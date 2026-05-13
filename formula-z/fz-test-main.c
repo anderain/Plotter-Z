@@ -119,7 +119,8 @@ void printAstNode(int iLevel, const FzAstNode* pAstNode) {
 
 int main(int argc, char* argv[]) {
     const char* szExpr = NULL;
-    int i;
+    int         i;
+    FzAstNode*  pAstExpr = NULL;
 
     g_bPretty = 0;
 
@@ -136,17 +137,14 @@ int main(int argc, char* argv[]) {
         return 2;
     }
 
-    {
-        FzAstNode* pAstExpr = FzParser_ParseExpression(szExpr);
-
-        if (!pAstExpr) {
-            fprintf(stderr, "Syntax Error\n");
-            return 1;
-        }
-
-        printAstNode(0, pAstExpr);
-        FzAstNode_Destroy(pAstExpr);
-
-        return 0;
+    pAstExpr = FzParser_ParseExpression(szExpr);
+    if (!pAstExpr) {
+        fprintf(stderr, "Syntax Error\n");
+        return 1;
     }
+
+    printAstNode(0, pAstExpr);
+    FzAstNode_Destroy(pAstExpr);
+
+    return 0;
 }

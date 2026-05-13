@@ -12,7 +12,7 @@
 
 /* Maximum length of single token */
 #define FZ_TOKEN_LENGTH_MAX             100
-#define FZ_FLOAT                        float
+#define PZ_FLOAT                        float
 
 typedef enum {
     OPR_NONE = 0,
@@ -86,7 +86,7 @@ typedef struct tagFzAstNode {
             struct tagFzAstNode* pAstRightOperand;
         } sBinaryOperator;
         struct {
-            FZ_FLOAT fValue;
+            PZ_FLOAT fValue;
         } sLiteralNumeric;
         struct {
             char *szName;
