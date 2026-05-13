@@ -1,6 +1,11 @@
 #include <stdio.h>
+#include <string.h>
+#include <stdlib.h>
 #include "ez.h"
 #include "../common/constants.h"
+
+static int g_bList = 0;
+static int g_bEval = 0;
 
 void printFloatPretty(float fValue) {
     char szBuf[100];
@@ -40,6 +45,10 @@ void printInstructions(EzMachine* pVm) {
 int main(int argc, char* argv[]) {
     const char* szExpr      = NULL;
     int         i           = 0;
+    int         iVarCount   = 0;
+    int         iModeCount  = 0;
+    char*       pszVarNames[100];
+    float       fVarValues[100];
     FzAstNode*  pAstExpr    = NULL;
     EzMachine*  pVm         = NULL;
     EzError     iError      = EZERR_NONE;
@@ -47,13 +56,28 @@ int main(int argc, char* argv[]) {
     PZ_FLOAT    fResult;
 
     for (i = 1; i < argc; ++i) {
-        if (szExpr == NULL) {
+        if (strcmp(argv[i], "-v") == 0) {
+            if (i + 2 >= argc) {
+                fprintf(stderr, "Error: -v requires <name> <value>\n");
+                return 2;
+            }
+            pszVarNames[iVarCount] = argv[i + 1];
+            fVarValues[iVarCount] = (float)atof(argv[i + 2]);
+            iVarCount++;
+            i += 2;
+        } else if (strcmp(argv[i], "-l") == 0) {
+            g_bList = 1;
+            iModeCount++;
+        } else if (strcmp(argv[i], "-e") == 0) {
+            g_bEval = 1;
+            iModeCount++;
+        } else if (szExpr == NULL) {
             szExpr = argv[i];
         }
     }
 
-    if (szExpr == NULL) {
-        fprintf(stderr, "Usage: %s <expression>\n", argv[0]);
+    if (iModeCount == 0) {
+        fprintf(stderr, "Usage: %s [-v <name> <value> ...] (-l | -e) <expression>\n", argv[0]);
         return 2;
     }
 
@@ -66,18 +90,21 @@ int main(int argc, char* argv[]) {
 
     pVm = EzMachine_Create();
 
-    EzMachine_DeclareVariable(pVm, "x");
-    EzMachine_DeclareVariable(pVm, "y");
-    EzMachine_DeclareVariable(pVm, "z");
+    for (i = 0; i < iVarCount; ++i) {
+        EzMachine_DeclareVariable(pVm, pszVarNames[i]);
+    }
     EzMachine_AllocateVariables(pVm);
-    
-    EzMachine_SetVariableByIndex(pVm, 0, 1);
-    EzMachine_SetVariableByIndex(pVm, 1, 2);
-    EzMachine_SetVariableByIndex(pVm, 2, 3);
+
+    for (i = 0; i < iVarCount; ++i) {
+        int iIndex = EzMachine_GetVariableIndexByName(pVm, pszVarNames[i]);
+        if (iIndex >= 0) {
+            EzMachine_SetVariableByIndex(pVm, iIndex, fVarValues[i]);
+        }
+    }
 
     iError = EzMachine_Compile(pVm, pAstExpr, szError);
     FzAstNode_Destroy(pAstExpr);
-    
+
     switch (iError) {
         default:
         case EZERR_NONE:
@@ -93,12 +120,17 @@ int main(int argc, char* argv[]) {
             goto cleanUp;
     }
 
-    printInstructions(pVm);
-
-    fResult = EzMachine_Eval(pVm);
-    printf("Result = ");
-    printFloatPretty(fResult);
-    printf("\n");
+    if (g_bList) {
+        printInstructions(pVm);
+    }
+    if (g_bEval) {
+        fResult = EzMachine_Eval(pVm);
+        if (g_bList) {
+            printf("Result = ");
+        }
+        printFloatPretty(fResult);
+        printf("\n");
+    }
 
 cleanUp:
     EzMachine_Destroy(pVm);
