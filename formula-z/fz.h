@@ -86,7 +86,7 @@ typedef struct tagFzAstNode {
             struct tagFzAstNode* pAstRightOperand;
         } sBinaryOperator;
         struct {
-            PZ_FLOAT fValue;
+            char* szNumber;
         } sLiteralNumeric;
         struct {
             char *szName;

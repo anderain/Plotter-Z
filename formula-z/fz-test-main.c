@@ -75,13 +75,9 @@ void printAstNode(int iLevel, const FzAstNode* pAstNode) {
         case AST_LITERAL_NUMERIC:
             printIndent(iLevel);
             if (g_bPretty) {
-                printf("<Literal> ");
-                printFloatPretty(pAstNode->uData.sLiteralNumeric.fValue);
-                printf(" </Literal>");
+                printf("<Literal> %s </Literal>", pAstNode->uData.sLiteralNumeric.szNumber);
             } else {
-                printf("<Literal>");
-                printFloatPretty(pAstNode->uData.sLiteralNumeric.fValue);
-                printf("</Literal>");
+                printf("<Literal>%s</Literal>", pAstNode->uData.sLiteralNumeric.szNumber);
             }
             printNewline();
             break;

@@ -95,7 +95,7 @@ static FzAstNode* createAst(AstNodeType iAstType, FzAstNode* pAstParent) {
             pAstNode->uData.sParen.pAstExpr = NULL;
             break;
         case AST_LITERAL_NUMERIC:
-            pAstNode->uData.sLiteralNumeric.fValue = 0;
+            pAstNode->uData.sLiteralNumeric.szNumber = NULL;
             break;
         case AST_FUNCTION_CALL:
             pAstNode->uData.sFunctionCall.szFunction = NULL;
@@ -133,6 +133,7 @@ void FzAstNode_Destroy(FzAstNode* pAstNode) {
             FzAstNode_Destroy(pAstNode->uData.sParen.pAstExpr);
             break;
         case AST_LITERAL_NUMERIC:
+            checkNullAndFreeString(pAstNode->uData.sLiteralNumeric.szNumber);
             break;
         case AST_VARIABLE:
             checkNullAndFreeString(pAstNode->uData.sVariable.szName);
@@ -296,7 +297,7 @@ static void buildExprAstTryOperand(FzLineAnalyzer *pAnalyzer, Vlist* pStackOpera
     /* Literal: number */
     if (tokenTypeIs(TOKEN_NUMERIC)) {
         FzAstNode *pAstLiteral = createAst(AST_LITERAL_NUMERIC, NULL);
-        pAstLiteral->uData.sLiteralNumeric.fValue = Utils_Atof(pToken->szContent);
+        pAstLiteral->uData.sLiteralNumeric.szNumber = Utils_StringDump(pToken->szContent);
         /* Push directly onto operand stack */
         vlPushBack(pStackOperand, pAstLiteral);
         /* Check if the next token is an operator */

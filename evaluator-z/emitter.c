@@ -171,7 +171,7 @@ static void compile(EzMachine* pVm, const FzAstNode* pAstNode) {
         case AST_EMPTY:
             break;
         case AST_LITERAL_NUMERIC:
-            addInstructionPushImmediate(pVm, pAstNode->uData.sLiteralNumeric.fValue);
+            addInstructionPushImmediate(pVm, Utils_Atof(pAstNode->uData.sLiteralNumeric.szNumber));
             break;
         case AST_VARIABLE:
             addInstructionPushVariable(pVm, EzMachine_GetVariableIndexByName(pVm, pAstNode->uData.sVariable.szName));
