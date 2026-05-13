@@ -1,0 +1,6 @@
+.vscode
+*.o
+*.exe
+*.html
+*.json
+*.xml
