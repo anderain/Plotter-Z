@@ -40,7 +40,7 @@ static FzOperatorId getOperatorId(const char* szOperator) {
 
 const struct {
     const char* szOperatorName;
-    int         iPriority;
+    int         iPrecedence;
 } OperatorIdMetaMap[] = {
     { "NONE",       0   },
     { "NEG",        500 },
@@ -48,10 +48,10 @@ const struct {
     { "SUB",        100 },
     { "MUL",        200 },
     { "DIV",        200 },
-    { "POW",        200 },
+    { "POW",        250 },
     { "INTDIV",     150 },
     { "MOD",        200 },
-    { "NOT",        50  },
+    { "NOT",        450  },
     { "AND",        40  },
     { "OR",         30  },
     { "EQUAL",      50  },
@@ -62,8 +62,8 @@ const struct {
     { "LTEQ",       60  }
 };
 
-int FzOperator_GetPriorityById(FzOperatorId iOprId) {
-    return OperatorIdMetaMap[iOprId].iPriority;
+int FzOperator_GetPrecedenceById(FzOperatorId iOprId) {
+    return OperatorIdMetaMap[iOprId].iPrecedence;
 }
 
 const char* FzOperator_GetNameById(FzOperatorId iOprId) {
@@ -226,17 +226,23 @@ static BOOL matchExpr(FzLineAnalyzer* pAnalyzer) {
 
 static void buildExprAstTryOperand(FzLineAnalyzer *pAnalyzer, Vlist* pStackOperand, Vlist* pStackOperator);
 
-static void buildExprAstHandleBinaryOperator(Vlist* pStackOperand, Vlist* pStackOperator) {
+static void buildExprAstHandleOperator(Vlist* pStackOperand, Vlist* pStackOperator) {
     FzAstNode* pAstTop;
     if (pStackOperator->iSize <= 0) {
         return;
     }
     pAstTop = (FzAstNode *)vlPopBack(pStackOperator);
-    /* Pop two operands from stack as children of the operator node */
-    pAstTop->uData.sBinaryOperator.pAstRightOperand = (FzAstNode *)vlPopBack(pStackOperand);
-    pAstTop->uData.sBinaryOperator.pAstLeftOperand = (FzAstNode *)vlPopBack(pStackOperand);
+    
+    if (pAstTop->iType == AST_BINARY_OPERATOR) {
+        /* Pop two operands from stack as children of the operator node */
+        pAstTop->uData.sBinaryOperator.pAstRightOperand = (FzAstNode *)vlPopBack(pStackOperand);
+        pAstTop->uData.sBinaryOperator.pAstLeftOperand = (FzAstNode *)vlPopBack(pStackOperand);
+    }
+    else if (pAstTop->iType == AST_UNARY_OPERATOR) {
+        pAstTop->uData.sUnaryOperator.pAstOperand = (FzAstNode *)vlPopBack(pStackOperand);
+    }
     /* Push the operator node (computed result) onto the operand stack */
-    vlPushBack(pStackOperand, pAstTop);
+     vlPushBack(pStackOperand, pAstTop);
 }
 
 static void buildExprAstTryOperator(FzLineAnalyzer* pAnalyzer, Vlist* pStackOperand, Vlist* pStackOperator) {
@@ -246,24 +252,27 @@ static void buildExprAstTryOperator(FzLineAnalyzer* pAnalyzer, Vlist* pStackOper
         /* Create operator node */
         FzAstNode*      pAstOpr = createAst(AST_BINARY_OPERATOR, NULL);
         FzOperatorId    iOprId  = getOperatorId(pToken->szContent);
-        int             iCurrentPriority = FzOperator_GetPriorityById(iOprId);
+        int             iCurrentPrecedence = FzOperator_GetPrecedenceById(iOprId);
 
         pAstOpr->uData.sBinaryOperator.iOperatorId = iOprId;
-        
+
         /* Check existing operator stack for precedence */
         while (pStackOperator->iSize > 0) {
-            FzAstNode*    pAstTop = (FzAstNode *)vlPeek(pStackOperator);
-            FzOperatorId  iTopOprId;
-            int         iTopPriority;
-            /* If not an operator, exit */
-            if (pAstTop->iType != AST_BINARY_OPERATOR) {
+            FzAstNode*      pAstTop = (FzAstNode *)vlPeek(pStackOperator);
+            FzOperatorId    iTopOprId;
+            int             iTopPrecedence;
+
+            /* Not operator, exit */
+            if (pAstTop->iType != AST_BINARY_OPERATOR && pAstTop->iType != AST_UNARY_OPERATOR) {
                 break;
             }
+
             iTopOprId = pAstTop->uData.sBinaryOperator.iOperatorId;
-            iTopPriority = FzOperator_GetPriorityById(iTopOprId);
+            iTopPrecedence = FzOperator_GetPrecedenceById(iTopOprId);
+
             /* If the stack top has higher or equal precedence */
-            if (iTopPriority >= iCurrentPriority) {
-                buildExprAstHandleBinaryOperator(pStackOperand, pStackOperator);
+            if (iTopPrecedence >= iCurrentPrecedence) {
+                buildExprAstHandleOperator(pStackOperand, pStackOperator);
             }
             else {
                 break;
@@ -293,33 +302,17 @@ static void buildExprAstTryOperand(FzLineAnalyzer *pAnalyzer, Vlist* pStackOpera
         /* Check if the next token is an operator */
         buildExprAstTryOperator(pAnalyzer, pStackOperand, pStackOperator);
     }
-    /* Unary operator: negation */
-    else if (tokenTypeIs(TOKEN_OPERATOR) && tokenIs("-")) {
-        /* Create negation node but do not push it yet */
-        FzAstNode* pAstOprNeg = createAst(AST_UNARY_OPERATOR, NULL);
-        pAstOprNeg->uData.sUnaryOperator.iOperatorId = OPR_NEG;
-        /* Push operand following negation onto stack */
+    /* Unary operator*/
+    else if (tokenTypeIs(TOKEN_OPERATOR)) {
+        FzAstNode* pAstOprUnary = createAst(AST_UNARY_OPERATOR, NULL);
+        if (tokenIs("-")) {
+            pAstOprUnary->uData.sUnaryOperator.iOperatorId = OPR_NEG;
+        }
+        else if (tokenIs("!")) {
+            pAstOprUnary->uData.sUnaryOperator.iOperatorId = OPR_NOT;
+        }
+        vlPushBack(pStackOperator, pAstOprUnary);
         buildExprAstTryOperand(pAnalyzer, pStackOperand, pStackOperator);
-        /* Pop the operand as the child of the negation node */
-        pAstOprNeg->uData.sUnaryOperator.pAstOperand = (FzAstNode *)vlPopBack(pStackOperand);
-        /* Push negation node onto operand stack */
-        vlPushBack(pStackOperand, pAstOprNeg);
-        /* Check if the next token is an operator */
-        buildExprAstTryOperator(pAnalyzer, pStackOperand, pStackOperator);
-    }
-    /* Unary operator: logical NOT */
-    else if (tokenTypeIs(TOKEN_OPERATOR) && tokenIs("!")) {
-        /* Create logical NOT node but do not push it yet */
-        FzAstNode* pAstOprNot = createAst(AST_UNARY_OPERATOR, NULL);
-        pAstOprNot->uData.sUnaryOperator.iOperatorId = OPR_NOT;
-        /* Push operand following logical NOT onto stack */
-        buildExprAstTryOperand(pAnalyzer, pStackOperand, pStackOperator);
-        /* Pop the operand as the child of the logical NOT node */
-        pAstOprNot->uData.sUnaryOperator.pAstOperand = (FzAstNode *)vlPopBack(pStackOperand);
-        /* Push logical NOT node onto operand stack */
-        vlPushBack(pStackOperand, pAstOprNot);
-        /* Check if the next token is an operator */
-        buildExprAstTryOperator(pAnalyzer, pStackOperand, pStackOperator);
     }
     /* Identifier */
     else if (tokenTypeIs(TOKEN_IDENTIFIER)) {
@@ -350,7 +343,7 @@ static void buildExprAstTryOperand(FzLineAnalyzer *pAnalyzer, Vlist* pStackOpera
                             break;
                         }
                         /* Process operator */
-                        buildExprAstHandleBinaryOperator(pStackOperand, pStackOperator);
+                        buildExprAstHandleOperator(pStackOperand, pStackOperator);
                     }
                     /* Pop operand and add it to the function call node */
                     vlPushBack(pAstFuncCall->uData.sFunctionCall.pListArguments, vlPopBack(pStackOperand));
@@ -397,7 +390,7 @@ static void buildExprAstTryOperand(FzLineAnalyzer *pAnalyzer, Vlist* pStackOpera
                 break;
             }
             /* Process operator */
-            buildExprAstHandleBinaryOperator(pStackOperand, pStackOperator);
+            buildExprAstHandleOperator(pStackOperand, pStackOperator);
         }
         /* Pop expression inside parentheses as child of parentheses node */
         pAstParen->uData.sParen.pAstExpr = (FzAstNode *)vlPopBack(pStackOperand);
@@ -411,7 +404,7 @@ static void buildExprAstTryOperand(FzLineAnalyzer *pAnalyzer, Vlist* pStackOpera
 static FzAstNode* buildExprAst(FzLineAnalyzer *pAnalyzer) {
     Vlist*      pStackOperand;  /* FzAstNode */
     Vlist*      pStackOperator; /* FzAstNode */
-    FzAstNode*    pAstExprRoot;
+    FzAstNode*  pAstExprRoot;
     
     pStackOperand = vlNewList();
     pStackOperator = vlNewList();
@@ -419,7 +412,7 @@ static FzAstNode* buildExprAst(FzLineAnalyzer *pAnalyzer) {
 
     /* Pop all remaining operators from the operator stack */
     while (pStackOperator->iSize > 0) {
-        buildExprAstHandleBinaryOperator(pStackOperand, pStackOperator);
+        buildExprAstHandleOperator(pStackOperand, pStackOperator);
     }
 
     pAstExprRoot = (FzAstNode *)vlPopBack(pStackOperand);
@@ -442,6 +435,11 @@ FzAstNode* FzParser_ParseExpression(const char* szSource) {
         return NULL;
     }
 
+    FzAnalyzer_NextToken(&analyzer);
+    if (analyzer.token.iType != TOKEN_LINE_END) {
+        return NULL;
+    }
+    
     FzAnalyzer_ResetToken(&analyzer);
 
     pAstRootNode = buildExprAst(&analyzer);
