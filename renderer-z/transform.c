@@ -170,6 +170,20 @@ static void transform(RenderNode* pParentHorz, FzAstNode* pAstNode) {
 
                 vlPushBack(pParentHorz->uData.sHorizontal.pList, pRoot);
             }
+            else if (Utils_IsStringEqual(szFuncName, "exp") && iNumArg == 1) {
+                RenderNode* pSuperscriptNode = createRenderNode(RN_SUPERSCRIPT);
+                RenderNode* pBody = createRenderNode(RN_TEXT);
+                RenderNode* pScript = createRenderNode(RN_HORIZONTAL);
+                FzAstNode* pAstContent = (FzAstNode *)pAstNode->uData.sFunctionCall.pListArguments->pHead->pData;
+
+                pSuperscriptNode->uData.sSuperscript.pBody = pBody;
+                pSuperscriptNode->uData.sSuperscript.pScript = pScript;
+
+                pBody->uData.sText.szText = Utils_StringDump("e");
+                transform(pScript, pAstContent);
+
+                vlPushBack(pParentHorz->uData.sHorizontal.pList, pSuperscriptNode);
+            }
             else {
                 VlistNode* pParam = NULL;
                 RenderNode* pFuncName = createRenderNode(RN_TEXT);
@@ -201,27 +215,24 @@ static void transform(RenderNode* pParentHorz, FzAstNode* pAstNode) {
 
 static void reduceHorizontal(RenderNode* pNode) {
     switch (pNode->iType) {
-        case RN_HORIZONTAL:
+        case RN_HORIZONTAL: {
+            VlistNode* pListNode;
+            for (
+                pListNode = pNode->uData.sHorizontal.pList->pHead;
+                pListNode != NULL;
+                pListNode = pListNode->pNext
+            ) {
+                reduceHorizontal((RenderNode *)pListNode->pData);
+            }
             /* Only one child, reduce */
             if (pNode->uData.sHorizontal.pList->iSize == 1) {
-                RenderNode* pChild = (RenderNode *)pNode->uData.sHorizontal.pList->pHead->pData;
-                reduceHorizontal(pChild);
-                pNode->uData.sHorizontal.pList->pHead->pData = NULL;
+                RenderNode* pOnlyChild = (RenderNode *)vlPopBack(pNode->uData.sHorizontal.pList);
                 cleanUpRenderNode(pNode);
-                memcpy(pNode, pChild, sizeof(RenderNode));
-                free(pChild);
-            }
-            else {
-                VlistNode* pListNode;
-                for (
-                    pListNode = pNode->uData.sHorizontal.pList->pHead;
-                    pListNode != NULL;
-                    pListNode = pListNode->pNext
-                ) {
-                    reduceHorizontal((RenderNode *)pListNode->pData);
-                }
+                memcpy(pNode, pOnlyChild, sizeof(RenderNode));
+                free(pOnlyChild);
             }
             break;
+        }
         case RN_ENCLOSURE:
             reduceHorizontal(pNode->uData.sEnclosure.pContent);
             break;
