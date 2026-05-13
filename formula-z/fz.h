@@ -109,10 +109,9 @@ typedef enum tagFzAstNodeType {
 } AstNodeType;
 
 int         FzOperator_GetPrecedenceById(FzOperatorId iOprId);
-const char* FzOperator_GetNameById(FzOperatorId iOprId);
-void        FzAstNode_Destroy(FzAstNode* pAstNode);
-FzAstNode*  FzParser_ParseExpression(const char* szSource);
+const char* FzOperator_GetNameById      (FzOperatorId iOprId);
+const char* FzOperator_GetSymbolById    (FzOperatorId iOprId);
+void        FzAstNode_Destroy           (FzAstNode* pAstNode);
+FzAstNode*  FzParser_ParseExpression    (const char* szSource);
 
-
-void printAstNode(int iLevel, const FzAstNode* pAstNode);
 #endif 

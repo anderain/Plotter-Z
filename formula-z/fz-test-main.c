@@ -4,16 +4,6 @@
 
 static int g_bPretty = 0;
 
-void printFloatPretty(float fValue) {
-    char szBuf[100];
-    int iLen = sprintf(szBuf, "%f", fValue);
-    for (--iLen; szBuf[iLen] && szBuf[iLen] == '0'; --iLen) {
-        szBuf[iLen] = '\0';
-    }
-    if (szBuf[iLen] == '.') szBuf[iLen] = '\0';
-    printf("%s", szBuf);
-}
-
 static void printIndent(int iLevel) {
     if (g_bPretty) {
         int i;

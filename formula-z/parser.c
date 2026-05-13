@@ -39,27 +39,28 @@ static FzOperatorId getOperatorId(const char* szOperator) {
 }
 
 const struct {
-    const char* szOperatorName;
-    int         iPrecedence;
+    char* szOperatorSymbol;
+    char* szOperatorName;
+    int   iPrecedence;
 } OperatorIdMetaMap[] = {
-    { "NONE",       0   },
-    { "NEG",        500 },
-    { "ADD",        100 },
-    { "SUB",        100 },
-    { "MUL",        200 },
-    { "DIV",        200 },
-    { "POW",        250 },
-    { "INTDIV",     150 },
-    { "MOD",        200 },
-    { "NOT",        450  },
-    { "AND",        40  },
-    { "OR",         30  },
-    { "EQUAL",      50  },
-    { "NEQ",        50  },
-    { "GT",         60  },
-    { "LT",         60  },
-    { "GTEQ",       60  },
-    { "LTEQ",       60  }
+    { "",   "NONE",         0   },
+    { "-",  "NEG",          500 },
+    { "+",  "ADD",          100 },
+    { "-",  "SUB",          100 },
+    { "*",  "MUL",          200 },
+    { "/",  "DIV",          200 },
+    { "^",  "POW",          250 },
+    { "\\", "INTDIV",       150 },
+    { "%",  "MOD",          200 },
+    { "!",  "NOT",          450  },
+    { "&&", "AND",          40  },
+    { "||", "OR",           30  },
+    { "=",  "EQUAL",        50  },
+    { "<>", "NEQ",          50  },
+    { ">",  "GT",           60  },
+    { "<",  "LT",           60  },
+    { ">=", "GTEQ",         60  },
+    { "<=", "LTEQ",         60  }
 };
 
 int FzOperator_GetPrecedenceById(FzOperatorId iOprId) {
@@ -68,6 +69,10 @@ int FzOperator_GetPrecedenceById(FzOperatorId iOprId) {
 
 const char* FzOperator_GetNameById(FzOperatorId iOprId) {
     return OperatorIdMetaMap[iOprId].szOperatorName;
+}
+
+const char* FzOperator_GetSymbolById(FzOperatorId iOprId) {
+    return OperatorIdMetaMap[iOprId].szOperatorSymbol;
 }
 
 static FzAstNode* createAst(AstNodeType iAstType, FzAstNode* pAstParent) {
