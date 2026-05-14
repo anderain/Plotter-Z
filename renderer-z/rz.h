@@ -71,16 +71,15 @@ typedef struct tagRenderConfig {
     struct {
         int bOutline;
     } sDebug;
+    struct {
+        void (*setPixel)(int x, int y);
+        void (*plotLine)(int x1, int y1, int x2, int y2);
+        void (*putChar)(int x, int y, unsigned char ch);
+    } sInterfaces;
 } RenderConfig;
 
-typedef struct tagRenderInterface {
-    void (*setPixel)(int x, int y);
-    void (*plotLine)(int x1, int y1, int x2, int y2);
-    void (*putChar)(int x, int y, unsigned char ch);
-} RenderInterface;
-
-void RenderConfig_GetDefault    (RenderConfig* pConfig);
-void RenderNode_EstimateSize    (RenderNode* pNode, RenderConfig* pConfig);
-void RenderNode_Draw            (RenderNode* pNode, RenderConfig* pConfig, RenderInterface* pInterface, int iStartX, int iCenterY);
+void RenderConfig_GetDefaultStyle   (RenderConfig* pConfig);
+void RenderNode_EstimateSize        (RenderNode* pNode, const RenderConfig* pConfig);
+void RenderNode_Draw                (RenderNode* pNode, const RenderConfig* pConfig, int iStartX, int iCenterY);
 
 #endif
