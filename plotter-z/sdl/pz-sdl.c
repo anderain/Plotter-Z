@@ -17,6 +17,7 @@
 typedef struct {
     int         iWidth;
     int         iHeight;
+    int         iScale;
     int         bFullscreen;
     PZ_FLOAT    fXMin, fXMax;
     int         iXGrid;
@@ -29,6 +30,7 @@ typedef struct {
 
 static const PzSdlConfig DEFAULT_CONFIG = {
     320, 240,                                   /* width, height */
+    1,                                          /* scale */
     0,                                          /* fullscreen */
     -10.0f, 6.0f, 20,                           /* xMin, xMax, xGrid */
     -10.0f, 6.0f, 20,                           /* yMin, yMax, yGrid */
@@ -43,8 +45,10 @@ static const PzSdlConfig DEFAULT_CONFIG = {
 int             bMainLoop = 1;
 int             iWidth = 320;
 int             iHeight = 240;
+int             iScale = 1;
 int             bShowBox = 1;
 SDL_Surface*    sfScreen;
+SDL_Surface*    sfCanvas;
 Uint32          uBgColor = 0x99bb00;
 Uint32          uSolidColor = 0x115500;
 
@@ -120,6 +124,7 @@ static int parsePair(const char* szArg, PZ_FLOAT* pMin, PZ_FLOAT* pMax) {
 static void applyConfig(const PzSdlConfig* pCfg) {
     iWidth   = pCfg->iWidth;
     iHeight  = pCfg->iHeight;
+    iScale   = pCfg->iScale;
     bShowBox = pCfg->bShowBox;
 
     Camera.xMin  = pCfg->fXMin;
@@ -166,7 +171,7 @@ static void setPixelToSurface(SDL_Surface *sf, int x, int y, Uint32 color) {
 }
 
 static void setPixel(int x, int y) {
-    setPixelToSurface(sfScreen, x, y, uSolidColor);
+    setPixelToSurface(sfCanvas, x, y, uSolidColor);
 }
 
 static void plotLineColor(int x0, int y0, int x1, int y1, Uint32 color) {
@@ -175,7 +180,7 @@ static void plotLineColor(int x0, int y0, int x1, int y1, Uint32 color) {
     int err = dx + dy, e2;
 
     for (;;) {
-        setPixelToSurface(sfScreen, x0, y0, color);
+        setPixelToSurface(sfCanvas, x0, y0, color);
         if (x0 == x1 && y0 == y1)
             break;
         e2 = 2 * err;
@@ -203,7 +208,7 @@ static void draw1bpp(const unsigned char *raw, int dx, int dy, int w, int h, int
             eightPixels = *(raw + y * pitch + (x >> 3));
             dot = (eightPixels >> (7 - x % 8)) & 1;
             if (dot ^ rev) {
-                setPixelToSurface(sfScreen, dx + x, dy + y, color);
+                setPixelToSurface(sfCanvas, dx + x, dy + y, color);
             }
         }
     }
@@ -229,6 +234,45 @@ static void xyz2xy(PZ_FLOAT x, PZ_FLOAT y, PZ_FLOAT z, int *ox, int *oy) {
     PZ_FLOAT ny = (-x * Camera.sinB * Camera.sinA - y * Camera.cosB * Camera.sinA + z * Camera.cosA);
     *ox = (int)(iWidth / 2.0f + zoom * nx);
     *oy = (int)(iHeight / 2.0f + zoom * ny);
+}
+
+/*====================================================
+ * Scale blit (integer nearest-neighbour)
+ *====================================================*/
+
+static void scaleBlit(SDL_Surface* sfSrc, SDL_Surface* sfDst, int iFactor) {
+    int sx, sy, dx, dy;
+    if (iFactor <= 1) {
+        SDL_BlitSurface(sfSrc, NULL, sfDst, NULL);
+        return;
+    }
+    if (SDL_LockSurface(sfSrc) < 0) return;
+    if (SDL_LockSurface(sfDst) < 0) { SDL_UnlockSurface(sfSrc); return; }
+    {
+        int srcBpp = sfSrc->format->BytesPerPixel;
+        int dstBpp = sfDst->format->BytesPerPixel;
+        int srcPitch = sfSrc->pitch;
+        int dstPitch = sfDst->pitch;
+        unsigned char* pSrcBase = (unsigned char*)sfSrc->pixels;
+        unsigned char* pDstBase = (unsigned char*)sfDst->pixels;
+        int i;
+
+        for (sy = 0; sy < sfSrc->h; ++sy) {
+            for (sx = 0; sx < sfSrc->w; ++sx) {
+                unsigned char* pSrc = pSrcBase + sy * srcPitch + sx * srcBpp;
+                for (dy = 0; dy < iFactor; ++dy) {
+                    unsigned char* pDst = pDstBase + (sy * iFactor + dy) * dstPitch + sx * iFactor * dstBpp;
+                    for (dx = 0; dx < iFactor; ++dx) {
+                        for (i = 0; i < srcBpp; ++i) {
+                            pDst[dx * dstBpp + i] = pSrc[i];
+                        }
+                    }
+                }
+            }
+        }
+    }
+    SDL_UnlockSurface(sfDst);
+    SDL_UnlockSurface(sfSrc);
 }
 
 /*====================================================
@@ -298,7 +342,7 @@ static void redraw(void) {
     int iStartY = 12;
     int iCenterY = iStartY + pRenderNode->sSize.iTop;
 
-    SDL_FillRect(sfScreen, NULL, uBgColor);
+    SDL_FillRect(sfCanvas, NULL, uBgColor);
     
     putText(8, 2, (const unsigned char *)"Plotter-Z");
     RenderNode_Draw(pRenderNode, &config, iStartX, iCenterY);
@@ -314,6 +358,7 @@ static void redraw(void) {
         drawBoundingBox();
     }
 
+    scaleBlit(sfCanvas, sfScreen, iScale);
     SDL_Flip(sfScreen);
 }
 
@@ -359,7 +404,7 @@ static void recalc(void) {
  *====================================================*/
 
 static void drawErrorScreen(void) {
-    SDL_FillRect(sfScreen, NULL, uBgColor);
+    SDL_FillRect(sfCanvas, NULL, uBgColor);
     putText(8, 2, (const unsigned char *)"Plotter-Z");
     putText(8, 20, (const unsigned char *)"ERROR:");
     putText(8, 30, (const unsigned char *)"  Expression: ");
@@ -369,6 +414,7 @@ static void drawErrorScreen(void) {
         putText(8, 38, (const unsigned char *)g_szErrorText);
     }
     putText(8, 54, (const unsigned char *)"Press [Tab] to exit");
+    scaleBlit(sfCanvas, sfScreen, iScale);
     SDL_Flip(sfScreen);
 }
 
@@ -413,6 +459,14 @@ int main(int argc, char* argv[]) {
             i++;
         } else if (strcmp(argv[i], "-b") == 0) {
             cfg.bShowBox = !cfg.bShowBox;
+        } else if (strcmp(argv[i], "-s") == 0) {
+            if (i + 1 >= argc) {
+                fprintf(stderr, "Error: -s requires SCALE\n");
+                return 2;
+            }
+            cfg.iScale = atoi(argv[i + 1]);
+            if (cfg.iScale < 1) cfg.iScale = 1;
+            i++;
         } else if (cfg.szExpr == DEFAULT_CONFIG.szExpr) {
             /* First positional argument overrides the default expression */
             cfg.szExpr = argv[i];
@@ -474,12 +528,18 @@ int main(int argc, char* argv[]) {
         if (bFullscreen) {
             uFlags |= SDL_FULLSCREEN;
         }
-        sfScreen = SDL_SetVideoMode(iWidth, iHeight, 32, uFlags);
+        sfScreen = SDL_SetVideoMode(iWidth * iScale, iHeight * iScale, 32, uFlags);
     }
     SDL_WM_SetCaption("Plotter-Z | SDL", NULL);
 
     if (sfScreen == NULL) {
         return 0;
+    }
+
+    sfCanvas = SDL_CreateRGBSurface(SDL_HWSURFACE, iWidth, iHeight, 32,
+                                    0x00FF0000, 0x0000FF00, 0x000000FF, 0x00000000);
+    if (sfCanvas == NULL) {
+        return 1;
     }
 
     if (g_bError) {
@@ -537,6 +597,7 @@ int main(int argc, char* argv[]) {
         EzMachine_Destroy(pVm);
     }
 
+    SDL_FreeSurface(sfCanvas);
     SDL_Quit();
 
     return 0;
