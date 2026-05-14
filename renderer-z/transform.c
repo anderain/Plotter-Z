@@ -7,14 +7,15 @@ static RenderNode* createRenderNode(RenderNodeType iType) {
     RenderNode* pNode = (RenderNode *)malloc(sizeof(RenderNode));
 
     pNode->iType = iType;
-    pNode->sPixel.iWidth = 0;
-    pNode->sPixel.iHeight = 0;
+    pNode->sSize.iWidth = 0;
+    pNode->sSize.iTop = 0;
+    pNode->sSize.iBottom = 0;
 
     switch (iType) {
         case RN_TEXT:
             pNode->uData.sText.szText = NULL;
             break;
-        case RN_COMMA:
+        case RN_SPECIAL_CHAR:
             break;
         case RN_HORIZONTAL:
             pNode->uData.sHorizontal.pList = vlNewList();  
@@ -52,7 +53,7 @@ static void cleanUpRenderNode(RenderNode* pNode) {
                 free(pNode->uData.sText.szText);
             }
             break;
-        case RN_COMMA:
+        case RN_SPECIAL_CHAR:
             break;
         case RN_HORIZONTAL:
             if (pNode->uData.sHorizontal.pList) {
@@ -128,6 +129,13 @@ static void transform(RenderNode* pParentHorz, FzAstNode* pAstNode) {
 
                 vlPushBack(pParentHorz->uData.sHorizontal.pList, pSuperscriptNode);
             }
+            else if (iOprId == OPR_MUL) {
+                RenderNode* pMul = createRenderNode(RN_SPECIAL_CHAR);
+                pMul->uData.sSpecialChar.c = '*';
+                transform(pParentHorz, pAstNode->uData.sBinaryOperator.pAstLeftOperand);
+                vlPushBack(pParentHorz->uData.sHorizontal.pList, pMul);
+                transform(pParentHorz, pAstNode->uData.sBinaryOperator.pAstRightOperand);
+            }
             else {
                 RenderNode* pTextOperator = createRenderNode(RN_TEXT);
                 pTextOperator->uData.sText.szText = Utils_StringDump(FzOperator_GetSymbolById(iOprId));
@@ -172,14 +180,14 @@ static void transform(RenderNode* pParentHorz, FzAstNode* pAstNode) {
             }
             else if (Utils_IsStringEqual(szFuncName, "exp") && iNumArg == 1) {
                 RenderNode* pSuperscriptNode = createRenderNode(RN_SUPERSCRIPT);
-                RenderNode* pBody = createRenderNode(RN_TEXT);
+                RenderNode* pBody = createRenderNode(RN_SPECIAL_CHAR);
                 RenderNode* pScript = createRenderNode(RN_HORIZONTAL);
                 FzAstNode* pAstContent = (FzAstNode *)pAstNode->uData.sFunctionCall.pListArguments->pHead->pData;
 
                 pSuperscriptNode->uData.sSuperscript.pBody = pBody;
                 pSuperscriptNode->uData.sSuperscript.pScript = pScript;
 
-                pBody->uData.sText.szText = Utils_StringDump("e");
+                pBody->uData.sSpecialChar.c = 'e';
                 transform(pScript, pAstContent);
 
                 vlPushBack(pParentHorz->uData.sHorizontal.pList, pSuperscriptNode);
@@ -201,7 +209,9 @@ static void transform(RenderNode* pParentHorz, FzAstNode* pAstNode) {
                 ) {
                     transform(pChildHorz, (FzAstNode *)pParam->pData);
                     if (pParam->pNext != NULL) { /* Not last parameter */
-                        vlPushBack(pChildHorz->uData.sHorizontal.pList, createRenderNode(RN_COMMA));
+                        RenderNode* pSpecialCharNode = createRenderNode(RN_SPECIAL_CHAR);
+                        pSpecialCharNode->uData.sSpecialChar.c = ',';
+                        vlPushBack(pChildHorz->uData.sHorizontal.pList, pSpecialCharNode);
                     }
                 }
                 vlPushBack(pParentHorz->uData.sHorizontal.pList, pEnclosureNode);

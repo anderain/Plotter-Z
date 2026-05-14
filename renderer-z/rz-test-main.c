@@ -33,9 +33,9 @@ void printRenderNode(int iLevel, const RenderNode* pNode) {
             }
             printNewline();
             break;
-        case RN_COMMA:
+        case RN_SPECIAL_CHAR:
             printIndent(iLevel);
-            printf("<Comma />", pNode->uData.sText.szText);
+            printf("<SpecialChar code=\"%d\" />", pNode->uData.sSpecialChar.c);
             printNewline();
             break;
         case RN_HORIZONTAL:

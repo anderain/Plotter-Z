@@ -1,6 +1,8 @@
-.vscode
 *.o
 *.exe
 *.html
 *.json
 *.xml
+
+plotter-z/sdl/sdl
+*.dll

@@ -4,25 +4,29 @@
 #include "../formula-z/fz.h"
 
 typedef enum tagRenderNodeType {
-    RN_TEXT = 0,
-    RN_COMMA,
-    RN_HORIZONTAL,
-    RN_ENCLOSURE,
-    RN_STACK,
-    RN_ROOT,
-    RN_SUPERSCRIPT,
+    RN_TEXT         = 1,
+    RN_SPECIAL_CHAR = 2,
+    RN_HORIZONTAL   = 4,
+    RN_ENCLOSURE    = 8,
+    RN_STACK        = 16,
+    RN_ROOT         = 32,
+    RN_SUPERSCRIPT  = 64,
 } RenderNodeType;
 
 typedef struct tagRenderNode {
     RenderNodeType iType;
     struct {
         int iWidth;
-        int iHeight;
-    } sPixel;
+        int iTop;
+        int iBottom;
+    } sSize;
     union {
         struct {
             char* szText;
         } sText;
+        struct {
+            unsigned char c;
+        } sSpecialChar;
         struct {
             Vlist* pList; /* RenderNode* */
         } sHorizontal;
@@ -45,5 +49,38 @@ typedef struct tagRenderNode {
 
 void        RenderNode_Destroy  (RenderNode* pNode);
 RenderNode* Render_Transform    (FzAstNode* pAstNode);
+
+typedef struct tagRenderConfig {
+    struct {
+        int iWidth;
+        int iHeight;
+    } sFont;
+    struct {
+        int iSpacingX;
+        int iSpacingY;
+    } sStack;
+    struct {
+        int iSpacingLeft;
+        int iSpacingTop;
+    } sRoot;
+    struct {
+        int iPadding;
+        int iMargin;
+        int iRadius;
+    } sEnclosure;
+    struct {
+        int bOutline;
+    } sDebug;
+} RenderConfig;
+
+typedef struct tagRenderInterface {
+    void (*setPixel)(int x, int y);
+    void (*plotLine)(int x1, int y1, int x2, int y2);
+    void (*putChar)(int x, int y, unsigned char ch);
+} RenderInterface;
+
+void RenderConfig_GetDefault    (RenderConfig* pConfig);
+void RenderNode_EstimateSize    (RenderNode* pNode, RenderConfig* pConfig);
+void RenderNode_Draw            (RenderNode* pNode, RenderConfig* pConfig, RenderInterface* pInterface, int iStartX, int iCenterY);
 
 #endif

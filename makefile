@@ -6,8 +6,8 @@
 # - LDFLAGS		Linker flags
 #====================================================
 CC		  		= gcc
+LD				= gcc
 C_FLAGS	 		= -c -Wall -ansi
-LD_FLAGS 		=
 #----------------------------------------------------
 COMMON_SRC_PATH = common
 COMMON_OBJS		= vlist.o utils.o constants.o
@@ -21,22 +21,37 @@ EZ_OBJS			= emitter.o eval.o
 EZ_TEST_EXE		= ez-test.exe
 #----------------------------------------------------
 RZ_SRC_PATH		= renderer-z
-RZ_OBJS			= transform.o
+RZ_OBJS			= transform.o render.o
 RZ_TEST_EXE		= rz-test.exe
+#----------------------------------------------------
+SDL_PATH		= plotter-z/sdl/sdl
+PZ_LD_FLAGS		= -L$(SDL_PATH)/lib -lmingw32 -lSDLmain -lSDL # -mwindows
+PZ_SDL_OBJS		= pz-sdl.o
+PZ_SDL_SRC_PATH	= plotter-z/sdl
+PZ_SDL_EXE		= pz-sdl.exe
+
+#====================================================
+# * Target: SDL version
+#====================================================
+
+pz-sdl: $(RZ_OBJS) $(EZ_OBJS) $(FZ_OBJS) $(COMMON_OBJS) $(PZ_SDL_OBJS)
+	$(LD) $(RZ_OBJS) $(EZ_OBJS) $(FZ_OBJS) $(COMMON_OBJS) $(PZ_SDL_OBJS)  $(PZ_LD_FLAGS) -o $(PZ_SDL_EXE)
+
+pz-sdl.o: $(PZ_SDL_SRC_PATH)/pz-sdl.c
+	$(CC) -I$(SDL_PATH)/include $(C_FLAGS) $(PZ_SDL_SRC_PATH)/pz-sdl.c -o pz-sdl.o
 
 #====================================================
 # * Target: Test Programs
 #====================================================
-all: fz-test ez-test rz-test
 
 fz-test: $(FZ_OBJS) $(COMMON_OBJS) fz-test-main.o
-	$(CC) $(LD_FLAGS) $(FZ_OBJS) $(COMMON_OBJS) fz-test-main.o -o $(FZ_TEST_EXE)
+	$(LD) $(FZ_OBJS) $(COMMON_OBJS) fz-test-main.o -o $(FZ_TEST_EXE)
 
 ez-test: $(EZ_OBJS) $(FZ_OBJS) $(COMMON_OBJS) ez-test-main.o
-	$(CC) $(LD_FLAGS) $(EZ_OBJS) $(FZ_OBJS) $(COMMON_OBJS) ez-test-main.o -o $(EZ_TEST_EXE)
+	$(LD) $(EZ_OBJS) $(FZ_OBJS) $(COMMON_OBJS) ez-test-main.o -o $(EZ_TEST_EXE)
 
 rz-test: $(RZ_OBJS) $(FZ_OBJS) $(COMMON_OBJS) rz-test-main.o
-	$(CC) $(LD_FLAGS) $(RZ_OBJS) $(FZ_OBJS) $(COMMON_OBJS) rz-test-main.o -o $(RZ_TEST_EXE)
+	$(LD) $(RZ_OBJS) $(FZ_OBJS) $(COMMON_OBJS) rz-test-main.o -o $(RZ_TEST_EXE)
 
 #====================================================
 # * Target: Common Files
@@ -80,6 +95,9 @@ ez-test-main.o: $(EZ_SRC_PATH)/ez-test-main.c $(EZ_SRC_PATH)/ez.h
 transform.o: $(RZ_SRC_PATH)/transform.c $(RZ_SRC_PATH)/rz.h
 	$(CC) $(C_FLAGS)  $(RZ_SRC_PATH)/transform.c -o transform.o
 
+render.o: $(RZ_SRC_PATH)/render.c $(RZ_SRC_PATH)/rz.h
+	$(CC) $(C_FLAGS)  $(RZ_SRC_PATH)/render.c -o render.o
+
 rz-test-main.o: $(RZ_SRC_PATH)/rz-test-main.c $(RZ_SRC_PATH)/rz.h
 	$(CC) $(C_FLAGS) -DIS_TEST_PROGRAM $(RZ_SRC_PATH)/rz-test-main.c -o rz-test-main.o
 
@@ -88,4 +106,4 @@ rz-test-main.o: $(RZ_SRC_PATH)/rz-test-main.c $(RZ_SRC_PATH)/rz.h
 #====================================================
 .PHONY: clean
 clean:
-	rm *.o $(FZ_TEST_EXE) $(EZ_TEST_EXE)
+	rm *.o $(FZ_TEST_EXE) $(EZ_TEST_EXE) $(RZ_TEST_EXE) $(PZ_SDL_EXE)
