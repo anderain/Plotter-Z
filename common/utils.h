@@ -13,6 +13,8 @@
 #   define FALSE 0
 #endif
 
+#define PZ_FLOAT float
+
 #define isDigit(c)      ((c) >= '0' && (c) <= '9')
 #define isUppercase(c)  ((c) >= 'A' && (c) <= 'Z')
 #define isLowercase(c)  ((c) >= 'a' && (c) <= 'z')

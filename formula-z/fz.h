@@ -11,8 +11,7 @@
  *================================================*/
 
 /* Maximum length of single token */
-#define FZ_TOKEN_LENGTH_MAX             100
-#define PZ_FLOAT                        float
+#define FZ_TOKEN_LENGTH_MAX 100
 
 typedef enum {
     OPR_NONE = 0,
