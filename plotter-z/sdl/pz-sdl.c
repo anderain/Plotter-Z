@@ -60,12 +60,14 @@ struct {
     PZ_FLOAT xMin;  PZ_FLOAT xMax;  int xGrid;
     PZ_FLOAT yMin;  PZ_FLOAT yMax;  int yGrid;
     PZ_FLOAT zMin;  PZ_FLOAT zMax;
+    PZ_FLOAT zoomFactor;
 } Camera = {
     0.5f, 0.5f,
     0.0f, 0.0f, 0.0f, 0.0f,
     -10.0f, 6.0f, 20,
     -10.0f, 6.0f, 20,
-    -3.0f, 3.0f
+    -3.0f, 3.0f,
+    1.0f
 };
 
 PZ_FLOAT zBuf[2000];
@@ -222,7 +224,7 @@ static void putText(int x, int y, const unsigned char* usz) {
  *====================================================*/
 
 static void xyz2xy(PZ_FLOAT x, PZ_FLOAT y, PZ_FLOAT z, int *ox, int *oy) {
-    PZ_FLOAT zoom = iHeight / 2.0f;
+    PZ_FLOAT zoom = Camera.zoomFactor * iHeight / 2.0f;
     PZ_FLOAT nx = (x * Camera.cosB - y * Camera.sinB);
     PZ_FLOAT ny = (-x * Camera.sinB * Camera.sinA - y * Camera.cosB * Camera.sinA + z * Camera.cosA);
     *ox = (int)(iWidth / 2.0f + zoom * nx);
@@ -511,6 +513,15 @@ int main(int argc, char* argv[]) {
                         }
                         else if (sdlEvent.key.keysym.sym == SDLK_DOWN) {
                             Camera.alpha += 0.1f;
+                        }
+                        else if (sdlEvent.key.keysym.sym == SDLK_q) {
+                            Camera.zoomFactor -= 0.2;
+                        }
+                        else if (sdlEvent.key.keysym.sym == SDLK_w) {
+                            Camera.zoomFactor += 0.2;
+                        }
+                        else if (sdlEvent.key.keysym.sym == SDLK_e) {
+                            bShowBox = !bShowBox;
                         }
                         redraw();
                     }
