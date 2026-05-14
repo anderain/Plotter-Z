@@ -313,26 +313,29 @@ static void drawBoundingBox(void) {
 
 static void drawSurfaceWireframe(void) {
     int ix, iy, x0, y0, x1, y1;
+    PZ_FLOAT z0, z1;
 
     for (ix = 0; ix < Camera.xGrid; ++ix) {
         iy = 0;
-        xyz2xy(xBuf[ix], yBuf[iy], Z_BUF(ix, iy), &x0, &y0); 
+        xyz2xy(xBuf[ix], yBuf[iy], z0 = Z_BUF(ix, iy), &x0, &y0); 
         for (iy = 0; iy < Camera.yGrid; ++iy) {
-            xyz2xy(xBuf[ix], yBuf[iy], Z_BUF(ix, iy), &x1, &y1); 
-            plotLine(x0, y0, x1, y1);
-            x0 = x1;
-            y0 = y1;
+            xyz2xy(xBuf[ix], yBuf[iy], z1 = Z_BUF(ix, iy), &x1, &y1); 
+            if (z0 <= 1 && z0 >= -1 && z1 <= 1 && z1 >= -1) {
+                plotLine(x0, y0, x1, y1);
+            }
+            x0 = x1, y0 = y1, z0 = z1;
         }
     }
 
     for (iy = 0; iy < Camera.yGrid; ++iy) {
         ix = 0;
-        xyz2xy(xBuf[ix], yBuf[iy], Z_BUF(ix, iy), &x0, &y0); 
+        xyz2xy(xBuf[ix], yBuf[iy], z0 = Z_BUF(ix, iy), &x0, &y0); 
         for (ix = 0; ix < Camera.xGrid; ++ix) {
-            xyz2xy(xBuf[ix], yBuf[iy], Z_BUF(ix, iy), &x1, &y1); 
-            plotLine(x0, y0, x1, y1);
-            x0 = x1;
-            y0 = y1;
+            xyz2xy(xBuf[ix], yBuf[iy], z1 = Z_BUF(ix, iy), &x1, &y1); 
+            if (z0 <= 1 && z0 >= -1 && z1 <= 1 && z1 >= -1) {
+                plotLine(x0, y0, x1, y1);
+            }
+            x0 = x1, y0 = y1, z0 = z1;
         }
     }
 }
@@ -575,10 +578,11 @@ int main(int argc, char* argv[]) {
                             Camera.alpha += 0.1f;
                         }
                         else if (sdlEvent.key.keysym.sym == SDLK_q) {
-                            Camera.zoomFactor -= 0.2;
+                            Camera.zoomFactor -= 0.1;
+                            if (Camera.zoomFactor <= 0.1) Camera.zoomFactor = 0.1;
                         }
                         else if (sdlEvent.key.keysym.sym == SDLK_w) {
-                            Camera.zoomFactor += 0.2;
+                            Camera.zoomFactor += 0.1;
                         }
                         else if (sdlEvent.key.keysym.sym == SDLK_e) {
                             bShowBox = !bShowBox;
