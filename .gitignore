@@ -3,6 +3,7 @@
 *.html
 *.json
 *.xml
+*.log
 
 plotter-z/sdl/sdl
 *.dll

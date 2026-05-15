@@ -429,9 +429,9 @@ static void redraw(void) {
     {
         int iStartX = 2;
         int iStartY = 12;
-        int iNodeWidth = pRenderNode->sSize.iWidth;
-        int iNodeHeight = pRenderNode->sSize.iTop + pRenderNode->sSize.iBottom;
-        int iCenterY = iStartY + pRenderNode->sSize.iTop;
+        int iNodeWidth = pRenderNode->sLayout.iWidth;
+        int iNodeHeight = pRenderNode->sLayout.iAscent + pRenderNode->sLayout.iDescent;
+        int iCenterY = iStartY + pRenderNode->sLayout.iAscent;
         fillRect(iStartX - 2, iStartY - 2, iNodeWidth + 2, iNodeHeight + 2, uBgColor);
         RenderNode_Draw(pRenderNode, &config, iStartX, iCenterY);
     }

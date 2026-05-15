@@ -19,14 +19,14 @@ void RenderConfig_GetDefaultStyle(RenderConfig* pConfig) {
 void RenderNode_EstimateSize(RenderNode* pNode, const RenderConfig* pConfig) {
     switch (pNode->iType) {
         case RN_TEXT:
-            pNode->sSize.iWidth = pConfig->sFont.iWidth * strlen(pNode->uData.sText.szText);
-            pNode->sSize.iTop = pConfig->sFont.iHeight / 2;
-            pNode->sSize.iBottom = pConfig->sFont.iHeight / 2;
+            pNode->sLayout.iWidth = pConfig->sFont.iWidth * strlen(pNode->uData.sText.szText);
+            pNode->sLayout.iAscent = pConfig->sFont.iHeight / 2;
+            pNode->sLayout.iDescent = pConfig->sFont.iHeight / 2;
             break;
         case RN_SPECIAL_CHAR:
-            pNode->sSize.iWidth = pConfig->sFont.iWidth;
-            pNode->sSize.iTop = pConfig->sFont.iHeight / 2;
-            pNode->sSize.iBottom = pConfig->sFont.iHeight / 2;
+            pNode->sLayout.iWidth = pConfig->sFont.iWidth;
+            pNode->sLayout.iAscent = pConfig->sFont.iHeight / 2;
+            pNode->sLayout.iDescent = pConfig->sFont.iHeight / 2;
             break;
         case RN_HORIZONTAL: {
             int iSumWidth = 0;
@@ -40,21 +40,21 @@ void RenderNode_EstimateSize(RenderNode* pNode, const RenderConfig* pConfig) {
             ) {
                 RenderNode* pChild = (RenderNode *)pListNode->pData;
                 RenderNode_EstimateSize(pChild, pConfig);
-                if (pChild->sSize.iTop > iTopMax) iTopMax = pChild->sSize.iTop;
-                if (pChild->sSize.iBottom > iBottomMax) iBottomMax = pChild->sSize.iBottom;
-                iSumWidth += pChild->sSize.iWidth;
+                if (pChild->sLayout.iAscent > iTopMax) iTopMax = pChild->sLayout.iAscent;
+                if (pChild->sLayout.iDescent > iBottomMax) iBottomMax = pChild->sLayout.iDescent;
+                iSumWidth += pChild->sLayout.iWidth;
             }
-            pNode->sSize.iWidth = iSumWidth;
-            pNode->sSize.iTop = iTopMax;
-            pNode->sSize.iBottom = iBottomMax;
+            pNode->sLayout.iWidth = iSumWidth;
+            pNode->sLayout.iAscent = iTopMax;
+            pNode->sLayout.iDescent = iBottomMax;
             break;
         }
         case RN_ENCLOSURE: {
             RenderNode* pContent = pNode->uData.sEnclosure.pContent;
             RenderNode_EstimateSize(pContent, pConfig);
-            pNode->sSize.iWidth = pContent->sSize.iWidth + 2 * pConfig->sEnclosure.iPadding + 2 * pConfig->sEnclosure.iMargin;
-            pNode->sSize.iTop = pContent->sSize.iTop;
-            pNode->sSize.iBottom = pContent->sSize.iBottom;
+            pNode->sLayout.iWidth = pContent->sLayout.iWidth + 2 * pConfig->sEnclosure.iPadding + 2 * pConfig->sEnclosure.iMargin;
+            pNode->sLayout.iAscent = pContent->sLayout.iAscent;
+            pNode->sLayout.iDescent = pContent->sLayout.iDescent;
             break;
         }
         case RN_STACK: {
@@ -62,17 +62,17 @@ void RenderNode_EstimateSize(RenderNode* pNode, const RenderConfig* pConfig) {
             RenderNode* pBottom = pNode->uData.sStack.pBottom;
             RenderNode_EstimateSize(pTop, pConfig);
             RenderNode_EstimateSize(pBottom, pConfig);
-            pNode->sSize.iWidth = pConfig->sStack.iSpacingY * 2 + (pTop->sSize.iWidth > pBottom->sSize.iWidth ? pTop->sSize.iWidth : pBottom->sSize.iWidth);
-            pNode->sSize.iTop = pTop->sSize.iTop + pTop->sSize.iBottom + pConfig->sStack.iSpacingY;
-            pNode->sSize.iBottom = pBottom->sSize.iTop + pBottom->sSize.iBottom + pConfig->sStack.iSpacingY;
+            pNode->sLayout.iWidth = pConfig->sStack.iSpacingY * 2 + (pTop->sLayout.iWidth > pBottom->sLayout.iWidth ? pTop->sLayout.iWidth : pBottom->sLayout.iWidth);
+            pNode->sLayout.iAscent = pTop->sLayout.iAscent + pTop->sLayout.iDescent + pConfig->sStack.iSpacingY;
+            pNode->sLayout.iDescent = pBottom->sLayout.iAscent + pBottom->sLayout.iDescent + pConfig->sStack.iSpacingY;
             break;
         }
         case RN_ROOT: {
             RenderNode* pContent = pNode->uData.sRoot.pContent;
             RenderNode_EstimateSize(pContent, pConfig);
-            pNode->sSize.iWidth = pContent->sSize.iWidth + pConfig->sRoot.iSpacingLeft;
-            pNode->sSize.iTop = pContent->sSize.iTop + pConfig->sRoot.iSpacingTop;
-            pNode->sSize.iBottom = pContent->sSize.iBottom;
+            pNode->sLayout.iWidth = pContent->sLayout.iWidth + pConfig->sRoot.iSpacingLeft;
+            pNode->sLayout.iAscent = pContent->sLayout.iAscent + pConfig->sRoot.iSpacingTop;
+            pNode->sLayout.iDescent = pContent->sLayout.iDescent;
             break;
         }
         case RN_SUPERSCRIPT: {
@@ -80,9 +80,9 @@ void RenderNode_EstimateSize(RenderNode* pNode, const RenderConfig* pConfig) {
             RenderNode* pScript = pNode->uData.sSuperscript.pScript;
             RenderNode_EstimateSize(pBody, pConfig);
             RenderNode_EstimateSize(pScript, pConfig);
-            pNode->sSize.iWidth = pBody->sSize.iWidth + pScript->sSize.iWidth;
-            pNode->sSize.iTop = pBody->sSize.iTop + (pScript->sSize.iTop + pScript->sSize.iBottom - pConfig->sFont.iHeight / 2);
-            pNode->sSize.iBottom = pBody->sSize.iBottom;
+            pNode->sLayout.iWidth = pBody->sLayout.iWidth + pScript->sLayout.iWidth;
+            pNode->sLayout.iAscent = pBody->sLayout.iAscent + (pScript->sLayout.iAscent + pScript->sLayout.iDescent - pConfig->sFont.iHeight / 2);
+            pNode->sLayout.iDescent = pBody->sLayout.iDescent;
             break;
         }
     }
@@ -91,27 +91,27 @@ void RenderNode_EstimateSize(RenderNode* pNode, const RenderConfig* pConfig) {
 void RenderNode_Draw(RenderNode* pNode, const RenderConfig* pConfig, int iStartX, int iCenterY) {
     if (pNode->iType & pConfig->sDebug.bOutline) {
         pConfig->sInterfaces.plotLine(
-            iStartX, iCenterY - pNode->sSize.iTop,
-            iStartX + pNode->sSize.iWidth, iCenterY - pNode->sSize.iTop
+            iStartX, iCenterY - pNode->sLayout.iAscent,
+            iStartX + pNode->sLayout.iWidth, iCenterY - pNode->sLayout.iAscent
         );
         pConfig->sInterfaces.plotLine(
-            iStartX + pNode->sSize.iWidth, iCenterY - pNode->sSize.iTop,
-            iStartX + pNode->sSize.iWidth, iCenterY + pNode->sSize.iBottom
+            iStartX + pNode->sLayout.iWidth, iCenterY - pNode->sLayout.iAscent,
+            iStartX + pNode->sLayout.iWidth, iCenterY + pNode->sLayout.iDescent
         );
         pConfig->sInterfaces.plotLine(
-            iStartX + pNode->sSize.iWidth, iCenterY + pNode->sSize.iBottom,
-            iStartX, iCenterY + pNode->sSize.iBottom
+            iStartX + pNode->sLayout.iWidth, iCenterY + pNode->sLayout.iDescent,
+            iStartX, iCenterY + pNode->sLayout.iDescent
         );
         pConfig->sInterfaces.plotLine(
-            iStartX, iCenterY + pNode->sSize.iBottom,
-            iStartX, iCenterY - pNode->sSize.iTop
+            iStartX, iCenterY + pNode->sLayout.iDescent,
+            iStartX, iCenterY - pNode->sLayout.iAscent
         );
     }
     switch (pNode->iType) {
         case RN_TEXT: {
             int i;
             int x = iStartX;
-            int y = iCenterY - pNode->sSize.iTop + pConfig->sFont.iHeight / 8;
+            int y = iCenterY - pNode->sLayout.iAscent + pConfig->sFont.iHeight / 8;
             const char* szText = pNode->uData.sText.szText;
             for (i = 0; szText[i]; ++i) {
                 pConfig->sInterfaces.putChar(x, y, (unsigned char)szText[i]);
@@ -125,23 +125,23 @@ void RenderNode_Draw(RenderNode* pNode, const RenderConfig* pConfig, int iStartX
                 /*
                 static const int iCrossSize = 2;
                 int x = iStartX + pConfig->sFont.iWidth / 2 - iCrossSize / 2;
-                int y = iCenterY - pNode->sSize.iTop + pConfig->sFont.iHeight / 2;
+                int y = iCenterY - pNode->sLayout.iAscent + pConfig->sFont.iHeight / 2;
                 pConfig->sInterfaces.plotLine(x - iCrossSize, y - iCrossSize, x + iCrossSize, y + iCrossSize);
                 pConfig->sInterfaces.plotLine(x + iCrossSize, y - iCrossSize, x - iCrossSize, y + iCrossSize);
                 */
                 int x = iStartX + pConfig->sFont.iWidth / 2 - 1;
-                int y = iCenterY - pNode->sSize.iTop + pConfig->sFont.iHeight / 2;
+                int y = iCenterY - pNode->sLayout.iAscent + pConfig->sFont.iHeight / 2;
                 pConfig->sInterfaces.setPixel(x, y);
             }
             else if (c == 'e') {
                 int x = iStartX;
-                int y = iCenterY - pNode->sSize.iTop + pConfig->sFont.iHeight / 8;
+                int y = iCenterY - pNode->sLayout.iAscent + pConfig->sFont.iHeight / 8;
                 pConfig->sInterfaces.putChar(x, y, c);
                 pConfig->sInterfaces.putChar(x + 1, y, c);
             }
             else {
                 int x = iStartX;
-                int y = iCenterY - pNode->sSize.iTop + pConfig->sFont.iHeight / 8;
+                int y = iCenterY - pNode->sLayout.iAscent + pConfig->sFont.iHeight / 8;
                 pConfig->sInterfaces.putChar(x, y, c);
             }
             break;
@@ -157,26 +157,26 @@ void RenderNode_Draw(RenderNode* pNode, const RenderConfig* pConfig, int iStartX
             ) {
                 RenderNode* pChild = (RenderNode *)pListNode->pData;
                 RenderNode_Draw(pChild, pConfig, x, y);
-                x += pChild->sSize.iWidth;
+                x += pChild->sLayout.iWidth;
             }
             break;
         }
         case RN_ENCLOSURE: {
             int x, y;
             int w;
-            int t = pNode->sSize.iTop;
-            int b = pNode->sSize.iBottom;
+            int t = pNode->sLayout.iAscent;
+            int b = pNode->sLayout.iDescent;
             int r = pConfig->sEnclosure.iRadius;
 
             RenderNode* pContent = pNode->uData.sEnclosure.pContent;
 
-            x = iStartX + (pNode->sSize.iWidth - pContent->sSize.iWidth) / 2;
+            x = iStartX + (pNode->sLayout.iWidth - pContent->sLayout.iWidth) / 2;
             y = iCenterY;
             
             RenderNode_Draw(pContent, pConfig, x, y);
 
             x = iStartX + pConfig->sEnclosure.iMargin;
-            w = pNode->sSize.iWidth - pConfig->sEnclosure.iMargin * 2 - 1;
+            w = pNode->sLayout.iWidth - pConfig->sEnclosure.iMargin * 2 - 1;
 
             pConfig->sInterfaces.plotLine(
                 x, y - t + r,
@@ -210,15 +210,15 @@ void RenderNode_Draw(RenderNode* pNode, const RenderConfig* pConfig, int iStartX
             RenderNode* pTop = pNode->uData.sStack.pTop;
             RenderNode* pBottom = pNode->uData.sStack.pBottom;
 
-            x = iStartX + (pNode->sSize.iWidth - pTop->sSize.iWidth) / 2 ;
-            y = iCenterY - pNode->sSize.iTop + pTop->sSize.iTop;
+            x = iStartX + (pNode->sLayout.iWidth - pTop->sLayout.iWidth) / 2 ;
+            y = iCenterY - pNode->sLayout.iAscent + pTop->sLayout.iAscent;
             RenderNode_Draw(pTop, pConfig, x, y);
             
-            x = iStartX + (pNode->sSize.iWidth - pBottom->sSize.iWidth) / 2;
-            y = iCenterY + pNode->sSize.iBottom - pBottom->sSize.iBottom;
+            x = iStartX + (pNode->sLayout.iWidth - pBottom->sLayout.iWidth) / 2;
+            y = iCenterY + pNode->sLayout.iDescent - pBottom->sLayout.iDescent;
             RenderNode_Draw(pBottom, pConfig, x, y);
 
-            pConfig->sInterfaces.plotLine(iStartX, iCenterY, iStartX + pNode->sSize.iWidth - 2, iCenterY);
+            pConfig->sInterfaces.plotLine(iStartX, iCenterY, iStartX + pNode->sLayout.iWidth - 2, iCenterY);
             break;
         }
         case RN_ROOT: {
@@ -229,11 +229,11 @@ void RenderNode_Draw(RenderNode* pNode, const RenderConfig* pConfig, int iStartX
             y = iCenterY;
             RenderNode_Draw(pContent, pConfig, x, y);
 
-            w = pNode->sSize.iWidth;
-            h = pNode->sSize.iBottom + pNode->sSize.iTop;
+            w = pNode->sLayout.iWidth;
+            h = pNode->sLayout.iDescent + pNode->sLayout.iAscent;
 
             x = iStartX;
-            y = iCenterY - pNode->sSize.iTop;
+            y = iCenterY - pNode->sLayout.iAscent;
             pConfig->sInterfaces.plotLine(
                 x + pConfig->sRoot.iSpacingLeft / 2, y,
                 x + w, y
@@ -264,8 +264,8 @@ void RenderNode_Draw(RenderNode* pNode, const RenderConfig* pConfig, int iStartX
             y = iCenterY;
             RenderNode_Draw(pBody, pConfig, x, y);
             
-            x = iStartX + pBody->sSize.iWidth;
-            y = iCenterY - pNode->sSize.iTop + pScript->sSize.iTop;
+            x = iStartX + pBody->sLayout.iWidth;
+            y = iCenterY - pNode->sLayout.iAscent + pScript->sLayout.iAscent;
             RenderNode_Draw(pScript, pConfig, x, y);
             
             break;

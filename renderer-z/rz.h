@@ -16,10 +16,11 @@ typedef enum tagRenderNodeType {
 typedef struct tagRenderNode {
     RenderNodeType iType;
     struct {
-        int iWidth;
-        int iTop;
-        int iBottom;
-    } sSize;
+        int iWidth;     /* Total width of the node */
+        /* Total height of the node (iAscent + iDescent) */
+        int iAscent;    /* Distance above the baseline (upward extent) */
+        int iDescent;   /* Distance below the baseline (downward extent) */
+    } sLayout;
     union {
         struct {
             char* szText;

@@ -7,9 +7,9 @@ static RenderNode* createRenderNode(RenderNodeType iType) {
     RenderNode* pNode = (RenderNode *)malloc(sizeof(RenderNode));
 
     pNode->iType = iType;
-    pNode->sSize.iWidth = 0;
-    pNode->sSize.iTop = 0;
-    pNode->sSize.iBottom = 0;
+    pNode->sLayout.iWidth = 0;
+    pNode->sLayout.iAscent = 0;
+    pNode->sLayout.iDescent = 0;
 
     switch (iType) {
         case RN_TEXT:
