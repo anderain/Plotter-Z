@@ -70,6 +70,10 @@ int             g_iMousePrevY = 0;
 typedef struct { PZ_FLOAT x, y, z; } Vertex;
 typedef struct { int i0, i1; } Edge;
 
+const PZ_FLOAT arrZoomLevels[] = { 0.33, 0.5, 0.75, 1, 1.5, 2, 4, 8 };
+const int iNumZoomLevel = sizeof(arrZoomLevels) / sizeof(arrZoomLevels[0]);
+#define ZOOM_LEVEL_DEFAULT 3
+
 struct {
     int iViewportX;
     int iViewportY;
@@ -80,7 +84,7 @@ struct {
     PZ_FLOAT xMin;  PZ_FLOAT xMax;  int xGrid;
     PZ_FLOAT yMin;  PZ_FLOAT yMax;  int yGrid;
     PZ_FLOAT zMin;  PZ_FLOAT zMax;
-    int iZoomFactor; /* 1 -> 0.25 | 2 -> 0.5 | 4 -> 1.0 | 8 -> 2.0 ... */
+    int iZoomLevel;
 } Camera = {
     0, 0, 0,
     0, 0,
@@ -88,7 +92,7 @@ struct {
     -6.0f, 6.0f, 20,
     -6.0f, 6.0f, 20,
     -3.0f, 3.0f,
-    4
+    ZOOM_LEVEL_DEFAULT
 };
 
 PZ_FLOAT zBuf[2000];
@@ -268,7 +272,7 @@ static void putText(int x, int y, const unsigned char* usz, Uint32 uColor) {
  *====================================================*/
 
 static void xyz2xy(PZ_FLOAT x, PZ_FLOAT y, PZ_FLOAT z, int *ox, int *oy) {
-    PZ_FLOAT zoom = Camera.iZoomFactor / 4.0f;
+    PZ_FLOAT zoom = arrZoomLevels[Camera.iZoomLevel];
     PZ_FLOAT scale = Camera.iViewportS * zoom;
     PZ_FLOAT nx = (x * Camera.cosB - y * Camera.sinB);
     PZ_FLOAT ny = (x * Camera.sinB * Camera.sinA + y * Camera.cosB * Camera.sinA - z * Camera.cosA);
@@ -441,10 +445,24 @@ static void redraw(void) {
         int iStartY = iCanvasH - 10;
         int iLeft;
         char szBuf[200];
+
         fillRect(0, iStartY, iCanvasW, 10, uSolidColor);
-        sprintf(szBuf, "VIEW: A=%d, B=%d", Camera.iAlphaDeg, Camera.iBetaDeg);
+
+        sprintf(
+            szBuf,
+            "VIEW: A=%d, B=%d",
+            Camera.iAlphaDeg,
+            Camera.iBetaDeg
+        );
         putText(2, iStartY + 2, (const unsigned char *)szBuf, uBgColor);
-        sprintf(szBuf, "ZOOM=%d%%, OX=%d, OY=%d", Camera.iZoomFactor * 100 / 4, Camera.iViewportX, Camera.iViewportY);
+
+        sprintf(
+            szBuf,
+            "ZOOM=%d%%, OX=%d, OY=%d",
+            (int)(arrZoomLevels[Camera.iZoomLevel] * 100),
+            Camera.iViewportX,
+            Camera.iViewportY
+        );
         iLeft = iCanvasW - (int)strlen(szBuf) * 6 - 2;
         putText(iLeft, iStartY + 2, (const unsigned char *)szBuf, uBgColor);
 
@@ -713,17 +731,17 @@ int main(int argc, char* argv[]) {
                         else if (sdlEvent.key.keysym.sym == SDLK_r) {
                             Camera.iViewportX = iCanvasW / 2;
                             Camera.iViewportY = iCanvasH / 2;
-                            Camera.iZoomFactor = 4;
+                            Camera.iZoomLevel = ZOOM_LEVEL_DEFAULT;
                             Camera.iBetaDeg = 0;
                             Camera.iAlphaDeg = 0;
                         }
                         else if (sdlEvent.key.keysym.sym == SDLK_q) {
-                            Camera.iZoomFactor >>= 1;
-                            if (Camera.iZoomFactor <= 0) Camera.iZoomFactor = 1;
+                            Camera.iZoomLevel--;
+                            if (Camera.iZoomLevel < 0) Camera.iZoomLevel = 0;
                         }
                         else if (sdlEvent.key.keysym.sym == SDLK_w) {
-                            Camera.iZoomFactor <<= 1;
-                            if (Camera.iZoomFactor >= 16) Camera.iZoomFactor = 16;
+                            Camera.iZoomLevel++;
+                            if (Camera.iZoomLevel >= iNumZoomLevel) Camera.iZoomLevel = iNumZoomLevel - 1;
                         }
                         else if (sdlEvent.key.keysym.sym == SDLK_e) {
                             bShowBox = !bShowBox;
