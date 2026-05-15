@@ -13,7 +13,7 @@ typedef enum {
     PZF_EXP,
     PZF_ABS,
     PZF_LOG,
-    PZF_LN,
+    PZF_LN
 } PzFuncIndex;
 
 typedef struct {

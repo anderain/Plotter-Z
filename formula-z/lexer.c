@@ -38,22 +38,26 @@ void FzAnalyzer_NextToken(FzLineAnalyzer *pAnalyzer) {
         szBuffer[0] = firstChar;
         szBuffer[1] = '\0';
         pAnalyzer->pCurrent++;
-        return assignToken(pAnalyzer, TOKEN_OPERATOR, szBuffer, pSourceStart);
+        assignToken(pAnalyzer, TOKEN_OPERATOR, szBuffer, pSourceStart);
+        return;
     case '(':
         szBuffer[0] = firstChar;
         szBuffer[1] = '\0';
         pAnalyzer->pCurrent++;
-        return assignToken(pAnalyzer, TOKEN_PAREN_L, szBuffer, pSourceStart);
+        assignToken(pAnalyzer, TOKEN_PAREN_L, szBuffer, pSourceStart);
+        return;
     case ')':
         szBuffer[0] = firstChar;
         szBuffer[1] = '\0';
         pAnalyzer->pCurrent++;
-        return assignToken(pAnalyzer, TOKEN_PAREN_R, szBuffer, pSourceStart);
+        assignToken(pAnalyzer, TOKEN_PAREN_R, szBuffer, pSourceStart);
+        return;
     case ',':
         szBuffer[0] = firstChar;
         szBuffer[1] = '\0';
         pAnalyzer->pCurrent++;
-        return assignToken(pAnalyzer, TOKEN_COMMA, szBuffer, pSourceStart);
+        assignToken(pAnalyzer, TOKEN_COMMA, szBuffer, pSourceStart);
+        return;
     case '>':
         secondChar = *(pAnalyzer->pCurrent + 1);
         if (secondChar == '=') {
@@ -61,12 +65,14 @@ void FzAnalyzer_NextToken(FzLineAnalyzer *pAnalyzer) {
             szBuffer[1] = secondChar;
             szBuffer[2] = '\0';
             pAnalyzer->pCurrent += 2;
-            return assignToken(pAnalyzer, TOKEN_OPERATOR, szBuffer, pSourceStart);
+            assignToken(pAnalyzer, TOKEN_OPERATOR, szBuffer, pSourceStart);
+            return;
         } else {
             szBuffer[0] = firstChar;
             szBuffer[1] = '\0';
             pAnalyzer->pCurrent++;
-            return assignToken(pAnalyzer, TOKEN_OPERATOR, szBuffer, pSourceStart);
+            assignToken(pAnalyzer, TOKEN_OPERATOR, szBuffer, pSourceStart);
+            return;
         }
     case '<':
         secondChar = *(pAnalyzer->pCurrent + 1);
@@ -75,18 +81,21 @@ void FzAnalyzer_NextToken(FzLineAnalyzer *pAnalyzer) {
             szBuffer[1] = secondChar;
             szBuffer[2] = '\0';
             pAnalyzer->pCurrent += 2;
-            return assignToken(pAnalyzer, TOKEN_OPERATOR, szBuffer, pSourceStart);
+            assignToken(pAnalyzer, TOKEN_OPERATOR, szBuffer, pSourceStart);
+            return;
         } else if (secondChar == '>') {
             szBuffer[0] = firstChar;
             szBuffer[1] = secondChar;
             szBuffer[2] = '\0';
             pAnalyzer->pCurrent += 2;
-            return assignToken(pAnalyzer, TOKEN_OPERATOR, szBuffer, pSourceStart);
+            assignToken(pAnalyzer, TOKEN_OPERATOR, szBuffer, pSourceStart);
+            return;
         } else {
             szBuffer[0] = firstChar;
             szBuffer[1] = '\0';
             pAnalyzer->pCurrent++;
-            return assignToken(pAnalyzer, TOKEN_OPERATOR, szBuffer, pSourceStart);
+            assignToken(pAnalyzer, TOKEN_OPERATOR, szBuffer, pSourceStart);
+            return;
         }
     case '&':
         secondChar = *(pAnalyzer->pCurrent + 1);
@@ -95,12 +104,14 @@ void FzAnalyzer_NextToken(FzLineAnalyzer *pAnalyzer) {
             szBuffer[1] = secondChar;
             szBuffer[2] = '\0';
             pAnalyzer->pCurrent += 2;
-            return assignToken(pAnalyzer, TOKEN_OPERATOR, szBuffer, pSourceStart);
+            assignToken(pAnalyzer, TOKEN_OPERATOR, szBuffer, pSourceStart);
+            return;
         } else {
             szBuffer[0] = firstChar;
             szBuffer[1] = '\0';
             pAnalyzer->pCurrent++;
-            return assignToken(pAnalyzer, TOKEN_OPERATOR, szBuffer, pSourceStart);
+            assignToken(pAnalyzer, TOKEN_OPERATOR, szBuffer, pSourceStart);
+            return;
         }
     case '|':
         secondChar = *(pAnalyzer->pCurrent + 1);
@@ -109,18 +120,21 @@ void FzAnalyzer_NextToken(FzLineAnalyzer *pAnalyzer) {
             szBuffer[1] = secondChar;
             szBuffer[2] = '\0';
             pAnalyzer->pCurrent += 2;
-            return assignToken(pAnalyzer, TOKEN_OPERATOR, szBuffer, pSourceStart);
+            assignToken(pAnalyzer, TOKEN_OPERATOR, szBuffer, pSourceStart);
+            return;
         } else {
             szBuffer[0] = firstChar;
             szBuffer[1] = '\0';
             pAnalyzer->pCurrent++;
-            return assignToken(pAnalyzer, TOKEN_UNDEFINED, szBuffer, pSourceStart);
+            assignToken(pAnalyzer, TOKEN_UNDEFINED, szBuffer, pSourceStart);
+            return;
         }
     }
 
     /* Line end */
     if (firstChar == '\0') {
-        return assignToken(pAnalyzer, TOKEN_LINE_END, "", pSourceStart);
+        assignToken(pAnalyzer, TOKEN_LINE_END, "", pSourceStart);
+        return;
     }
     
     /* Numeric */
@@ -140,7 +154,8 @@ void FzAnalyzer_NextToken(FzLineAnalyzer *pAnalyzer) {
 
         *pBuffer = '\0';
 
-        return assignToken(pAnalyzer, TOKEN_NUMERIC, szBuffer, pSourceStart);
+        assignToken(pAnalyzer, TOKEN_NUMERIC, szBuffer, pSourceStart);
+        return;
     }
     /* Identifier */
     else if (isAlpha(firstChar)) {
@@ -149,14 +164,16 @@ void FzAnalyzer_NextToken(FzLineAnalyzer *pAnalyzer) {
         }
         *pBuffer = '\0';
 
-        return assignToken(pAnalyzer, TOKEN_IDENTIFIER, szBuffer, pSourceStart);
+        assignToken(pAnalyzer, TOKEN_IDENTIFIER, szBuffer, pSourceStart);
+        return;
     }
     /* Undefined character */
     else {
         pAnalyzer->pCurrent++;
         szBuffer[0] = firstChar;
         szBuffer[1] = '\0';
-        return assignToken(pAnalyzer, TOKEN_UNDEFINED, szBuffer, pSourceStart);
+        assignToken(pAnalyzer, TOKEN_UNDEFINED, szBuffer, pSourceStart);
+        return;
     }
 }
 

@@ -10,7 +10,7 @@ typedef enum tagRenderNodeType {
     RN_ENCLOSURE    = 8,
     RN_STACK        = 16,
     RN_ROOT         = 32,
-    RN_SUPERSCRIPT  = 64,
+    RN_SUPERSCRIPT  = 64
 } RenderNodeType;
 
 typedef struct tagRenderNode {

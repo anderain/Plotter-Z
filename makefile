@@ -7,7 +7,7 @@
 #====================================================
 CC		  		= gcc
 LD				= gcc
-C_FLAGS	 		= -c -Wall -ansi
+C_FLAGS	 		= -c -ansi -Werror -pedantic 
 #----------------------------------------------------
 COMMON_SRC_PATH = common
 COMMON_OBJS		= vlist.o utils.o constants.o

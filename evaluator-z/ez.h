@@ -41,7 +41,7 @@ const char* EzOpCode_GetName(EzOpCode iCode);
 
 typedef struct {
     /* Variables */
-    Vlist*          pListVariableName; /* char* */;
+    Vlist*          pListVariableName; /* char* */
     PZ_FLOAT*       pVariableValueArray;
     int             iVariableLength;
 

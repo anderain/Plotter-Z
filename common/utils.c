@@ -26,15 +26,16 @@ int Utils_IsStringEndWith(const char *str, const char *token) {
     if (str == NULL || token == NULL) {
         return 0;
     }
-    
-    int strLen = strlen(str);
-    int tokenLen = strlen(token);
-    
-    if (tokenLen > strLen) {
-        return 0;
-    }
+    else {
+        int strLen = strlen(str);
+        int tokenLen = strlen(token);
+        
+        if (tokenLen > strLen) {
+            return 0;
+        }
 
-    return strcmp(str + strLen - tokenLen, token) == 0;
+        return strcmp(str + strLen - tokenLen, token) == 0;
+    }
 }
 
 char* Utils_StringConcat(const char* szLeft, const char* szRight) {
