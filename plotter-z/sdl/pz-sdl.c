@@ -9,15 +9,17 @@
 #include "../../renderer-z/rz.h"
 #include "../../evaluator-z/ez.h"
 
-#define ABS(v) ((v) < 0 ? -(v) : (v))
+#define ABS(v)  ((v) < 0 ? -(v) : (v))
+#define PZ_PI   3.14159265
 
 /*====================================================
  * Configuration structure with defaults
  *====================================================*/
 typedef struct {
-    int         iWidth;
-    int         iHeight;
+    int         iScreenWidth;
+    int         iScreenHeight;
     int         iScale;
+    int         bLcd;
     int         bFullscreen;
     PZ_FLOAT    fXMin, fXMax;
     int         iXGrid;
@@ -29,49 +31,64 @@ typedef struct {
 } PzSdlConfig;
 
 static const PzSdlConfig DEFAULT_CONFIG = {
-    320, 240,                                   /* width, height */
+    640, 480,                                   /* width, height */
     1,                                          /* scale */
+    0,                                          /* lcd mode */
     0,                                          /* fullscreen */
-    -10.0f, 6.0f, 20,                           /* xMin, xMax, xGrid */
-    -10.0f, 6.0f, 20,                           /* yMin, yMax, yGrid */
+    -6.0f, 6.0f, 20,                            /* xMin, xMax, xGrid */
+    -6.0f, 6.0f, 20,                            /* yMin, yMax, yGrid */
     -3.0f, 3.0f,                                /* zMin, zMax */
-    1,                                          /* showBox */
-    "sin(sqr(x^2+y^2))*cos(sqr(x^2+y^2))"      /* default expression */
+    0,                                          /* showBox */
+    "sin(sqr(x^2+y^2))*cos(sqr(x^2+y^2))"       /* default expression */
 };
 
 /*====================================================
  * Global state
  *====================================================*/
 int             bMainLoop = 1;
-int             iWidth = 320;
-int             iHeight = 240;
+int             iScreenWidth = 640;
+int             iScreenHeight = 480;
 int             iScale = 1;
+int             bLcd = 0;
+int             iCanvasW = 640;
+int             iCanvasH = 480;
+int             iBlitOffX = 0;
+int             iBlitOffY = 0;
 int             bShowBox = 1;
 SDL_Surface*    sfScreen;
 SDL_Surface*    sfCanvas;
 Uint32          uBgColor = 0x99bb00;
-Uint32          uSolidColor = 0x115500;
-
+Uint32          uSolidColor = 0x226600;
+Uint32          uLcdDarken = 0x222222;
 int             g_bError = 0;
 char            g_szErrorText[200] = "";
+int             g_bMouseLeftDown = 0;
+int             g_bMouseRightDown = 0;
+int             g_iMousePrevX = 0;
+int             g_iMousePrevY = 0;
 
 typedef struct { PZ_FLOAT x, y, z; } Vertex;
 typedef struct { int i0, i1; } Edge;
 
 struct {
-    PZ_FLOAT alpha; PZ_FLOAT beta;
+    int iViewportX;
+    int iViewportY;
+    int iViewportS;
+    int iAlphaDeg;
+    int iBetaDeg;
     PZ_FLOAT cosA;  PZ_FLOAT sinA;  PZ_FLOAT cosB;  PZ_FLOAT sinB; 
     PZ_FLOAT xMin;  PZ_FLOAT xMax;  int xGrid;
     PZ_FLOAT yMin;  PZ_FLOAT yMax;  int yGrid;
     PZ_FLOAT zMin;  PZ_FLOAT zMax;
-    PZ_FLOAT zoomFactor;
+    int iZoomFactor; /* 1 -> 0.25 | 2 -> 0.5 | 4 -> 1.0 | 8 -> 2.0 ... */
 } Camera = {
-    0.5f, 0.5f,
+    0, 0, 0,
+    0, 0,
     0.0f, 0.0f, 0.0f, 0.0f,
-    -10.0f, 6.0f, 20,
-    -10.0f, 6.0f, 20,
+    -6.0f, 6.0f, 20,
+    -6.0f, 6.0f, 20,
     -3.0f, 3.0f,
-    1.0f
+    4
 };
 
 PZ_FLOAT zBuf[2000];
@@ -122,11 +139,20 @@ static int parsePair(const char* szArg, PZ_FLOAT* pMin, PZ_FLOAT* pMax) {
 }
 
 static void applyConfig(const PzSdlConfig* pCfg) {
-    iWidth   = pCfg->iWidth;
-    iHeight  = pCfg->iHeight;
+    iScreenWidth   = pCfg->iScreenWidth;
+    iScreenHeight  = pCfg->iScreenHeight;
     iScale   = pCfg->iScale;
+    bLcd     = pCfg->bLcd;
     bShowBox = pCfg->bShowBox;
 
+    iCanvasW = iScreenWidth / iScale;
+    iCanvasH = iScreenHeight / iScale;
+    iBlitOffX = (iScreenWidth  - iCanvasW * iScale) / 2;
+    iBlitOffY = (iScreenHeight - iCanvasH * iScale) / 2;
+
+    Camera.iViewportS = (iCanvasH < iCanvasW ? iCanvasH : iCanvasW) / 2;
+    Camera.iViewportX = iCanvasW / 2;
+    Camera.iViewportY = iCanvasH / 2;
     Camera.xMin  = pCfg->fXMin;
     Camera.xMax  = pCfg->fXMax;
     Camera.xGrid = pCfg->iXGrid;
@@ -199,6 +225,15 @@ static void plotLine(int x0, int y0, int x1, int y1) {
     plotLineColor(x0, y0, x1, y1, uSolidColor);
 }
 
+static void fillRect(int dx, int dy, int w, int h, Uint32 uColor) {
+    int x, y;
+    for (x = 0; x < w; ++x) {
+        for (y = 0; y < h; ++y) {
+            setPixelToSurface(sfCanvas, dx + x, dy + y, uColor);
+        }
+    }
+}
+
 static void draw1bpp(const unsigned char *raw, int dx, int dy, int w, int h, int rev, Uint32 color) {
     int pitch = (w >> 3) + (w % 8 ? 1 : 0);
     int x, y, dot;
@@ -214,13 +249,17 @@ static void draw1bpp(const unsigned char *raw, int dx, int dy, int w, int h, int
     }
 }
 
-static void putChar(int x, int y, unsigned char ch) {
-    draw1bpp(FONT_HYBIRD_6x8 + 8 * ch, x, y, 8, 8, 0, uSolidColor);
+static void putCharColor(int x, int y, unsigned char ch, Uint32 uColor) {
+    draw1bpp(FONT_HYBIRD_6x8 + 8 * ch, x, y, 8, 8, 0, uColor);
 }
 
-static void putText(int x, int y, const unsigned char* usz) {
+static void putChar(int x, int y, unsigned char ch) {
+    putCharColor(x, y, ch, uSolidColor);
+}
+
+static void putText(int x, int y, const unsigned char* usz, Uint32 uColor) {
     for (; *usz; ++usz, x += 6) {
-        putChar(x, y, *usz);
+        putCharColor(x, y, *usz, uColor);
     }
 }
 
@@ -229,48 +268,71 @@ static void putText(int x, int y, const unsigned char* usz) {
  *====================================================*/
 
 static void xyz2xy(PZ_FLOAT x, PZ_FLOAT y, PZ_FLOAT z, int *ox, int *oy) {
-    PZ_FLOAT zoom = Camera.zoomFactor * iHeight / 2.0f;
+    PZ_FLOAT zoom = Camera.iZoomFactor / 4.0f;
+    PZ_FLOAT scale = Camera.iViewportS * zoom;
     PZ_FLOAT nx = (x * Camera.cosB - y * Camera.sinB);
-    PZ_FLOAT ny = (-x * Camera.sinB * Camera.sinA - y * Camera.cosB * Camera.sinA + z * Camera.cosA);
-    *ox = (int)(iWidth / 2.0f + zoom * nx);
-    *oy = (int)(iHeight / 2.0f + zoom * ny);
+    PZ_FLOAT ny = (x * Camera.sinB * Camera.sinA + y * Camera.cosB * Camera.sinA - z * Camera.cosA);
+    *ox = (int)(Camera.iViewportX + scale * nx);
+    *oy = (int)(Camera.iViewportY + scale * ny);
 }
 
 /*====================================================
  * Scale blit (integer nearest-neighbour)
  *====================================================*/
 
-static void scaleBlit(SDL_Surface* sfSrc, SDL_Surface* sfDst, int iFactor) {
+static void scaleBlit(SDL_Surface* sfSrc, SDL_Surface* sfDst, int iFactor,
+                      int bLcdMode, Uint32 uDarken, int iDstOffX, int iDstOffY) {
     int sx, sy, dx, dy;
-    if (iFactor <= 1) {
-        SDL_BlitSurface(sfSrc, NULL, sfDst, NULL);
+    int srcBpp, dstBpp, srcPitch, dstPitch;
+    unsigned char* pSrcBase;
+    unsigned char* pDstBase;
+    int i;
+
+    if (iFactor <= 0) return;
+
+    if (iFactor == 1 && !bLcdMode) {
+        SDL_Rect rcDst;
+        rcDst.x = (Sint16)iDstOffX;
+        rcDst.y = (Sint16)iDstOffY;
+        SDL_BlitSurface(sfSrc, NULL, sfDst, &rcDst);
         return;
     }
+
     if (SDL_LockSurface(sfSrc) < 0) return;
     if (SDL_LockSurface(sfDst) < 0) { SDL_UnlockSurface(sfSrc); return; }
-    {
-        int srcBpp = sfSrc->format->BytesPerPixel;
-        int dstBpp = sfDst->format->BytesPerPixel;
-        int srcPitch = sfSrc->pitch;
-        int dstPitch = sfDst->pitch;
-        unsigned char* pSrcBase = (unsigned char*)sfSrc->pixels;
-        unsigned char* pDstBase = (unsigned char*)sfDst->pixels;
-        int i;
 
-        for (sy = 0; sy < sfSrc->h; ++sy) {
-            for (sx = 0; sx < sfSrc->w; ++sx) {
-                unsigned char* pSrc = pSrcBase + sy * srcPitch + sx * srcBpp;
-                for (dy = 0; dy < iFactor; ++dy) {
-                    unsigned char* pDst = pDstBase + (sy * iFactor + dy) * dstPitch + sx * iFactor * dstBpp;
-                    for (dx = 0; dx < iFactor; ++dx) {
+    srcBpp = sfSrc->format->BytesPerPixel;
+    dstBpp = sfDst->format->BytesPerPixel;
+    srcPitch = sfSrc->pitch;
+    dstPitch = sfDst->pitch;
+    pSrcBase = (unsigned char*)sfSrc->pixels;
+    pDstBase = (unsigned char*)sfDst->pixels;
+
+    for (sy = 0; sy < sfSrc->h; ++sy) {
+        for (sx = 0; sx < sfSrc->w; ++sx) {
+            unsigned char* pSrc = pSrcBase + sy * srcPitch + sx * srcBpp;
+            for (dy = 0; dy < iFactor; ++dy) {
+                int dstRow = iDstOffY + sy * iFactor + dy;
+                unsigned char* pDst = pDstBase + dstRow * dstPitch
+                                    + (iDstOffX + sx * iFactor) * dstBpp;
+                for (dx = 0; dx < iFactor; ++dx) {
+                    unsigned char* pDstPixel = pDst + dx * dstBpp;
+                    if (bLcdMode && (dx == iFactor - 1 || dy == iFactor - 1)) {
                         for (i = 0; i < srcBpp; ++i) {
-                            pDst[dx * dstBpp + i] = pSrc[i];
+                            unsigned char ucSrc = pSrc[i];
+                            unsigned char ucSub = ((unsigned char*)&uDarken)[i];
+                            pDstPixel[i] = (ucSrc > ucSub) ? (unsigned char)(ucSrc - ucSub) : (unsigned char)0;
+                        }
+                    } else {
+                        for (i = 0; i < srcBpp; ++i) {
+                            pDstPixel[i] = pSrc[i];
                         }
                     }
                 }
             }
         }
     }
+
     SDL_UnlockSurface(sfDst);
     SDL_UnlockSurface(sfSrc);
 }
@@ -341,19 +403,13 @@ static void drawSurfaceWireframe(void) {
 }
 
 static void redraw(void) {
-    int iStartX = 8;
-    int iStartY = 12;
-    int iCenterY = iStartY + pRenderNode->sSize.iTop;
 
     SDL_FillRect(sfCanvas, NULL, uBgColor);
-    
-    putText(8, 2, (const unsigned char *)"Plotter-Z");
-    RenderNode_Draw(pRenderNode, &config, iStartX, iCenterY);
 
-    Camera.sinA = (PZ_FLOAT)sin(Camera.alpha);
-    Camera.cosA = (PZ_FLOAT)cos(Camera.alpha);
-    Camera.sinB = (PZ_FLOAT)sin(Camera.beta);
-    Camera.cosB = (PZ_FLOAT)cos(Camera.beta);
+    Camera.sinA = (PZ_FLOAT)sin(Camera.iAlphaDeg * PZ_PI / 180);
+    Camera.cosA = (PZ_FLOAT)cos(Camera.iAlphaDeg * PZ_PI / 180);
+    Camera.sinB = (PZ_FLOAT)sin(Camera.iBetaDeg * PZ_PI / 180);
+    Camera.cosB = (PZ_FLOAT)cos(Camera.iBetaDeg * PZ_PI / 180);
 
     drawSurfaceWireframe();
 
@@ -361,7 +417,41 @@ static void redraw(void) {
         drawBoundingBox();
     }
 
-    scaleBlit(sfCanvas, sfScreen, iScale);
+    /* Display title text */
+    {
+        static const char szTitle[] = "Plotter-Z";
+        static const int iTitleWidth = (sizeof(szTitle) - 1) * 6;
+        fillRect(0, 0, iCanvasW, 10, uSolidColor);
+        putText((iCanvasW - iTitleWidth) / 2, 2, (const unsigned char *)szTitle, uBgColor);
+    }
+    
+    /* Render expression */
+    {
+        int iStartX = 2;
+        int iStartY = 12;
+        int iNodeWidth = pRenderNode->sSize.iWidth;
+        int iNodeHeight = pRenderNode->sSize.iTop + pRenderNode->sSize.iBottom;
+        int iCenterY = iStartY + pRenderNode->sSize.iTop;
+        fillRect(iStartX - 2, iStartY - 2, iNodeWidth + 2, iNodeHeight + 2, uBgColor);
+        RenderNode_Draw(pRenderNode, &config, iStartX, iCenterY);
+    }
+
+    /* Display footer */
+    {
+        int iStartY = iCanvasH - 10;
+        int iLeft;
+        char szBuf[200];
+        fillRect(0, iStartY, iCanvasW, 10, uSolidColor);
+        sprintf(szBuf, "VIEW: A=%d, B=%d", Camera.iAlphaDeg, Camera.iBetaDeg);
+        putText(2, iStartY + 2, (const unsigned char *)szBuf, uBgColor);
+        sprintf(szBuf, "ZOOM=%d%%, OX=%d, OY=%d", Camera.iZoomFactor * 100 / 4, Camera.iViewportX, Camera.iViewportY);
+        iLeft = iCanvasW - (int)strlen(szBuf) * 6 - 2;
+        putText(iLeft, iStartY + 2, (const unsigned char *)szBuf, uBgColor);
+
+    }
+
+    SDL_FillRect(sfScreen, NULL, uBgColor);
+    scaleBlit(sfCanvas, sfScreen, iScale, bLcd, uLcdDarken, iBlitOffX, iBlitOffY);
     SDL_Flip(sfScreen);
 }
 
@@ -408,16 +498,17 @@ static void recalc(void) {
 
 static void drawErrorScreen(void) {
     SDL_FillRect(sfCanvas, NULL, uBgColor);
-    putText(8, 2, (const unsigned char *)"Plotter-Z");
-    putText(8, 20, (const unsigned char *)"ERROR:");
-    putText(8, 30, (const unsigned char *)"  Expression: ");
+    putText(8, 2, (const unsigned char *)"Plotter-Z", uSolidColor);
+    putText(8, 20, (const unsigned char *)"ERROR:", uSolidColor);
+    putText(8, 30, (const unsigned char *)"  Expression: ", uSolidColor);
     if (pAstExpr == NULL) {
-        putText(8, 38, (const unsigned char *)"Syntax Error - could not parse expression");
+        putText(8, 38, (const unsigned char *)"Syntax Error - could not parse expression", uSolidColor);
     } else {
-        putText(8, 38, (const unsigned char *)g_szErrorText);
+        putText(8, 38, (const unsigned char *)g_szErrorText, uSolidColor);
     }
-    putText(8, 54, (const unsigned char *)"Press [Tab] to exit");
-    scaleBlit(sfCanvas, sfScreen, iScale);
+    putText(8, 54, (const unsigned char *)"Press [Tab] to exit", uSolidColor);
+    SDL_FillRect(sfScreen, NULL, uBgColor);
+    scaleBlit(sfCanvas, sfScreen, iScale, bLcd, uLcdDarken, iBlitOffX, iBlitOffY);
     SDL_Flip(sfScreen);
 }
 
@@ -435,7 +526,7 @@ int main(int argc, char* argv[]) {
     /* Parse command-line arguments */
     for (i = 1; i < argc; ++i) {
         if (strcmp(argv[i], "-r") == 0) {
-            if (i + 1 >= argc || !parseResolution(argv[i + 1], &cfg.iWidth, &cfg.iHeight)) {
+            if (i + 1 >= argc || !parseResolution(argv[i + 1], &cfg.iScreenWidth, &cfg.iScreenHeight)) {
                 fprintf(stderr, "Error: -r requires WIDTHxHEIGHT\n");
                 return 2;
             }
@@ -462,6 +553,8 @@ int main(int argc, char* argv[]) {
             i++;
         } else if (strcmp(argv[i], "-b") == 0) {
             cfg.bShowBox = !cfg.bShowBox;
+        } else if (strcmp(argv[i], "-l") == 0) {
+            cfg.bLcd = !cfg.bLcd;
         } else if (strcmp(argv[i], "-s") == 0) {
             if (i + 1 >= argc) {
                 fprintf(stderr, "Error: -s requires SCALE\n");
@@ -531,7 +624,7 @@ int main(int argc, char* argv[]) {
         if (bFullscreen) {
             uFlags |= SDL_FULLSCREEN;
         }
-        sfScreen = SDL_SetVideoMode(iWidth * iScale, iHeight * iScale, 32, uFlags);
+        sfScreen = SDL_SetVideoMode(iScreenWidth, iScreenHeight, 32, uFlags);
     }
     SDL_WM_SetCaption("Plotter-Z | SDL", NULL);
 
@@ -539,7 +632,7 @@ int main(int argc, char* argv[]) {
         return 0;
     }
 
-    sfCanvas = SDL_CreateRGBSurface(SDL_HWSURFACE, iWidth, iHeight, 32,
+    sfCanvas = SDL_CreateRGBSurface(SDL_HWSURFACE, iCanvasW, iCanvasH, 32,
                                     0x00FF0000, 0x0000FF00, 0x000000FF, 0x00000000);
     if (sfCanvas == NULL) {
         return 1;
@@ -559,6 +652,46 @@ int main(int argc, char* argv[]) {
                 case SDL_QUIT:
                     bMainLoop = 0;
                     break;
+                case SDL_MOUSEBUTTONDOWN:
+                    if (sdlEvent.button.button == SDL_BUTTON_LEFT) {
+                        g_bMouseLeftDown = 1;
+                        g_iMousePrevX = sdlEvent.button.x;
+                        g_iMousePrevY = sdlEvent.button.y;
+                    } else if (sdlEvent.button.button == SDL_BUTTON_RIGHT) {
+                        g_bMouseRightDown = 1;
+                        g_iMousePrevX = sdlEvent.button.x;
+                        g_iMousePrevY = sdlEvent.button.y;
+                    }
+                    break;
+                case SDL_MOUSEBUTTONUP:
+                    if (sdlEvent.button.button == SDL_BUTTON_LEFT) {
+                        g_bMouseLeftDown = 0;
+                    } else if (sdlEvent.button.button == SDL_BUTTON_RIGHT) {
+                        g_bMouseRightDown = 0;
+                    }
+                    break;
+                case SDL_MOUSEMOTION:
+                    if (!g_bError) {
+                        int iDeltaX = sdlEvent.motion.x - g_iMousePrevX;
+                        int iDeltaY = sdlEvent.motion.y - g_iMousePrevY;
+                        g_iMousePrevX = sdlEvent.motion.x;
+                        g_iMousePrevY = sdlEvent.motion.y;
+                        if (iDeltaX == 0 && iDeltaY == 0) break;
+                        if (g_bMouseLeftDown) {
+                            Camera.iBetaDeg  += iDeltaX / iScale;
+                            Camera.iAlphaDeg -= iDeltaY / iScale;
+                            Camera.iBetaDeg = Camera.iBetaDeg % 360;
+                            if (Camera.iBetaDeg < 0) Camera.iBetaDeg += 360;
+                            Camera.iAlphaDeg = Camera.iAlphaDeg % 360;
+                            if (Camera.iAlphaDeg < 0) Camera.iAlphaDeg += 360;
+                            redraw();
+                        } else if (g_bMouseRightDown) {
+                            Camera.iViewportX += iDeltaX / iScale;
+                            Camera.iViewportY += iDeltaY / iScale;
+                            redraw();
+                        }
+                    }
+                    break;
                 case SDL_KEYDOWN:
                     if (sdlEvent.key.keysym.sym == SDLK_TAB) {
                         bMainLoop = 0;
@@ -566,27 +699,41 @@ int main(int argc, char* argv[]) {
                     }
                     if (!g_bError) {
                         if (sdlEvent.key.keysym.sym == SDLK_LEFT) {
-                            Camera.beta -= 0.1f;
+                            Camera.iBetaDeg -= 5;
                         }
                         else if (sdlEvent.key.keysym.sym == SDLK_RIGHT) {
-                            Camera.beta += 0.1f;
+                            Camera.iBetaDeg += 5;
                         }
                         if (sdlEvent.key.keysym.sym == SDLK_UP) {
-                            Camera.alpha -= 0.1f;
+                            Camera.iAlphaDeg -= 5;
                         }
                         else if (sdlEvent.key.keysym.sym == SDLK_DOWN) {
-                            Camera.alpha += 0.1f;
+                            Camera.iAlphaDeg += 5;
+                        }
+                        else if (sdlEvent.key.keysym.sym == SDLK_r) {
+                            Camera.iViewportX = iCanvasW / 2;
+                            Camera.iViewportY = iCanvasH / 2;
+                            Camera.iZoomFactor = 4;
+                            Camera.iBetaDeg = 0;
+                            Camera.iAlphaDeg = 0;
                         }
                         else if (sdlEvent.key.keysym.sym == SDLK_q) {
-                            Camera.zoomFactor -= 0.1;
-                            if (Camera.zoomFactor <= 0.1) Camera.zoomFactor = 0.1;
+                            Camera.iZoomFactor >>= 1;
+                            if (Camera.iZoomFactor <= 0) Camera.iZoomFactor = 1;
                         }
                         else if (sdlEvent.key.keysym.sym == SDLK_w) {
-                            Camera.zoomFactor += 0.1;
+                            Camera.iZoomFactor <<= 1;
+                            if (Camera.iZoomFactor >= 16) Camera.iZoomFactor = 16;
                         }
                         else if (sdlEvent.key.keysym.sym == SDLK_e) {
                             bShowBox = !bShowBox;
                         }
+
+                        Camera.iBetaDeg = Camera.iBetaDeg % 360;
+                        if (Camera.iBetaDeg < 0) Camera.iBetaDeg += 360; 
+                        Camera.iAlphaDeg = Camera.iAlphaDeg % 360;
+                        if (Camera.iAlphaDeg < 0) Camera.iAlphaDeg += 360;
+
                         redraw();
                     }
                     break;
