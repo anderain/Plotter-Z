@@ -11,6 +11,9 @@
 #define ABS(v)  ((v) < 0 ? -(v) : (v))
 #define PZ_PI   3.14159265
 
+#define CURRENT_FONT_WIDTH 6
+#define CURRENT_FONT_HEIGHT 8
+
 /*====================================================
  * Configuration structure with defaults
  *====================================================*/
@@ -60,6 +63,7 @@ Uint32          uBgColor = 0x99bb00;
 Uint32          uSolidColor = 0x226600;
 Uint32          uLcdDarken = 0x222222;
 int             g_bError = 0;
+int             g_bHelp = 0;
 char            g_szErrorText[200] = "";
 int             g_bMouseLeftDown = 0;
 int             g_bMouseRightDown = 0;
@@ -104,6 +108,93 @@ FzAstNode*      pAstExpr = NULL;
 EzMachine*      pVm;
 RenderNode*     pRenderNode;
 RenderConfig    config;
+
+/*====================================================
+ * I18N - Internationalization
+ *====================================================*/
+
+#define I18N_LANG_EN    0
+#define I18N_LANG_JA    1
+#define I18N_LANG_COUNT 2
+
+/* Text key indices */
+#define I18N_TITLE                  0
+#define I18N_ERROR                  1
+#define I18N_EXPRESSION_LABEL       2
+#define I18N_SYNTAX_ERROR           3
+#define I18N_PRESS_TAB_EXIT         4
+#define I18N_VIEW_FMT               5
+#define I18N_ZOOM_FMT               6
+#define I18N_VARIABLE_UNDEFINED_FMT 7
+#define I18N_FUNCTION_UNDEFINED_FMT 8
+#define I18N_FUNCTION_PARAM_FMT     9
+#define I18N_HELP_TITLE             10
+#define I18N_HELP_TAB               11
+#define I18N_HELP_UP_DOWN           12
+#define I18N_HELP_LEFT_RIGHT        13
+#define I18N_HELP_R                 14
+#define I18N_HELP_Q                 15
+#define I18N_HELP_W                 16
+#define I18N_HELP_E                 17
+#define I18N_HELP_MOUSE_LEFT        18
+#define I18N_HELP_MOUSE_RIGHT       19
+#define I18N_HELP_ANY_KEY           20
+#define I18N_COUNT                  21
+
+static int g_iLang = I18N_LANG_EN;
+
+static const char* TextI18n[I18N_LANG_COUNT][I18N_COUNT] = {
+    /* [I18N_LANG_EN] English */
+    {
+        "Plotter-Z",
+        "ERROR:",
+        "  Expression: ",
+        "Syntax Error - could not parse expression",
+        "Press [Tab] to exit",
+        "VIEW: %c=%d, %c=%d",
+        "%d%%(%d, %d)",
+        "VARIABLE UNDEFINED: '%s'",
+        "FUNCTION UNDEFINED: '%s'",
+        "FUNCTION PARAM MISMATCH: '%s'",
+        "Operation Guide",
+        "Tab - Exit",
+        "\x15/\x16  - Horizontal rotation",
+        "\x17/\x18  - Vertical rotation",
+        "R - Reset viewport to origin",
+        "Q - Zoom out",
+        "W - Zoom in",
+        "E - Toggle bounding box",
+        "Left drag  - Rotate view",
+        "Right drag - Pan view",
+        "Press any key to continue",
+    },
+    /* [I18N_LANG_JA] Japanese */
+    {
+        "\xD6\xE9\xE5\xB9\xCA\xBAZ",
+        "\xBE\xE1\xBA:",
+        "  \xBE\xC2\xC7\xD6\xE9\xE4\xB9\xC6\xB8\xE7:",
+        "\xC6\xE7\xCA\xB9\xC2\xC7\xBE\xE1\xBA,\xBE\xC2\xC7\xD6\xE9\xE4\xB9\xC6\xB8\xE7 \xB0 \xD4\xE9\xBA\xC7 \xCD\xE8\xC1\xD9\xC8\xE7",
+        "[\xCA\xD6\xE8\xC1\xBA] \xB0 \xBF\xC6\xCD \xC6\xB7\xBD\xE2\xB8\xBD",
+        "\xD5\xE8\xB7\xBA: %c=%d, %c=%d",
+        "%d%%(%d, %d)",
+        "\xD4\xE8\xE2\xBB\xD6\xE8\xE3 \xBB\xE7\xCD\xE8\xD6\xB1\xBC\xE7\xCE\xE8: '%s'",
+        "\xD6\xB1\xE7\xC2\xC6\xB8\xE7 \xBB\xE7\xCD\xE8\xD6\xB1\xBC\xE7\xCE\xE8: '%s'",
+        "\xD6\xB1\xE7\xC2\xC6\xB8\xE7 \xD4\xE9\xE1\xDB \xDA\xC7\xD9\xB9\xCB: '%s'",
+        "\xC9\xBD\xC5 \xC0\xE8\xBC\xCE\xE8",
+        "\xCA\xD6\xE8 - \xC6\xB7\xBD\xE2\xB8\xBD",
+        "\x15/\x16 - \xC7\xBC\xD7\xBC \xC0\xBC\xCD\xE7",
+        "\x17/\x18 - \xC7\xBC\xCB\xB8\xC2 \xC0\xBC\xCD\xE7",
+        "R - \xD5\xE8\xB7\xBA\xD8\xE9\xBA\xCE \xBF \xC3\xE8\xE7\xCD\xE7 \xD7 \xE2\xC8\xB9\xCE",
+        "Q - \xC7\xE8\xBA\xDB \xBB\xBD\xCE",
+        "W - \xC7\xE8\xBA\xDB \xBC\xE7",
+        "E - \xD4\xE8\xBD\xE7\xCD\xE8\xB2\xE7\xC2\xE8 \xD8\xE8\xB9\xC2\xC7 \xD3 \xCE\xC2\xE8\xE3",
+        "\xE4\xD6\xCE \xCE\xE8\xE1\xB9\xC2\xE8 - \xD5\xE8\xB7\xBA \xC0\xBC\xCD\xE7",
+        "\xE1\xBC\xCE \xCE\xE8\xE1\xB9\xC2\xE8 - \xD5\xE8\xB7\xBA \xD4\xE9\xE7",
+        "\xCE\xE8\xE7\xCF \xC1\xBA \xCD\xE8\xDD \xBF\xC6\xCD \xC8\xE7\xC9\xE8\xC2",
+    },
+};
+
+#define I18N(k)  (TextI18n[g_iLang][k])
 
 /*====================================================
  * Command-line parsing helpers
@@ -261,7 +352,7 @@ static void putChar(int x, int y, unsigned char ch) {
 }
 
 static void putText(int x, int y, const unsigned char* usz, Uint32 uColor) {
-    for (; *usz; ++usz, x += 6) {
+    for (; *usz; ++usz, x += CURRENT_FONT_WIDTH) {
         putCharColor(x, y, *usz, uColor);
     }
 }
@@ -422,8 +513,8 @@ static void redraw(void) {
 
     /* Display title text */
     {
-        static const char szTitle[] = "Plotter-Z";
-        static const int iTitleWidth = (sizeof(szTitle) - 1) * 6;
+        const char* szTitle = I18N(I18N_TITLE);
+        int iTitleWidth = (int)strlen(szTitle) * 6;
         fillRect(0, 0, iCanvasW, 10, uSolidColor);
         putText((iCanvasW - iTitleWidth) / 2, 2, (const unsigned char *)szTitle, uBgColor);
     }
@@ -449,7 +540,7 @@ static void redraw(void) {
 
         sprintf(
             szBuf,
-            "VIEW: %c=%d, %c=%d",
+            I18N(I18N_VIEW_FMT),
             PZ_AE_GREEK_alpha,
             Camera.iAlphaDeg,
             PZ_AE_GREEK_beta,
@@ -459,7 +550,7 @@ static void redraw(void) {
 
         sprintf(
             szBuf,
-            "%d%%(%d, %d)",
+            I18N(I18N_ZOOM_FMT),
             (int)(arrZoomLevels[Camera.iZoomLevel] * 100),
             Camera.iViewportX,
             Camera.iViewportY
@@ -517,15 +608,79 @@ static void recalc(void) {
 
 static void drawErrorScreen(void) {
     SDL_FillRect(sfCanvas, NULL, uBgColor);
-    putText(8, 2, (const unsigned char *)"Plotter-Z", uSolidColor);
-    putText(8, 20, (const unsigned char *)"ERROR:", uSolidColor);
-    putText(8, 30, (const unsigned char *)"  Expression: ", uSolidColor);
+    putText(8, 2, (const unsigned char *)I18N(I18N_TITLE), uSolidColor);
+    putText(8, 20, (const unsigned char *)I18N(I18N_ERROR), uSolidColor);
+    putText(8, 30, (const unsigned char *)I18N(I18N_EXPRESSION_LABEL), uSolidColor);
     if (pAstExpr == NULL) {
-        putText(8, 38, (const unsigned char *)"Syntax Error - could not parse expression", uSolidColor);
+        putText(8, 38, (const unsigned char *)I18N(I18N_SYNTAX_ERROR), uSolidColor);
     } else {
         putText(8, 38, (const unsigned char *)g_szErrorText, uSolidColor);
     }
-    putText(8, 54, (const unsigned char *)"Press [Tab] to exit", uSolidColor);
+    putText(8, 54, (const unsigned char *)I18N(I18N_PRESS_TAB_EXIT), uSolidColor);
+    SDL_FillRect(sfScreen, NULL, uBgColor);
+    scaleBlit(sfCanvas, sfScreen, iScale, bLcd, uLcdDarken, iBlitOffX, iBlitOffY);
+    SDL_Flip(sfScreen);
+}
+
+/*====================================================
+ * Help screen
+ *====================================================*/
+
+static void drawHelpScreen(void) {
+    static const int iKeyList[] = {
+        I18N_HELP_TITLE,
+        I18N_HELP_TAB,
+        I18N_HELP_UP_DOWN,
+        I18N_HELP_LEFT_RIGHT,
+        I18N_HELP_R,
+        I18N_HELP_Q,
+        I18N_HELP_W,
+        I18N_HELP_E,
+        I18N_HELP_MOUSE_LEFT,
+        I18N_HELP_MOUSE_RIGHT,
+        I18N_HELP_ANY_KEY,
+    };
+    static const int iNumLines = sizeof(iKeyList) / sizeof(iKeyList[0]);
+    static const int iLineHeight = 8;
+    static const int iBorderSize = 2;
+    int i;
+    int iTotalHeight = iNumLines * iLineHeight;
+    int iMaxWidth = 0;
+    int iBlockLeft;
+    int iStartY;
+
+    for (i = 0; i < iNumLines; ++i) {
+        int iLen = (int)strlen(I18N(iKeyList[i]));
+        if (iLen > iMaxWidth) iMaxWidth = iLen;
+    }
+
+    iBlockLeft = (iCanvasW - iMaxWidth * 6) / 2;
+    if (iBlockLeft < 4) iBlockLeft = 4;
+
+    iStartY = (iCanvasH - iTotalHeight) / 2;
+    if (iStartY < 2) iStartY = 2;
+
+    redraw();
+
+    fillRect(iBlockLeft - iBorderSize, iStartY - iBorderSize, iMaxWidth * 6 + 2 * iBorderSize, iTotalHeight + 2 * iBorderSize, uBgColor);
+
+    for (i = 0; i < iNumLines; ++i) {
+        const char* szLine = I18N(iKeyList[i]);
+        int iLen = (int)strlen(szLine);
+        int iX, iBlockW, iLineY;
+        iBlockW = iMaxWidth * CURRENT_FONT_WIDTH;
+        iLineY = iStartY + i * iLineHeight;
+
+        if (i == 0 || i == iNumLines - 1) {
+            iX = iBlockLeft + (iMaxWidth - iLen) * CURRENT_FONT_WIDTH / 2;
+            fillRect(iBlockLeft, iLineY, iBlockW, iLineHeight, uSolidColor);
+            putText(iX, iLineY, (const unsigned char *)szLine, uBgColor);
+        } else {
+            iX = iBlockLeft;
+            putText(iX, iLineY, (const unsigned char *)szLine, uSolidColor);
+        }
+    }
+
     SDL_FillRect(sfScreen, NULL, uBgColor);
     scaleBlit(sfCanvas, sfScreen, iScale, bLcd, uLcdDarken, iBlitOffX, iBlitOffY);
     SDL_Flip(sfScreen);
@@ -582,6 +737,17 @@ int main(int argc, char* argv[]) {
             cfg.iScale = atoi(argv[i + 1]);
             if (cfg.iScale < 1) cfg.iScale = 1;
             i++;
+        } else if (strcmp(argv[i], "-t") == 0) {
+            if (i + 1 >= argc) {
+                fprintf(stderr, "Error: -t requires LANG\n");
+                return 2;
+            }
+            if (strcmp(argv[i + 1], "ja") == 0) {
+                g_iLang = I18N_LANG_JA;
+            } else {
+                g_iLang = I18N_LANG_EN;
+            }
+            i++;
         } else if (cfg.szExpr == DEFAULT_CONFIG.szExpr) {
             /* First positional argument overrides the default expression */
             cfg.szExpr = argv[i];
@@ -609,7 +775,10 @@ int main(int argc, char* argv[]) {
         pVm = EzMachine_Create();
         EzMachine_DeclareVariable(pVm, "x");
         EzMachine_DeclareVariable(pVm, "y");
+        EzMachine_DeclareVariable(pVm, "pi");
         EzMachine_AllocateVariables(pVm);
+        EzMachine_SetVariableByIndex(pVm, 2, PZ_PI);
+
         iCompileError = EzMachine_Compile(pVm, pAstExpr, szErrorBuf);
 
         if (iCompileError != EZERR_NONE) {
@@ -619,13 +788,13 @@ int main(int argc, char* argv[]) {
                 case EZERR_NONE:
                     break;
                 case EZERR_VARIABLE_UNDEFINED:
-                    sprintf(g_szErrorText, "VARIABLE_UNDEFINED: '%s'", szErrorBuf);
+                    sprintf(g_szErrorText, I18N(I18N_VARIABLE_UNDEFINED_FMT), szErrorBuf);
                     break;
                 case EZERR_FUNCTION_UNDEFINED:
-                    sprintf(g_szErrorText, "FUNCTION_UNDEFINED: '%s'", szErrorBuf);
+                    sprintf(g_szErrorText, I18N(I18N_FUNCTION_UNDEFINED_FMT), szErrorBuf);
                     break;
                 case EZERR_FUNCTION_PARAM_MISMATCH:
-                    sprintf(g_szErrorText, "FUNCTION_PARAM_MISMATCH: '%s'", szErrorBuf);
+                    sprintf(g_szErrorText, I18N(I18N_FUNCTION_PARAM_FMT), szErrorBuf);
                     break;
             }
         } else {
@@ -712,11 +881,21 @@ int main(int argc, char* argv[]) {
                     }
                     break;
                 case SDL_KEYDOWN:
+                    if (g_bHelp) {
+                        g_bHelp = 0;
+                        redraw();
+                        break;
+                    }
                     if (sdlEvent.key.keysym.sym == SDLK_TAB) {
                         bMainLoop = 0;
                         break;
                     }
                     if (!g_bError) {
+                        if (sdlEvent.key.keysym.sym == SDLK_z) {
+                            g_bHelp = 1;
+                            drawHelpScreen();
+                            break;
+                        }
                         if (sdlEvent.key.keysym.sym == SDLK_LEFT) {
                             Camera.iBetaDeg -= 5;
                         }
