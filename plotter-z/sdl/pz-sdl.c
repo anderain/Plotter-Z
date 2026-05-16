@@ -4,7 +4,7 @@
 #include <string.h>
 #include <SDL/SDL.h>
 #include "../utils/hybird_6x8.h"
-#include "../utils/ascii_extended_mapping.h"
+#include "../../renderer-z/ascii_extended_mapping.h"
 #include "../../renderer-z/rz.h"
 #include "../../evaluator-z/ez.h"
 
@@ -47,6 +47,9 @@ static const PzSdlConfig DEFAULT_CONFIG = {
 /*====================================================
  * Global state
  *====================================================*/
+#define DEFAULT_VIEW_ALPHA 30
+#define DEFAULT_VIEW_BETA 30
+
 int             bMainLoop = 1;
 int             iScreenWidth = 640;
 int             iScreenHeight = 480;
@@ -90,7 +93,7 @@ struct {
     int iZoomLevel;
 } Camera = {
     0, 0, 0,
-    0, 0,
+    DEFAULT_VIEW_ALPHA, DEFAULT_VIEW_BETA,
     0.0f, 0.0f, 0.0f, 0.0f,
     -6.0f, 6.0f, 20,
     -6.0f, 6.0f, 20,
@@ -912,8 +915,8 @@ int main(int argc, char* argv[]) {
                             Camera.iViewportX = iCanvasW / 2;
                             Camera.iViewportY = iCanvasH / 2;
                             Camera.iZoomLevel = ZOOM_LEVEL_DEFAULT;
-                            Camera.iBetaDeg = 0;
-                            Camera.iAlphaDeg = 0;
+                            Camera.iBetaDeg = DEFAULT_VIEW_BETA;
+                            Camera.iAlphaDeg = DEFAULT_VIEW_ALPHA;
                         }
                         else if (sdlEvent.key.keysym.sym == SDLK_q) {
                             Camera.iZoomLevel--;

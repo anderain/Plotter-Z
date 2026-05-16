@@ -53,6 +53,9 @@ RenderNode* Render_Transform    (FzAstNode* pAstNode);
 
 typedef struct tagRenderConfig {
     struct {
+        int iPaddingLeft;
+    } sText;
+    struct {
         int iWidth;
         int iHeight;
     } sFont;

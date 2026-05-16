@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include "rz.h"
+#include "ascii_extended_mapping.h"
 
 static RenderNode* createRenderNode(RenderNodeType iType) {
     RenderNode* pNode = (RenderNode *)malloc(sizeof(RenderNode));
@@ -131,7 +132,7 @@ static void transform(RenderNode* pParentHorz, FzAstNode* pAstNode) {
             }
             else if (iOprId == OPR_MUL) {
                 RenderNode* pMul = createRenderNode(RN_SPECIAL_CHAR);
-                pMul->uData.sSpecialChar.c = '*';
+                pMul->uData.sSpecialChar.c = PZ_AE_MIDDLE_DOT;
                 transform(pParentHorz, pAstNode->uData.sBinaryOperator.pAstLeftOperand);
                 vlPushBack(pParentHorz->uData.sHorizontal.pList, pMul);
                 transform(pParentHorz, pAstNode->uData.sBinaryOperator.pAstRightOperand);
@@ -160,9 +161,16 @@ static void transform(RenderNode* pParentHorz, FzAstNode* pAstNode) {
             break;
         }
         case AST_VARIABLE: {
-            RenderNode* pText = createRenderNode(RN_TEXT);
-            pText->uData.sText.szText = Utils_StringDump(pAstNode->uData.sVariable.szName);
-            vlPushBack(pParentHorz->uData.sHorizontal.pList, pText);
+            if (Utils_IsStringEqual(pAstNode->uData.sVariable.szName, "pi")) {
+                RenderNode* pPi = createRenderNode(RN_SPECIAL_CHAR);
+                pPi->uData.sSpecialChar.c = PZ_AE_GREEK_pi;
+                vlPushBack(pParentHorz->uData.sHorizontal.pList, pPi);
+            }
+            else {
+                RenderNode* pText = createRenderNode(RN_TEXT);
+                pText->uData.sText.szText = Utils_StringDump(pAstNode->uData.sVariable.szName);
+                vlPushBack(pParentHorz->uData.sHorizontal.pList, pText);
+            }
             break;
         }
         case AST_FUNCTION_CALL: {
@@ -187,7 +195,7 @@ static void transform(RenderNode* pParentHorz, FzAstNode* pAstNode) {
                 pSuperscriptNode->uData.sSuperscript.pBody = pBody;
                 pSuperscriptNode->uData.sSuperscript.pScript = pScript;
 
-                pBody->uData.sSpecialChar.c = 'e';
+                pBody->uData.sSpecialChar.c = PZ_AE_EXP_E;
                 transform(pScript, pAstContent);
 
                 vlPushBack(pParentHorz->uData.sHorizontal.pList, pSuperscriptNode);

@@ -4,6 +4,7 @@
 #include "rz.h"
 
 void RenderConfig_GetDefaultStyle(RenderConfig* pConfig) {
+    pConfig->sText.iPaddingLeft     = 1;
     pConfig->sFont.iWidth           = 6;
     pConfig->sFont.iHeight          = 8;
     pConfig->sStack.iSpacingX       = 2;
@@ -19,12 +20,12 @@ void RenderConfig_GetDefaultStyle(RenderConfig* pConfig) {
 void RenderNode_EstimateSize(RenderNode* pNode, const RenderConfig* pConfig) {
     switch (pNode->iType) {
         case RN_TEXT:
-            pNode->sLayout.iWidth = pConfig->sFont.iWidth * strlen(pNode->uData.sText.szText);
+            pNode->sLayout.iWidth = pConfig->sFont.iWidth * strlen(pNode->uData.sText.szText) + pConfig->sText.iPaddingLeft;
             pNode->sLayout.iAscent = pConfig->sFont.iHeight / 2;
             pNode->sLayout.iDescent = pConfig->sFont.iHeight / 2;
             break;
         case RN_SPECIAL_CHAR:
-            pNode->sLayout.iWidth = pConfig->sFont.iWidth;
+            pNode->sLayout.iWidth = pConfig->sFont.iWidth + pConfig->sText.iPaddingLeft;
             pNode->sLayout.iAscent = pConfig->sFont.iHeight / 2;
             pNode->sLayout.iDescent = pConfig->sFont.iHeight / 2;
             break;
@@ -110,7 +111,7 @@ void RenderNode_Draw(RenderNode* pNode, const RenderConfig* pConfig, int iStartX
     switch (pNode->iType) {
         case RN_TEXT: {
             int i;
-            int x = iStartX;
+            int x = iStartX + pConfig->sText.iPaddingLeft;
             int y = iCenterY - pNode->sLayout.iAscent + pConfig->sFont.iHeight / 8;
             const char* szText = pNode->uData.sText.szText;
             for (i = 0; szText[i]; ++i) {
@@ -121,29 +122,9 @@ void RenderNode_Draw(RenderNode* pNode, const RenderConfig* pConfig, int iStartX
         }
         case RN_SPECIAL_CHAR: {
             unsigned char c = pNode->uData.sSpecialChar.c;
-            if (c == '*') {
-                /*
-                static const int iCrossSize = 2;
-                int x = iStartX + pConfig->sFont.iWidth / 2 - iCrossSize / 2;
-                int y = iCenterY - pNode->sLayout.iAscent + pConfig->sFont.iHeight / 2;
-                pConfig->sInterfaces.plotLine(x - iCrossSize, y - iCrossSize, x + iCrossSize, y + iCrossSize);
-                pConfig->sInterfaces.plotLine(x + iCrossSize, y - iCrossSize, x - iCrossSize, y + iCrossSize);
-                */
-                int x = iStartX + pConfig->sFont.iWidth / 2 - 1;
-                int y = iCenterY - pNode->sLayout.iAscent + pConfig->sFont.iHeight / 2;
-                pConfig->sInterfaces.setPixel(x, y);
-            }
-            else if (c == 'e') {
-                int x = iStartX;
-                int y = iCenterY - pNode->sLayout.iAscent + pConfig->sFont.iHeight / 8;
-                pConfig->sInterfaces.putChar(x, y, c);
-                pConfig->sInterfaces.putChar(x + 1, y, c);
-            }
-            else {
-                int x = iStartX;
-                int y = iCenterY - pNode->sLayout.iAscent + pConfig->sFont.iHeight / 8;
-                pConfig->sInterfaces.putChar(x, y, c);
-            }
+            int x = iStartX + pConfig->sText.iPaddingLeft;
+            int y = iCenterY - pNode->sLayout.iAscent + pConfig->sFont.iHeight / 8;
+            pConfig->sInterfaces.putChar(x, y, c);
             break;
         }
         case RN_HORIZONTAL: {
