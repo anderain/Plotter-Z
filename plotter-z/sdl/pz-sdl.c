@@ -528,9 +528,9 @@ static void redraw(void) {
         int iStartY = 12;
         int iNodeWidth = pRenderNode->sLayout.iWidth;
         int iNodeHeight = pRenderNode->sLayout.iAscent + pRenderNode->sLayout.iDescent;
-        int iCenterY = iStartY + pRenderNode->sLayout.iAscent;
+        int iBaseline = iStartY + pRenderNode->sLayout.iAscent;
         fillRect(iStartX - 2, iStartY - 2, iNodeWidth + 2, iNodeHeight + 2, uBgColor);
-        RenderNode_Draw(pRenderNode, &config, iStartX, iCenterY);
+        RenderNode_Draw(pRenderNode, &config, iStartX, iBaseline);
     }
 
     /* Display footer */
@@ -771,10 +771,10 @@ int main(int argc, char* argv[]) {
     if (pAstExpr == NULL) {
         g_bError = 1;
     } else {
-        /* Compile expression to VM */
         pRenderNode = Render_Transform(pAstExpr);
         RenderNode_EstimateSize(pRenderNode, &config);
 
+        /* Compile expression to VM */
         pVm = EzMachine_Create();
         EzMachine_DeclareVariable(pVm, "x");
         EzMachine_DeclareVariable(pVm, "y");
@@ -947,6 +947,9 @@ int main(int argc, char* argv[]) {
     }
     if (pVm != NULL) {
         EzMachine_Destroy(pVm);
+    }
+    if (pAstExpr != NULL) {
+        FzAstNode_Destroy(pAstExpr);
     }
 
     SDL_FreeSurface(sfCanvas);
