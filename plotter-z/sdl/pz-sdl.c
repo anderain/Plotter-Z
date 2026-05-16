@@ -69,6 +69,7 @@ Uint32          uLcdDarken = 0x222222;
 int             g_bError = 0;
 int             g_bHelp = 0;
 int             g_bInspector = 0;
+int             g_iInspectorScroll = 0;
 char            g_szErrorText[200] = "";
 int             g_bMouseLeftDown = 0;
 int             g_bMouseRightDown = 0;
@@ -179,7 +180,7 @@ static const char* TextI18n[I18N_LANG_COUNT][I18N_COUNT] = {
         "Press any key to continue",
         "Evaluator-Z Inspector",
         "VM Instructions:",
-        "Predefined Variables:",
+        "Variables:",
     },
     /* [I18N_LANG_JA] Japanese */
     {
@@ -710,6 +711,8 @@ static void drawHelpScreen(void) {
 
 static void drawInspectorScreen(void) {
     const int iMargin = 4;
+    const int iScrollBarX = iCanvasW - 10;
+    const int iScrollBarW = 6;
     int iStartX = 2;
     int iStartY = 2;
     int iBaseline;
@@ -717,6 +720,9 @@ static void drawInspectorScreen(void) {
     char szBuf[100];
     int i;
     VlistNode* pListNode;
+    int bNeedScroll = 0;
+    int iVisibleLines = 0;
+    int iMaxScroll = 0;
 
     SDL_FillRect(sfCanvas, NULL, uBgColor);
 
@@ -729,38 +735,11 @@ static void drawInspectorScreen(void) {
         iBaseline = iStartY + pRenderNode->sLayout.iAscent;
         RenderNode_Draw(pRenderNode, &config, (iCanvasW - pRenderNode->sLayout.iWidth) / 2, iBaseline);
 
-        /* Render VM instructions */
         iVmInfoStartY = iStartY + (pRenderNode->sLayout.iAscent + pRenderNode->sLayout.iDescent) + iMargin * 2;
-        iStartY = iVmInfoStartY;
-        putText(iStartX, iStartY, (const unsigned char *)I18N(I18N_EZ_INSTRUCTIONS), uSolidColor);
-        iStartY += CURRENT_FONT_HEIGHT + iMargin;
-
-        for (i = 0; i < pVm->iInstructionLength; ++i, iStartY += CURRENT_FONT_HEIGHT) {
-            EzInstruction* pInst = pVm->pInstructions + i;
-            switch(pInst->iOpCode) {
-                case EZOP_PUSH_IMD: {
-                    sprintf(szBuf, "%3d \x18 %-10s", i, EzOpCode_GetName(pInst->iOpCode));
-                    Utils_Ftoa(pInst->uData.fImmediate, strchr(szBuf, '\0'), DEFAULT_FTOA_PRECISION);
-                    break;
-                }
-                case EZOP_PUSH_VAR:
-                    sprintf(szBuf, "%3d \x18 %-10s%d", i, EzOpCode_GetName(pInst->iOpCode), pInst->uData.iVarIndex);
-                    break;
-                case EZOP_FUNC: {
-                    const PzFuncMeta* pFuncMeta = Constant_GetFunctionMetadataByIndex(pInst->uData.iFuncIndex);
-                    sprintf(szBuf, "%3d \x18 %-10s%s", i, EzOpCode_GetName(pInst->iOpCode), pFuncMeta->szName);
-                    break;
-                }
-                default:
-                    sprintf(szBuf, "%3d \x18 %-10s", i, EzOpCode_GetName(pInst->iOpCode));
-                    break;
-            }
-            putText(iStartX, iStartY, (const unsigned char *)szBuf, uSolidColor);
-        }
 
         /* Render variable table */
         iStartY = iVmInfoStartY;
-        iStartX = 160;
+        iStartX = 0;
         putText(iStartX, iStartY, (const unsigned char *)I18N(I18N_EZ_PREDEF_VARS), uSolidColor);
         iStartY += CURRENT_FONT_HEIGHT + iMargin;
         for (
@@ -770,6 +749,77 @@ static void drawInspectorScreen(void) {
         ) {
             sprintf(szBuf, "%02d \x18 %s", i, (const char *)pListNode->pData);
             putText(iStartX, iStartY, (const unsigned char *)szBuf, uSolidColor);
+        }
+
+        /* Render VM instructions header */
+        iStartX = iCanvasW / 2;
+        iStartY = iVmInfoStartY;
+        putText(iStartX, iStartY, (const unsigned char *)I18N(I18N_EZ_INSTRUCTIONS), uSolidColor);
+        iStartY += CURRENT_FONT_HEIGHT + iMargin;
+
+        /* Calculate scrolling: visible area = canvasH minus header and safety margin */
+        iVisibleLines = (iCanvasH - iStartY - CURRENT_FONT_HEIGHT) / CURRENT_FONT_HEIGHT;
+        if (iVisibleLines < 1) iVisibleLines = 1;
+        if (pVm->iInstructionLength > iVisibleLines) {
+            bNeedScroll = 1;
+            iMaxScroll = pVm->iInstructionLength - iVisibleLines;
+            if (g_iInspectorScroll > iMaxScroll) g_iInspectorScroll = iMaxScroll;
+            if (g_iInspectorScroll < 0) g_iInspectorScroll = 0;
+        } else {
+            g_iInspectorScroll = 0;
+        }
+
+        /* Draw VM instructions (visible window) */
+        i = g_iInspectorScroll;
+        for (; i < pVm->iInstructionLength && i < g_iInspectorScroll + iVisibleLines; ++i, iStartY += CURRENT_FONT_HEIGHT) {
+            EzInstruction* pInst = pVm->pInstructions + i;
+            switch(pInst->iOpCode) {
+                case EZOP_PUSH_IMD: {
+                    sprintf(szBuf, "%3d \x18 %-9s", i, EzOpCode_GetName(pInst->iOpCode));
+                    Utils_Ftoa(pInst->uData.fImmediate, strchr(szBuf, '\0'), DEFAULT_FTOA_PRECISION);
+                    break;
+                }
+                case EZOP_PUSH_VAR:
+                    sprintf(szBuf, "%3d \x18 %-9s%d", i, EzOpCode_GetName(pInst->iOpCode), pInst->uData.iVarIndex);
+                    break;
+                case EZOP_FUNC: {
+                    const PzFuncMeta* pFuncMeta = Constant_GetFunctionMetadataByIndex(pInst->uData.iFuncIndex);
+                    sprintf(szBuf, "%3d \x18 %-9s%s", i, EzOpCode_GetName(pInst->iOpCode), pFuncMeta->szName);
+                    break;
+                }
+                default:
+                    sprintf(szBuf, "%3d \x18 %-9s", i, EzOpCode_GetName(pInst->iOpCode));
+                    break;
+            }
+            putText(iStartX, iStartY, (const unsigned char *)szBuf, uSolidColor);
+        }
+
+        /* Draw scroll bar if needed */
+        if (bNeedScroll) {
+            int iTrackTop, iTrackBottom, iTrackH, iThumbY, iThumbH, iThumbW, iThumbX;
+
+            iTrackTop = iVmInfoStartY + CURRENT_FONT_HEIGHT + iMargin;
+            iTrackBottom = iCanvasH - CURRENT_FONT_HEIGHT;
+            iTrackH = iTrackBottom - iTrackTop;
+
+            /* Track background */
+            fillRect(iScrollBarX, iTrackTop, iScrollBarW, iTrackH, uSolidColor);
+
+            /* Up arrow */
+            putCharColor(iScrollBarX, iTrackTop - CURRENT_FONT_HEIGHT, (unsigned char)PZ_AE_ARROW_UP, uSolidColor);
+
+            /* Down arrow */
+            putCharColor(iScrollBarX, iTrackBottom, (unsigned char)PZ_AE_ARROW_DOWN, uSolidColor);
+
+            /* Thumb (inset by 1px on each side, horizontally centered) */
+            if (iTrackH > 0 && iMaxScroll > 0) {
+                iThumbW = iScrollBarW - 2;
+                iThumbX = iScrollBarX + 1;
+                iThumbH = iScrollBarW;
+                if (iThumbH < 2) iThumbH = 2;
+                iThumbY = iTrackTop + 1 + (iTrackH - 2 - iThumbH) * g_iInspectorScroll / iMaxScroll;
+                fillRect(iThumbX, iThumbY, iThumbW, iThumbH, uBgColor);
+            }
         }
     }
 
@@ -979,8 +1029,22 @@ int main(int argc, char* argv[]) {
                         break;
                     }
                     if (g_bInspector) {
-                        g_bInspector = 0;
-                        redraw();
+                        if (sdlEvent.key.keysym.sym == SDLK_i) {
+                            g_bInspector = 0;
+                            redraw();
+                            break;
+                        }
+                        if (sdlEvent.key.keysym.sym == SDLK_UP) {
+                            g_iInspectorScroll--;
+                            if (g_iInspectorScroll < 0) g_iInspectorScroll = 0;
+                            drawInspectorScreen();
+                            break;
+                        }
+                        if (sdlEvent.key.keysym.sym == SDLK_DOWN) {
+                            g_iInspectorScroll++;
+                            drawInspectorScreen();
+                            break;
+                        }
                         break;
                     }
                     if (sdlEvent.key.keysym.sym == SDLK_TAB) {
