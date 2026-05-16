@@ -29,6 +29,8 @@ PZ_LD_FLAGS		= -L$(SDL_PATH)/lib -lmingw32 -lSDLmain -lSDL # -mwindows
 PZ_SDL_OBJS		= pz-sdl.o
 PZ_SDL_SRC_PATH	= plotter-z/sdl
 PZ_SDL_EXE		= pz-sdl.exe
+INSPECTOR_OBJ	= inspector-sdl.o
+INSPECTOR_EXE	= inspector-sdl.exe
 
 #====================================================
 # * Target: SDL version
@@ -39,6 +41,12 @@ pz-sdl: $(RZ_OBJS) $(EZ_OBJS) $(FZ_OBJS) $(COMMON_OBJS) $(PZ_SDL_OBJS)
 
 pz-sdl.o: $(PZ_SDL_SRC_PATH)/pz-sdl.c
 	$(CC) -I$(SDL_PATH)/include $(C_FLAGS) $(PZ_SDL_SRC_PATH)/pz-sdl.c -o pz-sdl.o
+
+inspector-sdl: $(RZ_OBJS) $(EZ_OBJS) $(FZ_OBJS) $(COMMON_OBJS) $(INSPECTOR_OBJ)
+	$(LD) $(RZ_OBJS) $(EZ_OBJS) $(FZ_OBJS) $(COMMON_OBJS) $(INSPECTOR_OBJ)  $(PZ_LD_FLAGS) -o $(INSPECTOR_EXE)
+
+inspector-sdl.o: $(PZ_SDL_SRC_PATH)/inspector-sdl.c
+	$(CC) -I$(SDL_PATH)/include $(C_FLAGS) $(PZ_SDL_SRC_PATH)/inspector-sdl.c -o inspector-sdl.o
 
 #====================================================
 # * Target: Test Programs
@@ -106,4 +114,4 @@ rz-test-main.o: $(RZ_SRC_PATH)/rz-test-main.c $(RZ_SRC_PATH)/rz.h
 #====================================================
 .PHONY: clean
 clean:
-	rm *.o $(FZ_TEST_EXE) $(EZ_TEST_EXE) $(RZ_TEST_EXE) $(PZ_SDL_EXE)
+	rm *.o $(FZ_TEST_EXE) $(EZ_TEST_EXE) $(RZ_TEST_EXE) $(PZ_SDL_EXE) $(INSPECTOR_EXE)

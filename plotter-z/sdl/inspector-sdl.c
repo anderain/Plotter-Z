@@ -277,8 +277,10 @@ static void redraw(void) {
         int iNodeWidth = pRenderNode->sLayout.iWidth;
         int iNodeHeight = pRenderNode->sLayout.iAscent + pRenderNode->sLayout.iDescent;
         int iBaseline;
+        int iVmInfoStartY;
         char szBuf[100];
         int i;
+        VlistNode* pListNode;
 
         putText(iStartX, iStartY, (const unsigned char *)"Expression:", uSolidColor);
 
@@ -288,7 +290,8 @@ static void redraw(void) {
         RenderNode_Draw(pRenderNode, &config, iStartX, iBaseline);
 
         /* Render VM instructions */
-        iStartY += iNodeHeight + iMargin * 2;
+        iVmInfoStartY = iStartY + iNodeHeight + iMargin * 2;
+        iStartY = iVmInfoStartY;
         putText(iStartX, iStartY, (const unsigned char *)"EzMachine Instructions:", uSolidColor);
         iStartY += CURRENT_FONT_HEIGHT + iMargin;
 
@@ -296,22 +299,36 @@ static void redraw(void) {
             EzInstruction* pInst = pVm->pInstructions + i;
             switch(pInst->iOpCode) {
                 case EZOP_PUSH_IMD: {
-                    sprintf(szBuf, "[%3d] %-10s", i, EzOpCode_GetName(pInst->iOpCode));
+                    sprintf(szBuf, "%3d \x18 %-10s", i, EzOpCode_GetName(pInst->iOpCode));
                     Utils_Ftoa(pInst->uData.fImmediate, strchr(szBuf, '\0'), DEFAULT_FTOA_PRECISION);
                     break;
                 }
                 case EZOP_PUSH_VAR:
-                    sprintf(szBuf, "[%3d] %-10s%d", i, EzOpCode_GetName(pInst->iOpCode), pInst->uData.iVarIndex);
+                    sprintf(szBuf, "%3d \x18 %-10s%d", i, EzOpCode_GetName(pInst->iOpCode), pInst->uData.iVarIndex);
                     break;
                 case EZOP_FUNC: {
                     const PzFuncMeta* pFuncMeta = Constant_GetFunctionMetadataByIndex(pInst->uData.iFuncIndex);
-                    sprintf(szBuf, "[%3d] %-10s%s", i, EzOpCode_GetName(pInst->iOpCode), pFuncMeta->szName);
+                    sprintf(szBuf, "%3d \x18 %-10s%s", i, EzOpCode_GetName(pInst->iOpCode), pFuncMeta->szName);
                     break;
                 }
                 default:
-                    sprintf(szBuf, "[%3d] %-10s", i, EzOpCode_GetName(pInst->iOpCode));
+                    sprintf(szBuf, "%3d \x18 %-10s", i, EzOpCode_GetName(pInst->iOpCode));
                     break;
             }
+            putText(iStartX, iStartY, (const unsigned char *)szBuf, uSolidColor);
+        }
+    
+        /* Render VM instructions */
+        iStartY = iVmInfoStartY;
+        iStartX = 160;
+        putText(iStartX, iStartY, (const unsigned char *)"Predefined variables:", uSolidColor);
+        iStartY += CURRENT_FONT_HEIGHT + iMargin;
+        for (
+            i = 0, pListNode = pVm->pListVariableName->pHead;
+            pListNode != NULL;
+            pListNode = pListNode->pNext, iStartY += CURRENT_FONT_HEIGHT, ++i
+        ) {
+            sprintf(szBuf, "%02d \x18 %s", i, (const char *)pListNode->pData);
             putText(iStartX, iStartY, (const unsigned char *)szBuf, uSolidColor);
         }
     }

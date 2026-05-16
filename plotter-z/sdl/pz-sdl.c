@@ -7,6 +7,7 @@
 #include "../../renderer-z/ascii_extended_mapping.h"
 #include "../../renderer-z/rz.h"
 #include "../../evaluator-z/ez.h"
+#include "../../common/constants.h"
 
 #define ABS(v)  ((v) < 0 ? -(v) : (v))
 #define PZ_PI   3.14159265
@@ -67,6 +68,7 @@ Uint32          uSolidColor = 0x226600;
 Uint32          uLcdDarken = 0x222222;
 int             g_bError = 0;
 int             g_bHelp = 0;
+int             g_bInspector = 0;
 char            g_szErrorText[200] = "";
 int             g_bMouseLeftDown = 0;
 int             g_bMouseRightDown = 0;
@@ -139,10 +141,14 @@ RenderConfig    config;
 #define I18N_HELP_Q                 15
 #define I18N_HELP_W                 16
 #define I18N_HELP_E                 17
-#define I18N_HELP_MOUSE_LEFT        18
-#define I18N_HELP_MOUSE_RIGHT       19
-#define I18N_HELP_ANY_KEY           20
-#define I18N_COUNT                  21
+#define I18N_HELP_I                 18
+#define I18N_HELP_MOUSE_LEFT        19
+#define I18N_HELP_MOUSE_RIGHT       20
+#define I18N_HELP_ANY_KEY           21
+#define I18N_EZ_INSPECTOR           22
+#define I18N_EZ_INSTRUCTIONS        23
+#define I18N_EZ_PREDEF_VARS         24
+#define I18N_COUNT                  25
 
 static int g_iLang = I18N_LANG_EN;
 
@@ -167,9 +173,13 @@ static const char* TextI18n[I18N_LANG_COUNT][I18N_COUNT] = {
         "Q - Zoom out",
         "W - Zoom in",
         "E - Toggle bounding box",
+        "I - Toggle inspector",
         "Left drag  - Rotate view",
         "Right drag - Pan view",
         "Press any key to continue",
+        "Evaluator-Z Inspector",
+        "VM Instructions:",
+        "Predefined Variables:",
     },
     /* [I18N_LANG_JA] Japanese */
     {
@@ -191,9 +201,13 @@ static const char* TextI18n[I18N_LANG_COUNT][I18N_COUNT] = {
         "Q - \xC7\xE8\xBA\xDB \xBB\xBD\xCE",
         "W - \xC7\xE8\xBA\xDB \xBC\xE7",
         "E - \xD4\xE8\xBD\xE7\xCD\xE8\xB2\xE7\xC2\xE8 \xD8\xE8\xB9\xC2\xC7 \xD3 \xCE\xC2\xE8\xE3",
+        "I - \xD4\xE8\xBD\xE7\xCD\xE8\xB2\xE7\xC2\xE8 \xBC\xE7\xC7\xD7\xE9\xC2\xCA\xBA",
         "\xE4\xD6\xCE \xCE\xE8\xE1\xB9\xC2\xE8 - \xD5\xE8\xB7\xBA \xC0\xBC\xCD\xE7",
         "\xE1\xBC\xCE \xCE\xE8\xE1\xB9\xC2\xE8 - \xD5\xE8\xB7\xBA \xD4\xE9\xE7",
         "\xCE\xE8\xE7\xCF \xC1\xBA \xCD\xE8\xDD \xBF\xC6\xCD \xC8\xE7\xC9\xE8\xC2",
+        "\xBE\xD4\xE8\xE2\xB7\xBE\xBA\xCA\xBAZ \xBC\xE7\xC7\xD7\xE9\xC2\xCA\xBA",
+        "VM \xBC\xE7\xC7\xCE\xE1\xC2\xC6\xB8\xE7\xC7\xE8:",
+        "\xD4\xE8\xE2\xBB\xD6\xE8\xE3\xC7\xE8:",
     },
 };
 
@@ -639,6 +653,7 @@ static void drawHelpScreen(void) {
         I18N_HELP_Q,
         I18N_HELP_W,
         I18N_HELP_E,
+        I18N_HELP_I,
         I18N_HELP_MOUSE_LEFT,
         I18N_HELP_MOUSE_RIGHT,
         I18N_HELP_ANY_KEY,
@@ -681,6 +696,80 @@ static void drawHelpScreen(void) {
         } else {
             iX = iBlockLeft;
             putText(iX, iLineY, (const unsigned char *)szLine, uSolidColor);
+        }
+    }
+
+    SDL_FillRect(sfScreen, NULL, uBgColor);
+    scaleBlit(sfCanvas, sfScreen, iScale, bLcd, uLcdDarken, iBlitOffX, iBlitOffY);
+    SDL_Flip(sfScreen);
+}
+
+/*====================================================
+ * Inspector screen (VM internals)
+ *====================================================*/
+
+static void drawInspectorScreen(void) {
+    const int iMargin = 4;
+    int iStartX = 2;
+    int iStartY = 2;
+    int iBaseline;
+    int iVmInfoStartY;
+    char szBuf[100];
+    int i;
+    VlistNode* pListNode;
+
+    SDL_FillRect(sfCanvas, NULL, uBgColor);
+
+    if (pAstExpr == NULL || pRenderNode == NULL || pVm == NULL) {
+        putText(iStartX, iStartY, (const unsigned char *)"N/A", uSolidColor);
+    } else {
+        fillRect(iStartX - 2, iStartY - 2, iCanvasW, CURRENT_FONT_HEIGHT + 2, uSolidColor);
+        putText(iStartX, iStartY, (const unsigned char *)I18N(I18N_EZ_INSPECTOR), uBgColor);
+        iStartY += CURRENT_FONT_HEIGHT + iMargin;
+        iBaseline = iStartY + pRenderNode->sLayout.iAscent;
+        RenderNode_Draw(pRenderNode, &config, (iCanvasW - pRenderNode->sLayout.iWidth) / 2, iBaseline);
+
+        /* Render VM instructions */
+        iVmInfoStartY = iStartY + (pRenderNode->sLayout.iAscent + pRenderNode->sLayout.iDescent) + iMargin * 2;
+        iStartY = iVmInfoStartY;
+        putText(iStartX, iStartY, (const unsigned char *)I18N(I18N_EZ_INSTRUCTIONS), uSolidColor);
+        iStartY += CURRENT_FONT_HEIGHT + iMargin;
+
+        for (i = 0; i < pVm->iInstructionLength; ++i, iStartY += CURRENT_FONT_HEIGHT) {
+            EzInstruction* pInst = pVm->pInstructions + i;
+            switch(pInst->iOpCode) {
+                case EZOP_PUSH_IMD: {
+                    sprintf(szBuf, "%3d \x18 %-10s", i, EzOpCode_GetName(pInst->iOpCode));
+                    Utils_Ftoa(pInst->uData.fImmediate, strchr(szBuf, '\0'), DEFAULT_FTOA_PRECISION);
+                    break;
+                }
+                case EZOP_PUSH_VAR:
+                    sprintf(szBuf, "%3d \x18 %-10s%d", i, EzOpCode_GetName(pInst->iOpCode), pInst->uData.iVarIndex);
+                    break;
+                case EZOP_FUNC: {
+                    const PzFuncMeta* pFuncMeta = Constant_GetFunctionMetadataByIndex(pInst->uData.iFuncIndex);
+                    sprintf(szBuf, "%3d \x18 %-10s%s", i, EzOpCode_GetName(pInst->iOpCode), pFuncMeta->szName);
+                    break;
+                }
+                default:
+                    sprintf(szBuf, "%3d \x18 %-10s", i, EzOpCode_GetName(pInst->iOpCode));
+                    break;
+            }
+            putText(iStartX, iStartY, (const unsigned char *)szBuf, uSolidColor);
+        }
+
+        /* Render variable table */
+        iStartY = iVmInfoStartY;
+        iStartX = 160;
+        putText(iStartX, iStartY, (const unsigned char *)I18N(I18N_EZ_PREDEF_VARS), uSolidColor);
+        iStartY += CURRENT_FONT_HEIGHT + iMargin;
+        for (
+            i = 0, pListNode = pVm->pListVariableName->pHead;
+            pListNode != NULL;
+            pListNode = pListNode->pNext, iStartY += CURRENT_FONT_HEIGHT, ++i
+        ) {
+            sprintf(szBuf, "%02d \x18 %s", i, (const char *)pListNode->pData);
+            putText(iStartX, iStartY, (const unsigned char *)szBuf, uSolidColor);
         }
     }
 
@@ -889,6 +978,11 @@ int main(int argc, char* argv[]) {
                         redraw();
                         break;
                     }
+                    if (g_bInspector) {
+                        g_bInspector = 0;
+                        redraw();
+                        break;
+                    }
                     if (sdlEvent.key.keysym.sym == SDLK_TAB) {
                         bMainLoop = 0;
                         break;
@@ -897,6 +991,11 @@ int main(int argc, char* argv[]) {
                         if (sdlEvent.key.keysym.sym == SDLK_z) {
                             g_bHelp = 1;
                             drawHelpScreen();
+                            break;
+                        }
+                        if (sdlEvent.key.keysym.sym == SDLK_i) {
+                            g_bInspector = 1;
+                            drawInspectorScreen();
                             break;
                         }
                         if (sdlEvent.key.keysym.sym == SDLK_LEFT) {
