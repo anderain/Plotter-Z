@@ -4,6 +4,7 @@
 #include <string.h>
 #include <SDL/SDL.h>
 #include "../utils/hybird_6x8.h"
+#include "../utils/ascii_extended_mapping.h"
 #include "../../renderer-z/rz.h"
 #include "../../evaluator-z/ez.h"
 
@@ -448,15 +449,17 @@ static void redraw(void) {
 
         sprintf(
             szBuf,
-            "VIEW: A=%d, B=%d",
+            "VIEW: %c=%d, %c=%d",
+            PZ_AE_GREEK_alpha,
             Camera.iAlphaDeg,
+            PZ_AE_GREEK_beta,
             Camera.iBetaDeg
         );
         putText(2, iStartY + 2, (const unsigned char *)szBuf, uBgColor);
 
         sprintf(
             szBuf,
-            "ZOOM=%d%%, OX=%d, OY=%d",
+            "%d%%(%d, %d)",
             (int)(arrZoomLevels[Camera.iZoomLevel] * 100),
             Camera.iViewportX,
             Camera.iViewportY
