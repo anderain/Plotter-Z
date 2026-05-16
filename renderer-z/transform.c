@@ -4,6 +4,25 @@
 #include "rz.h"
 #include "ascii_extended_mapping.h"
 
+static const struct {
+    char* szToken;
+    unsigned char ucSpecial;
+} SpecialCharMapping[] = {
+    { "pi",         PZ_AE_GREEK_pi      },
+    { "const_i",    PZ_AE_IMAG_I        },
+    { "inf",        PZ_AE_INFINITY      },
+    { "dots",       PZ_AE_ELLIPSIS      },
+    { "alpha",      PZ_AE_GREEK_alpha   }, 
+    { "beta",       PZ_AE_GREEK_beta    }, 
+    { "theta",      PZ_AE_GREEK_theta   }, 
+    { "lambda",     PZ_AE_GREEK_lambda  }, 
+    { "delta",      PZ_AE_GREEK_delta   },
+    { "Delta",      PZ_AE_GREEK_DELTA   }, 
+    { "omega",      PZ_AE_GREEK_omega   },
+    { "Omega",      PZ_AE_GREEK_OMEGA   },
+    { NULL,         0x0                 }
+};
+
 static RenderNode* createRenderNode(RenderNodeType iType) {
     RenderNode* pNode = (RenderNode *)malloc(sizeof(RenderNode));
 
@@ -161,10 +180,17 @@ static void transform(RenderNode* pParentHorz, FzAstNode* pAstNode) {
             break;
         }
         case AST_VARIABLE: {
-            if (Utils_IsStringEqual(pAstNode->uData.sVariable.szName, "pi")) {
-                RenderNode* pPi = createRenderNode(RN_SPECIAL_CHAR);
-                pPi->uData.sSpecialChar.c = PZ_AE_GREEK_pi;
-                vlPushBack(pParentHorz->uData.sHorizontal.pList, pPi);
+            unsigned char ucSpecialChar = 0;
+            int i;
+            for (i = 0; SpecialCharMapping[i].szToken != NULL; ++i) {
+                if (Utils_IsStringEqual(pAstNode->uData.sVariable.szName, SpecialCharMapping[i].szToken)) {
+                    ucSpecialChar = SpecialCharMapping[i].ucSpecial;
+                }
+            }
+            if (ucSpecialChar > 0) {
+                RenderNode* pSpecial = createRenderNode(RN_SPECIAL_CHAR);
+                pSpecial->uData.sSpecialChar.c = ucSpecialChar;
+                vlPushBack(pParentHorz->uData.sHorizontal.pList, pSpecial);
             }
             else {
                 RenderNode* pText = createRenderNode(RN_TEXT);

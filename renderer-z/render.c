@@ -89,30 +89,30 @@ void RenderNode_EstimateSize(RenderNode* pNode, const RenderConfig* pConfig) {
     }
 }
 
-void RenderNode_Draw(RenderNode* pNode, const RenderConfig* pConfig, int iStartX, int iCenterY) {
+void RenderNode_Draw(RenderNode* pNode, const RenderConfig* pConfig, int iStartX, int iBaseline) {
     if (pNode->iType & pConfig->sDebug.bOutline) {
         pConfig->sInterfaces.plotLine(
-            iStartX, iCenterY - pNode->sLayout.iAscent,
-            iStartX + pNode->sLayout.iWidth, iCenterY - pNode->sLayout.iAscent
+            iStartX, iBaseline - pNode->sLayout.iAscent,
+            iStartX + pNode->sLayout.iWidth, iBaseline - pNode->sLayout.iAscent
         );
         pConfig->sInterfaces.plotLine(
-            iStartX + pNode->sLayout.iWidth, iCenterY - pNode->sLayout.iAscent,
-            iStartX + pNode->sLayout.iWidth, iCenterY + pNode->sLayout.iDescent
+            iStartX + pNode->sLayout.iWidth, iBaseline - pNode->sLayout.iAscent,
+            iStartX + pNode->sLayout.iWidth, iBaseline + pNode->sLayout.iDescent
         );
         pConfig->sInterfaces.plotLine(
-            iStartX + pNode->sLayout.iWidth, iCenterY + pNode->sLayout.iDescent,
-            iStartX, iCenterY + pNode->sLayout.iDescent
+            iStartX + pNode->sLayout.iWidth, iBaseline + pNode->sLayout.iDescent,
+            iStartX, iBaseline + pNode->sLayout.iDescent
         );
         pConfig->sInterfaces.plotLine(
-            iStartX, iCenterY + pNode->sLayout.iDescent,
-            iStartX, iCenterY - pNode->sLayout.iAscent
+            iStartX, iBaseline + pNode->sLayout.iDescent,
+            iStartX, iBaseline - pNode->sLayout.iAscent
         );
     }
     switch (pNode->iType) {
         case RN_TEXT: {
             int i;
             int x = iStartX + pConfig->sText.iPaddingLeft;
-            int y = iCenterY - pNode->sLayout.iAscent + pConfig->sFont.iHeight / 8;
+            int y = iBaseline - pNode->sLayout.iAscent + pConfig->sFont.iHeight / 8;
             const char* szText = pNode->uData.sText.szText;
             for (i = 0; szText[i]; ++i) {
                 pConfig->sInterfaces.putChar(x, y, (unsigned char)szText[i]);
@@ -123,13 +123,13 @@ void RenderNode_Draw(RenderNode* pNode, const RenderConfig* pConfig, int iStartX
         case RN_SPECIAL_CHAR: {
             unsigned char c = pNode->uData.sSpecialChar.c;
             int x = iStartX + pConfig->sText.iPaddingLeft;
-            int y = iCenterY - pNode->sLayout.iAscent + pConfig->sFont.iHeight / 8;
+            int y = iBaseline - pNode->sLayout.iAscent + pConfig->sFont.iHeight / 8;
             pConfig->sInterfaces.putChar(x, y, c);
             break;
         }
         case RN_HORIZONTAL: {
             int x = iStartX;
-            int y = iCenterY;
+            int y = iBaseline;
             VlistNode* pListNode;
             for (
                 pListNode = pNode->uData.sHorizontal.pList->pHead;
@@ -152,7 +152,7 @@ void RenderNode_Draw(RenderNode* pNode, const RenderConfig* pConfig, int iStartX
             RenderNode* pContent = pNode->uData.sEnclosure.pContent;
 
             x = iStartX + (pNode->sLayout.iWidth - pContent->sLayout.iWidth) / 2;
-            y = iCenterY;
+            y = iBaseline;
             
             RenderNode_Draw(pContent, pConfig, x, y);
 
@@ -192,14 +192,14 @@ void RenderNode_Draw(RenderNode* pNode, const RenderConfig* pConfig, int iStartX
             RenderNode* pBottom = pNode->uData.sStack.pBottom;
 
             x = iStartX + (pNode->sLayout.iWidth - pTop->sLayout.iWidth) / 2 ;
-            y = iCenterY - pNode->sLayout.iAscent + pTop->sLayout.iAscent;
+            y = iBaseline - pNode->sLayout.iAscent + pTop->sLayout.iAscent;
             RenderNode_Draw(pTop, pConfig, x, y);
             
             x = iStartX + (pNode->sLayout.iWidth - pBottom->sLayout.iWidth) / 2;
-            y = iCenterY + pNode->sLayout.iDescent - pBottom->sLayout.iDescent;
+            y = iBaseline + pNode->sLayout.iDescent - pBottom->sLayout.iDescent;
             RenderNode_Draw(pBottom, pConfig, x, y);
 
-            pConfig->sInterfaces.plotLine(iStartX, iCenterY, iStartX + pNode->sLayout.iWidth - 2, iCenterY);
+            pConfig->sInterfaces.plotLine(iStartX, iBaseline, iStartX + pNode->sLayout.iWidth - 2, iBaseline);
             break;
         }
         case RN_ROOT: {
@@ -207,14 +207,14 @@ void RenderNode_Draw(RenderNode* pNode, const RenderConfig* pConfig, int iStartX
             int checkSize = 1;
             RenderNode* pContent = pNode->uData.sRoot.pContent;
             x = iStartX + pConfig->sRoot.iSpacingLeft;
-            y = iCenterY;
+            y = iBaseline;
             RenderNode_Draw(pContent, pConfig, x, y);
 
             w = pNode->sLayout.iWidth;
             h = pNode->sLayout.iDescent + pNode->sLayout.iAscent;
 
             x = iStartX;
-            y = iCenterY - pNode->sLayout.iAscent;
+            y = iBaseline - pNode->sLayout.iAscent;
             pConfig->sInterfaces.plotLine(
                 x + pConfig->sRoot.iSpacingLeft / 2, y,
                 x + w, y
@@ -242,11 +242,11 @@ void RenderNode_Draw(RenderNode* pNode, const RenderConfig* pConfig, int iStartX
             RenderNode* pScript = pNode->uData.sSuperscript.pScript;
             
             x = iStartX;
-            y = iCenterY;
+            y = iBaseline;
             RenderNode_Draw(pBody, pConfig, x, y);
             
             x = iStartX + pBody->sLayout.iWidth;
-            y = iCenterY - pNode->sLayout.iAscent + pScript->sLayout.iAscent;
+            y = iBaseline - pNode->sLayout.iAscent + pScript->sLayout.iAscent;
             RenderNode_Draw(pScript, pConfig, x, y);
             
             break;

@@ -84,6 +84,6 @@ typedef struct tagRenderConfig {
 
 void RenderConfig_GetDefaultStyle   (RenderConfig* pConfig);
 void RenderNode_EstimateSize        (RenderNode* pNode, const RenderConfig* pConfig);
-void RenderNode_Draw                (RenderNode* pNode, const RenderConfig* pConfig, int iStartX, int iCenterY);
+void RenderNode_Draw                (RenderNode* pNode, const RenderConfig* pConfig, int iStartX, int iBaseline);
 
 #endif
