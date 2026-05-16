@@ -3,8 +3,6 @@
 #include <stdlib.h>
 #include <string.h>
 #include <SDL/SDL.h>
-#include "../utils/vga_index.h"
-#include "../utils/vga_palette.h"
 #include "../utils/hybird_6x8.h"
 #include "../../renderer-z/rz.h"
 #include "../../evaluator-z/ez.h"
