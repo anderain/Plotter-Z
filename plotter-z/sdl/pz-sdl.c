@@ -63,9 +63,27 @@ int             iBlitOffY = 0;
 int             bShowBox = 1;
 SDL_Surface*    sfScreen;
 SDL_Surface*    sfCanvas;
-Uint32          uBgColor = 0x99bb00;
-Uint32          uSolidColor = 0x226600;
-Uint32          uLcdDarken = 0x222222;
+Uint32          uLcdDarken = 0x111111;
+
+/*====================================================
+ * Color palette (grayscale)
+ *====================================================*/
+
+#define COLOR_WHITE         0
+#define COLOR_LIGHT_GRAY    1
+#define COLOR_DARK_GRAY     2
+#define COLOR_BLACK         3
+
+static const Uint32 uPalette[] = {    
+    0x7ba200,   /* COLOR_WHITE       */
+    0x437f00,   /* COLOR_LIGHT_GRAY  */
+    0x226600,   /* COLOR_DARK_GRAY   */
+    0x115000,   /* COLOR_BLACK       */
+};
+
+static Uint32 getColor(int iIndex) {
+    return uPalette[iIndex];
+}
 int             g_bError = 0;
 int             g_bHelp = 0;
 int             g_bInspector = 0;
@@ -309,7 +327,7 @@ static void setPixelToSurface(SDL_Surface *sf, int x, int y, Uint32 color) {
 }
 
 static void setPixel(int x, int y) {
-    setPixelToSurface(sfCanvas, x, y, uSolidColor);
+    setPixelToSurface(sfCanvas, x, y, getColor(COLOR_BLACK));
 }
 
 static void plotLineColor(int x0, int y0, int x1, int y1, Uint32 color) {
@@ -334,7 +352,7 @@ static void plotLineColor(int x0, int y0, int x1, int y1, Uint32 color) {
 }
 
 static void plotLine(int x0, int y0, int x1, int y1) {
-    plotLineColor(x0, y0, x1, y1, uSolidColor);
+    plotLineColor(x0, y0, x1, y1, getColor(COLOR_BLACK));
 }
 
 static void fillRect(int dx, int dy, int w, int h, Uint32 uColor) {
@@ -366,7 +384,7 @@ static void putCharColor(int x, int y, unsigned char ch, Uint32 uColor) {
 }
 
 static void putChar(int x, int y, unsigned char ch) {
-    putCharColor(x, y, ch, uSolidColor);
+    putCharColor(x, y, ch, getColor(COLOR_BLACK));
 }
 
 static void putText(int x, int y, const unsigned char* usz, Uint32 uColor) {
@@ -453,7 +471,7 @@ static void scaleBlit(SDL_Surface* sfSrc, SDL_Surface* sfDst, int iFactor,
  * Redraw
  *====================================================*/
 
-static void drawBoundingBox(void) {
+static void drawBoxEdges() {
     static const Vertex BoxVertices[] = {
         {  1,  1,  1 },
         { -1,  1,  1 },
@@ -479,9 +497,10 @@ static void drawBoundingBox(void) {
         const Vertex* v0 = BoxVertices + e->i0;
         const Vertex* v1 = BoxVertices + e->i1;
         int x0, y0, x1, y1;
+
         xyz2xy(v0->x, v0->y, v0->z, &x0, &y0); 
         xyz2xy(v1->x, v1->y, v1->z, &x1, &y1); 
-        plotLine(x0, y0, x1, y1);
+        plotLineColor(x0, y0, x1, y1, getColor(COLOR_LIGHT_GRAY));
     }
 }
 
@@ -516,25 +535,25 @@ static void drawSurfaceWireframe(void) {
 
 static void redraw(void) {
 
-    SDL_FillRect(sfCanvas, NULL, uBgColor);
+    SDL_FillRect(sfCanvas, NULL, getColor(COLOR_WHITE));
 
     Camera.sinA = (PZ_FLOAT)sin(Camera.iAlphaDeg * PZ_PI / 180);
     Camera.cosA = (PZ_FLOAT)cos(Camera.iAlphaDeg * PZ_PI / 180);
     Camera.sinB = (PZ_FLOAT)sin(Camera.iBetaDeg * PZ_PI / 180);
     Camera.cosB = (PZ_FLOAT)cos(Camera.iBetaDeg * PZ_PI / 180);
 
-    drawSurfaceWireframe();
-
     if (bShowBox) {
-        drawBoundingBox();
+        drawBoxEdges();
     }
+
+    drawSurfaceWireframe();
 
     /* Display title text */
     {
         const char* szTitle = I18N(I18N_TITLE);
         int iTitleWidth = (int)strlen(szTitle) * 6;
-        fillRect(0, 0, iCanvasW, 10, uSolidColor);
-        putText((iCanvasW - iTitleWidth) / 2, 2, (const unsigned char *)szTitle, uBgColor);
+        fillRect(0, 0, iCanvasW, 10, getColor(COLOR_DARK_GRAY));
+        putText((iCanvasW - iTitleWidth) / 2, 2, (const unsigned char *)szTitle, getColor(COLOR_WHITE));
     }
     
     /* Render expression */
@@ -544,7 +563,7 @@ static void redraw(void) {
         int iNodeWidth = pRenderNode->sLayout.iWidth;
         int iNodeHeight = pRenderNode->sLayout.iAscent + pRenderNode->sLayout.iDescent;
         int iBaseline = iStartY + pRenderNode->sLayout.iAscent;
-        fillRect(iStartX - 2, iStartY - 2, iNodeWidth + 2, iNodeHeight + 2, uBgColor);
+        fillRect(iStartX - 2, iStartY - 2, iNodeWidth + 3, iNodeHeight + 3, getColor(COLOR_WHITE));
         RenderNode_Draw(pRenderNode, &config, iStartX, iBaseline);
     }
 
@@ -554,7 +573,7 @@ static void redraw(void) {
         int iLeft;
         char szBuf[200];
 
-        fillRect(0, iStartY, iCanvasW, 10, uSolidColor);
+        fillRect(0, iStartY, iCanvasW, 10, getColor(COLOR_DARK_GRAY));
 
         sprintf(
             szBuf,
@@ -564,7 +583,7 @@ static void redraw(void) {
             PZ_AE_GREEK_beta,
             Camera.iBetaDeg
         );
-        putText(2, iStartY + 2, (const unsigned char *)szBuf, uBgColor);
+        putText(2, iStartY + 2, (const unsigned char *)szBuf, getColor(COLOR_WHITE));
 
         sprintf(
             szBuf,
@@ -574,11 +593,11 @@ static void redraw(void) {
             Camera.iViewportY
         );
         iLeft = iCanvasW - (int)strlen(szBuf) * 6 - 2;
-        putText(iLeft, iStartY + 2, (const unsigned char *)szBuf, uBgColor);
+        putText(iLeft, iStartY + 2, (const unsigned char *)szBuf, getColor(COLOR_WHITE));
 
     }
 
-    SDL_FillRect(sfScreen, NULL, uBgColor);
+    SDL_FillRect(sfScreen, NULL, getColor(COLOR_WHITE));
     scaleBlit(sfCanvas, sfScreen, iScale, bLcd, uLcdDarken, iBlitOffX, iBlitOffY);
     SDL_Flip(sfScreen);
 }
@@ -625,17 +644,17 @@ static void recalc(void) {
  *====================================================*/
 
 static void drawErrorScreen(void) {
-    SDL_FillRect(sfCanvas, NULL, uBgColor);
-    putText(8, 2, (const unsigned char *)I18N(I18N_TITLE), uSolidColor);
-    putText(8, 20, (const unsigned char *)I18N(I18N_ERROR), uSolidColor);
-    putText(8, 30, (const unsigned char *)I18N(I18N_EXPRESSION_LABEL), uSolidColor);
+    SDL_FillRect(sfCanvas, NULL, getColor(COLOR_WHITE));
+    putText(8, 2, (const unsigned char *)I18N(I18N_TITLE), getColor(COLOR_BLACK));
+    putText(8, 20, (const unsigned char *)I18N(I18N_ERROR), getColor(COLOR_BLACK));
+    putText(8, 30, (const unsigned char *)I18N(I18N_EXPRESSION_LABEL), getColor(COLOR_BLACK));
     if (pAstExpr == NULL) {
-        putText(8, 38, (const unsigned char *)I18N(I18N_SYNTAX_ERROR), uSolidColor);
+        putText(8, 38, (const unsigned char *)I18N(I18N_SYNTAX_ERROR), getColor(COLOR_BLACK));
     } else {
-        putText(8, 38, (const unsigned char *)g_szErrorText, uSolidColor);
+        putText(8, 38, (const unsigned char *)g_szErrorText, getColor(COLOR_BLACK));
     }
-    putText(8, 54, (const unsigned char *)I18N(I18N_PRESS_TAB_EXIT), uSolidColor);
-    SDL_FillRect(sfScreen, NULL, uBgColor);
+    putText(8, 54, (const unsigned char *)I18N(I18N_PRESS_TAB_EXIT), getColor(COLOR_BLACK));
+    SDL_FillRect(sfScreen, NULL, getColor(COLOR_WHITE));
     scaleBlit(sfCanvas, sfScreen, iScale, bLcd, uLcdDarken, iBlitOffX, iBlitOffY);
     SDL_Flip(sfScreen);
 }
@@ -661,7 +680,7 @@ static void drawHelpScreen(void) {
     };
     static const int iNumLines = sizeof(iKeyList) / sizeof(iKeyList[0]);
     static const int iLineHeight = 8;
-    static const int iBorderSize = 2;
+    static const int iBorderSize = 1;
     int i;
     int iTotalHeight = iNumLines * iLineHeight;
     int iMaxWidth = 0;
@@ -681,7 +700,7 @@ static void drawHelpScreen(void) {
 
     redraw();
 
-    fillRect(iBlockLeft - iBorderSize, iStartY - iBorderSize, iMaxWidth * 6 + 2 * iBorderSize, iTotalHeight + 2 * iBorderSize, uBgColor);
+    fillRect(iBlockLeft - iBorderSize, iStartY - iBorderSize, iMaxWidth * 6 + 2 * iBorderSize, iTotalHeight + 2 * iBorderSize, getColor(COLOR_LIGHT_GRAY));
 
     for (i = 0; i < iNumLines; ++i) {
         const char* szLine = I18N(iKeyList[i]);
@@ -692,15 +711,15 @@ static void drawHelpScreen(void) {
 
         if (i == 0 || i == iNumLines - 1) {
             iX = iBlockLeft + (iMaxWidth - iLen) * CURRENT_FONT_WIDTH / 2;
-            fillRect(iBlockLeft, iLineY, iBlockW, iLineHeight, uSolidColor);
-            putText(iX, iLineY, (const unsigned char *)szLine, uBgColor);
+            fillRect(iBlockLeft, iLineY, iBlockW, iLineHeight, getColor(COLOR_DARK_GRAY));
+            putText(iX, iLineY, (const unsigned char *)szLine, getColor(COLOR_WHITE));
         } else {
             iX = iBlockLeft;
-            putText(iX, iLineY, (const unsigned char *)szLine, uSolidColor);
+            putText(iX, iLineY, (const unsigned char *)szLine, getColor(COLOR_BLACK));
         }
     }
 
-    SDL_FillRect(sfScreen, NULL, uBgColor);
+    SDL_FillRect(sfScreen, NULL, getColor(COLOR_WHITE));
     scaleBlit(sfCanvas, sfScreen, iScale, bLcd, uLcdDarken, iBlitOffX, iBlitOffY);
     SDL_Flip(sfScreen);
 }
@@ -724,13 +743,13 @@ static void drawInspectorScreen(void) {
     int iVisibleLines = 0;
     int iMaxScroll = 0;
 
-    SDL_FillRect(sfCanvas, NULL, uBgColor);
+    SDL_FillRect(sfCanvas, NULL, getColor(COLOR_WHITE));
 
     if (pAstExpr == NULL || pRenderNode == NULL || pVm == NULL) {
-        putText(iStartX, iStartY, (const unsigned char *)"N/A", uSolidColor);
+        putText(iStartX, iStartY, (const unsigned char *)"N/A", getColor(COLOR_DARK_GRAY));
     } else {
-        fillRect(iStartX - 2, iStartY - 2, iCanvasW, CURRENT_FONT_HEIGHT + 2, uSolidColor);
-        putText(iStartX, iStartY, (const unsigned char *)I18N(I18N_EZ_INSPECTOR), uBgColor);
+        fillRect(iStartX - 2, iStartY - 2, iCanvasW, CURRENT_FONT_HEIGHT + 2, getColor(COLOR_DARK_GRAY));
+        putText(iStartX, iStartY, (const unsigned char *)I18N(I18N_EZ_INSPECTOR), getColor(COLOR_WHITE));
         iStartY += CURRENT_FONT_HEIGHT + iMargin;
         iBaseline = iStartY + pRenderNode->sLayout.iAscent;
         RenderNode_Draw(pRenderNode, &config, (iCanvasW - pRenderNode->sLayout.iWidth) / 2, iBaseline);
@@ -739,22 +758,24 @@ static void drawInspectorScreen(void) {
 
         /* Render variable table */
         iStartY = iVmInfoStartY;
-        iStartX = 0;
-        putText(iStartX, iStartY, (const unsigned char *)I18N(I18N_EZ_PREDEF_VARS), uSolidColor);
+        iStartX = 8;
+        putText(iStartX, iStartY, (const unsigned char *)I18N(I18N_EZ_PREDEF_VARS), getColor(COLOR_DARK_GRAY));
         iStartY += CURRENT_FONT_HEIGHT + iMargin;
         for (
             i = 0, pListNode = pVm->pListVariableName->pHead;
             pListNode != NULL;
             pListNode = pListNode->pNext, iStartY += CURRENT_FONT_HEIGHT, ++i
         ) {
-            sprintf(szBuf, "%02d:%s", i, (const char *)pListNode->pData);
-            putText(iStartX, iStartY, (const unsigned char *)szBuf, uSolidColor);
+            int iLeftOffset;
+            iLeftOffset = CURRENT_FONT_WIDTH * sprintf(szBuf, "%02d\x18", i);
+            putText(iStartX, iStartY, (const unsigned char *)szBuf, getColor(COLOR_LIGHT_GRAY));
+            putText(iStartX + iLeftOffset, iStartY, (const unsigned char *)pListNode->pData, getColor(COLOR_BLACK));
         }
 
         /* Render VM instructions header */
         iStartX = iCanvasW / 2;
         iStartY = iVmInfoStartY;
-        putText(iStartX, iStartY, (const unsigned char *)I18N(I18N_EZ_INSTRUCTIONS), uSolidColor);
+        putText(iStartX, iStartY, (const unsigned char *)I18N(I18N_EZ_INSTRUCTIONS), getColor(COLOR_DARK_GRAY));
         iStartY += CURRENT_FONT_HEIGHT + iMargin;
 
         /* Calculate scrolling: visible area = canvasH minus header and safety margin */
@@ -773,25 +794,28 @@ static void drawInspectorScreen(void) {
         i = g_iInspectorScroll;
         for (; i < pVm->iInstructionLength && i < g_iInspectorScroll + iVisibleLines; ++i, iStartY += CURRENT_FONT_HEIGHT) {
             EzInstruction* pInst = pVm->pInstructions + i;
+            int iLeftOffset;
+            iLeftOffset = CURRENT_FONT_WIDTH * sprintf(szBuf, "%03d\x18", i);
+            putText(iStartX, iStartY, (const unsigned char *)szBuf, getColor(COLOR_LIGHT_GRAY));
             switch(pInst->iOpCode) {
                 case EZOP_PUSH_IMD: {
-                    sprintf(szBuf, "%3d:%-9s", i, EzOpCode_GetName(pInst->iOpCode));
+                    sprintf(szBuf, "%-9s", EzOpCode_GetName(pInst->iOpCode));
                     Utils_Ftoa(pInst->uData.fImmediate, strchr(szBuf, '\0'), DEFAULT_FTOA_PRECISION);
                     break;
                 }
                 case EZOP_PUSH_VAR:
-                    sprintf(szBuf, "%3d:%-9s%d", i, EzOpCode_GetName(pInst->iOpCode), pInst->uData.iVarIndex);
+                    sprintf(szBuf, "%-9s%d", EzOpCode_GetName(pInst->iOpCode), pInst->uData.iVarIndex);
                     break;
                 case EZOP_FUNC: {
                     const PzFuncMeta* pFuncMeta = Constant_GetFunctionMetadataByIndex(pInst->uData.iFuncIndex);
-                    sprintf(szBuf, "%3d:%s \x18 %s", i, EzOpCode_GetName(pInst->iOpCode), pFuncMeta->szName);
+                    sprintf(szBuf, "%s \x18 %s", EzOpCode_GetName(pInst->iOpCode), pFuncMeta->szName);
                     break;
                 }
                 default:
-                    sprintf(szBuf, "%3d:%-9s", i, EzOpCode_GetName(pInst->iOpCode));
+                    sprintf(szBuf, "%-9s", EzOpCode_GetName(pInst->iOpCode));
                     break;
             }
-            putText(iStartX, iStartY, (const unsigned char *)szBuf, uSolidColor);
+            putText(iStartX + iLeftOffset, iStartY, (const unsigned char *)szBuf, getColor(COLOR_BLACK));
         }
 
         /* Draw scroll bar if needed */
@@ -803,13 +827,17 @@ static void drawInspectorScreen(void) {
             iTrackH = iTrackBottom - iTrackTop - 1;
 
             /* Track background */
-            fillRect(iScrollBarX, iTrackTop, iScrollBarW, iTrackH, uSolidColor);
+            fillRect(iScrollBarX, iTrackTop, iScrollBarW, iTrackH, getColor(COLOR_LIGHT_GRAY));
 
             /* Up arrow */
-            putCharColor(iScrollBarX, iTrackTop - CURRENT_FONT_HEIGHT, (unsigned char)PZ_AE_ARROW_UP, uSolidColor);
+            if (g_iInspectorScroll > 0) {
+                putCharColor(iScrollBarX, iTrackTop - CURRENT_FONT_HEIGHT, (unsigned char)PZ_AE_ARROW_UP, getColor(COLOR_DARK_GRAY));
+            }
 
             /* Down arrow */
-            putCharColor(iScrollBarX, iTrackBottom, (unsigned char)PZ_AE_ARROW_DOWN, uSolidColor);
+            if (g_iInspectorScroll < iMaxScroll) {
+                putCharColor(iScrollBarX, iTrackBottom, (unsigned char)PZ_AE_ARROW_DOWN, getColor(COLOR_DARK_GRAY));
+            }
 
             /* Thumb (inset by 1px on each side, horizontally centered) */
             if (iTrackH > 0 && iMaxScroll > 0) {
@@ -818,12 +846,12 @@ static void drawInspectorScreen(void) {
                 iThumbH = (iTrackH - iThumbW) / (iMaxScroll + 1) - 2 + iThumbW;
                 if (iThumbH < 2) iThumbH = 2;
                 iThumbY = iTrackTop + 1 + (iTrackH - 2 - iThumbH) * g_iInspectorScroll / iMaxScroll;
-                fillRect(iThumbX, iThumbY, iThumbW, iThumbH, uBgColor);
+                fillRect(iThumbX, iThumbY, iThumbW, iThumbH, getColor(COLOR_DARK_GRAY));
             }
         }
     }
 
-    SDL_FillRect(sfScreen, NULL, uBgColor);
+    SDL_FillRect(sfScreen, NULL, getColor(COLOR_WHITE));
     scaleBlit(sfCanvas, sfScreen, iScale, bLcd, uLcdDarken, iBlitOffX, iBlitOffY);
     SDL_Flip(sfScreen);
 }
@@ -1008,8 +1036,8 @@ int main(int argc, char* argv[]) {
                         g_iMousePrevY = sdlEvent.motion.y;
                         if (iDeltaX == 0 && iDeltaY == 0) break;
                         if (g_bMouseLeftDown) {
-                            Camera.iBetaDeg  += iDeltaX / iScale;
-                            Camera.iAlphaDeg -= iDeltaY / iScale;
+                            Camera.iBetaDeg  -= iDeltaX / iScale;
+                            Camera.iAlphaDeg += iDeltaY / iScale;
                             Camera.iBetaDeg = Camera.iBetaDeg % 360;
                             if (Camera.iBetaDeg < 0) Camera.iBetaDeg += 360;
                             Camera.iAlphaDeg = Camera.iAlphaDeg % 360;
@@ -1094,15 +1122,15 @@ int main(int argc, char* argv[]) {
                             Camera.iBetaDeg = DEFAULT_VIEW_BETA;
                             Camera.iAlphaDeg = DEFAULT_VIEW_ALPHA;
                         }
-                        else if (sdlEvent.key.keysym.sym == SDLK_q) {
+                        else if (sdlEvent.key.keysym.sym == SDLK_z) {
                             Camera.iZoomLevel--;
                             if (Camera.iZoomLevel < 0) Camera.iZoomLevel = 0;
                         }
-                        else if (sdlEvent.key.keysym.sym == SDLK_w) {
+                        else if (sdlEvent.key.keysym.sym == SDLK_x) {
                             Camera.iZoomLevel++;
                             if (Camera.iZoomLevel >= iNumZoomLevel) Camera.iZoomLevel = iNumZoomLevel - 1;
                         }
-                        else if (sdlEvent.key.keysym.sym == SDLK_e) {
+                        else if (sdlEvent.key.keysym.sym == SDLK_b) {
                             bShowBox = !bShowBox;
                         }
 
