@@ -4,6 +4,7 @@
 *.json
 *.xml
 *.log
+std*.txt
 
 plotter-z/sdl/sdl
 *.dll
