@@ -711,8 +711,8 @@ static void drawHelpScreen(void) {
 
 static void drawInspectorScreen(void) {
     const int iMargin = 4;
-    const int iScrollBarX = iCanvasW - 10;
-    const int iScrollBarW = 6;
+    const int iScrollBarX = iCanvasW - 8;
+    const int iScrollBarW = 5;
     int iStartX = 2;
     int iStartY = 2;
     int iBaseline;
@@ -747,7 +747,7 @@ static void drawInspectorScreen(void) {
             pListNode != NULL;
             pListNode = pListNode->pNext, iStartY += CURRENT_FONT_HEIGHT, ++i
         ) {
-            sprintf(szBuf, "%02d \x18 %s", i, (const char *)pListNode->pData);
+            sprintf(szBuf, "%02d:%s", i, (const char *)pListNode->pData);
             putText(iStartX, iStartY, (const unsigned char *)szBuf, uSolidColor);
         }
 
@@ -775,20 +775,20 @@ static void drawInspectorScreen(void) {
             EzInstruction* pInst = pVm->pInstructions + i;
             switch(pInst->iOpCode) {
                 case EZOP_PUSH_IMD: {
-                    sprintf(szBuf, "%3d \x18 %-9s", i, EzOpCode_GetName(pInst->iOpCode));
+                    sprintf(szBuf, "%3d:%-9s", i, EzOpCode_GetName(pInst->iOpCode));
                     Utils_Ftoa(pInst->uData.fImmediate, strchr(szBuf, '\0'), DEFAULT_FTOA_PRECISION);
                     break;
                 }
                 case EZOP_PUSH_VAR:
-                    sprintf(szBuf, "%3d \x18 %-9s%d", i, EzOpCode_GetName(pInst->iOpCode), pInst->uData.iVarIndex);
+                    sprintf(szBuf, "%3d:%-9s%d", i, EzOpCode_GetName(pInst->iOpCode), pInst->uData.iVarIndex);
                     break;
                 case EZOP_FUNC: {
                     const PzFuncMeta* pFuncMeta = Constant_GetFunctionMetadataByIndex(pInst->uData.iFuncIndex);
-                    sprintf(szBuf, "%3d \x18 %-9s%s", i, EzOpCode_GetName(pInst->iOpCode), pFuncMeta->szName);
+                    sprintf(szBuf, "%3d:%s \x18 %s", i, EzOpCode_GetName(pInst->iOpCode), pFuncMeta->szName);
                     break;
                 }
                 default:
-                    sprintf(szBuf, "%3d \x18 %-9s", i, EzOpCode_GetName(pInst->iOpCode));
+                    sprintf(szBuf, "%3d:%-9s", i, EzOpCode_GetName(pInst->iOpCode));
                     break;
             }
             putText(iStartX, iStartY, (const unsigned char *)szBuf, uSolidColor);
@@ -800,7 +800,7 @@ static void drawInspectorScreen(void) {
 
             iTrackTop = iVmInfoStartY + CURRENT_FONT_HEIGHT + iMargin;
             iTrackBottom = iCanvasH - CURRENT_FONT_HEIGHT;
-            iTrackH = iTrackBottom - iTrackTop;
+            iTrackH = iTrackBottom - iTrackTop - 1;
 
             /* Track background */
             fillRect(iScrollBarX, iTrackTop, iScrollBarW, iTrackH, uSolidColor);
@@ -815,7 +815,7 @@ static void drawInspectorScreen(void) {
             if (iTrackH > 0 && iMaxScroll > 0) {
                 iThumbW = iScrollBarW - 2;
                 iThumbX = iScrollBarX + 1;
-                iThumbH = iScrollBarW;
+                iThumbH = (iTrackH - iThumbW) / (iMaxScroll + 1) - 2 + iThumbW;
                 if (iThumbH < 2) iThumbH = 2;
                 iThumbY = iTrackTop + 1 + (iTrackH - 2 - iThumbH) * g_iInspectorScroll / iMaxScroll;
                 fillRect(iThumbX, iThumbY, iThumbW, iThumbH, uBgColor);
@@ -1028,6 +1028,10 @@ int main(int argc, char* argv[]) {
                         redraw();
                         break;
                     }
+                    if (sdlEvent.key.keysym.sym == SDLK_TAB) {
+                        bMainLoop = 0;
+                        break;
+                    }
                     if (g_bInspector) {
                         if (sdlEvent.key.keysym.sym == SDLK_i) {
                             g_bInspector = 0;
@@ -1045,10 +1049,6 @@ int main(int argc, char* argv[]) {
                             drawInspectorScreen();
                             break;
                         }
-                        break;
-                    }
-                    if (sdlEvent.key.keysym.sym == SDLK_TAB) {
-                        bMainLoop = 0;
                         break;
                     }
                     if (!g_bError) {
