@@ -1023,36 +1023,49 @@ int main(int argc, char* argv[]) {
                     }
                     break;
                 case SDL_KEYDOWN:
-                    if (g_bHelp) {
-                        g_bHelp = 0;
-                        redraw();
-                        break;
-                    }
                     if (sdlEvent.key.keysym.sym == SDLK_TAB) {
                         bMainLoop = 0;
                         break;
                     }
-                    if (g_bInspector) {
-                        if (sdlEvent.key.keysym.sym == SDLK_i) {
-                            g_bInspector = 0;
+                    if (!g_bError) {
+                        /* Common keys */
+                        if (sdlEvent.key.keysym.sym == SDLK_t) {
+                            g_iLang++;
+                            if (g_iLang >= I18N_LANG_COUNT) g_iLang = 0;
+                            /* Redraw screen */
+                            if (g_bHelp) drawHelpScreen();
+                            else if (g_bInspector) drawInspectorScreen();
+                            else redraw();
+                            break;
+                        }
+                        /* Help Screen */
+                        if (g_bHelp) {
+                            g_bHelp = 0;
                             redraw();
                             break;
                         }
-                        if (sdlEvent.key.keysym.sym == SDLK_UP) {
-                            g_iInspectorScroll--;
-                            if (g_iInspectorScroll < 0) g_iInspectorScroll = 0;
-                            drawInspectorScreen();
+                        /* Inspector Screen */
+                        if (g_bInspector) {
+                            if (sdlEvent.key.keysym.sym == SDLK_i) {
+                                g_bInspector = 0;
+                                redraw();
+                                break;
+                            }
+                            if (sdlEvent.key.keysym.sym == SDLK_UP) {
+                                g_iInspectorScroll--;
+                                if (g_iInspectorScroll < 0) g_iInspectorScroll = 0;
+                                drawInspectorScreen();
+                                break;
+                            }
+                            if (sdlEvent.key.keysym.sym == SDLK_DOWN) {
+                                g_iInspectorScroll++;
+                                drawInspectorScreen();
+                                break;
+                            }
                             break;
                         }
-                        if (sdlEvent.key.keysym.sym == SDLK_DOWN) {
-                            g_iInspectorScroll++;
-                            drawInspectorScreen();
-                            break;
-                        }
-                        break;
-                    }
-                    if (!g_bError) {
-                        if (sdlEvent.key.keysym.sym == SDLK_z) {
+                        /* Main Screen */
+                        if (sdlEvent.key.keysym.sym == SDLK_h) {
                             g_bHelp = 1;
                             drawHelpScreen();
                             break;
