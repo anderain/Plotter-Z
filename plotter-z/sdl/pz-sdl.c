@@ -74,7 +74,7 @@ Uint32          uLcdDarken = 0x111111;
 #define COLOR_DARK_GRAY     2
 #define COLOR_BLACK         3
 
-static const Uint32 uPalette[] = {    
+static Uint32 uPalette[] = {    
     0x7ba200,   /* COLOR_WHITE       */
     0x437f00,   /* COLOR_LIGHT_GRAY  */
     0x226600,   /* COLOR_DARK_GRAY   */
@@ -237,34 +237,31 @@ static const char* TextI18n[I18N_LANG_COUNT][I18N_COUNT] = {
  *====================================================*/
 
 static int parseResolution(const char* szArg, int* pWidth, int* pHeight) {
-    const char* pX;
-    *pWidth = atoi(szArg);
-    pX = strchr(szArg, 'x');
-    if (pX == NULL) return 0;
-    *pHeight = atoi(pX + 1);
-    return (*pWidth > 0 && *pHeight > 0);
+    return sscanf(szArg, "%dx%d", pWidth, pHeight) == 2 && *pWidth > 0 && *pHeight > 0;
 }
 
 static int parseTriple(const char* szArg, PZ_FLOAT* pMin, PZ_FLOAT* pMax, int* pGrid) {
-    char*  pEnd;
-    const char* pComma;
-    *pMin = (PZ_FLOAT)atof(szArg);
-    pComma = strchr(szArg, ',');
-    if (pComma == NULL) return 0;
-    *pMax = (PZ_FLOAT)atof(pComma + 1);
-    pComma = strchr(pComma + 1, ',');
-    if (pComma == NULL) return 0;
-    *pGrid = (int)strtol(pComma + 1, &pEnd, 10);
-    (void)pEnd;
-    return (*pGrid > 1);
+    return sscanf(szArg, "%f,%f,%d", pMin, pMax, pGrid) == 3 && *pGrid > 1;
 }
 
 static int parsePair(const char* szArg, PZ_FLOAT* pMin, PZ_FLOAT* pMax) {
-    const char* pComma;
-    *pMin = (PZ_FLOAT)atof(szArg);
-    pComma = strchr(szArg, ',');
-    if (pComma == NULL) return 0;
-    *pMax = (PZ_FLOAT)atof(pComma + 1);
+    return sscanf(szArg, "%f,%f", pMin, pMax) == 2;
+}
+
+static int parsePalette(const char* szArg) {
+    int i;
+    for (i = 0; i < 4; ++i) {
+        int iHex, iR, iG, iB;
+        const char* pComma;
+        if (sscanf(szArg, "%6x", &iHex) != 1) return 0;
+        iR = (iHex >> 16) & 0xFF;
+        iG = (iHex >>  8) & 0xFF;
+        iB = (iHex      ) & 0xFF;
+        uPalette[i] = ((Uint32)iR << 16) | ((Uint32)iG << 8) | (Uint32)iB;
+        pComma = strchr(szArg, ',');
+        if (pComma == NULL) return (i == 3);
+        szArg = pComma + 1;
+    }
     return 1;
 }
 
@@ -869,37 +866,37 @@ int main(int argc, char* argv[]) {
 
     /* Parse command-line arguments */
     for (i = 1; i < argc; ++i) {
-        if (strcmp(argv[i], "-r") == 0) {
+        if (strcmp(argv[i], "-r") == 0 || strcmp(argv[i], "--resolution") == 0) {
             if (i + 1 >= argc || !parseResolution(argv[i + 1], &cfg.iScreenWidth, &cfg.iScreenHeight)) {
                 fprintf(stderr, "Error: -r requires WIDTHxHEIGHT\n");
                 return 2;
             }
             i++;
-        } else if (strcmp(argv[i], "-f") == 0) {
+        } else if (strcmp(argv[i], "-f") == 0 || strcmp(argv[i], "--fullscreen") == 0) {
             cfg.bFullscreen = 1;
-        } else if (strcmp(argv[i], "-x") == 0) {
+        } else if (strcmp(argv[i], "-x") == 0 || strcmp(argv[i], "--xrange") == 0) {
             if (i + 1 >= argc || !parseTriple(argv[i + 1], &cfg.fXMin, &cfg.fXMax, &cfg.iXGrid)) {
                 fprintf(stderr, "Error: -x requires MIN,MAX,GRID\n");
                 return 2;
             }
             i++;
-        } else if (strcmp(argv[i], "-y") == 0) {
+        } else if (strcmp(argv[i], "-y") == 0 || strcmp(argv[i], "--yrange") == 0) {
             if (i + 1 >= argc || !parseTriple(argv[i + 1], &cfg.fYMin, &cfg.fYMax, &cfg.iYGrid)) {
                 fprintf(stderr, "Error: -y requires MIN,MAX,GRID\n");
                 return 2;
             }
             i++;
-        } else if (strcmp(argv[i], "-z") == 0) {
+        } else if (strcmp(argv[i], "-z") == 0 || strcmp(argv[i], "--zrange") == 0) {
             if (i + 1 >= argc || !parsePair(argv[i + 1], &cfg.fZMin, &cfg.fZMax)) {
                 fprintf(stderr, "Error: -z requires MIN,MAX\n");
                 return 2;
             }
             i++;
-        } else if (strcmp(argv[i], "-b") == 0) {
+        } else if (strcmp(argv[i], "-b") == 0 || strcmp(argv[i], "--box") == 0) {
             cfg.bShowBox = !cfg.bShowBox;
-        } else if (strcmp(argv[i], "-l") == 0) {
+        } else if (strcmp(argv[i], "-l") == 0 || strcmp(argv[i], "--lcd") == 0) {
             cfg.bLcd = !cfg.bLcd;
-        } else if (strcmp(argv[i], "-s") == 0) {
+        } else if (strcmp(argv[i], "-s") == 0 || strcmp(argv[i], "--scale") == 0) {
             if (i + 1 >= argc) {
                 fprintf(stderr, "Error: -s requires SCALE\n");
                 return 2;
@@ -907,7 +904,7 @@ int main(int argc, char* argv[]) {
             cfg.iScale = atoi(argv[i + 1]);
             if (cfg.iScale < 1) cfg.iScale = 1;
             i++;
-        } else if (strcmp(argv[i], "-t") == 0) {
+        } else if (strcmp(argv[i], "-t") == 0 || strcmp(argv[i], "--translation") == 0) {
             if (i + 1 >= argc) {
                 fprintf(stderr, "Error: -t requires LANG\n");
                 return 2;
@@ -916,6 +913,12 @@ int main(int argc, char* argv[]) {
                 g_iLang = I18N_LANG_JA;
             } else {
                 g_iLang = I18N_LANG_EN;
+            }
+            i++;
+        } else if (strcmp(argv[i], "-p") == 0 || strcmp(argv[i], "--palette") == 0) {
+            if (i + 1 >= argc || !parsePalette(argv[i + 1])) {
+                fprintf(stderr, "Error: -p requires C1,C2,C3,C4 (hex RRGGBB)\n");
+                return 2;
             }
             i++;
         } else if (cfg.szExpr == DEFAULT_CONFIG.szExpr) {
