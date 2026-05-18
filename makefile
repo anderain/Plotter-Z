@@ -42,6 +42,12 @@ pz-sdl: $(RZ_OBJS) $(EZ_OBJS) $(FZ_OBJS) $(COMMON_OBJS) $(PZ_SDL_OBJS)
 pz-sdl.o: $(PZ_SDL_SRC_PATH)/pz-sdl.c
 	$(CC) -I$(SDL_PATH)/include $(C_FLAGS) $(PZ_SDL_SRC_PATH)/pz-sdl.c -o pz-sdl.o
 
+pz-sdl-fixed: $(RZ_OBJS) $(EZ_OBJS) $(FZ_OBJS) $(COMMON_OBJS) pz-sdl-fixed.o
+	$(LD) $(RZ_OBJS) $(EZ_OBJS) $(FZ_OBJS) $(COMMON_OBJS) pz-sdl-fixed.o  $(PZ_LD_FLAGS) -o pz-sdl-fixed.exe
+
+pz-sdl-fixed.o: $(PZ_SDL_SRC_PATH)/pz-sdl-fixed.c
+	$(CC) -I$(SDL_PATH)/include $(C_FLAGS) $(PZ_SDL_SRC_PATH)/pz-sdl-fixed.c -o pz-sdl-fixed.o
+
 inspector-sdl: $(RZ_OBJS) $(EZ_OBJS) $(FZ_OBJS) $(COMMON_OBJS) $(INSPECTOR_OBJ)
 	$(LD) $(RZ_OBJS) $(EZ_OBJS) $(FZ_OBJS) $(COMMON_OBJS) $(INSPECTOR_OBJ)  $(PZ_LD_FLAGS) -o $(INSPECTOR_EXE)
 

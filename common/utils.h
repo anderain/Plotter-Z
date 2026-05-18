@@ -13,7 +13,29 @@
 #   define FALSE 0
 #endif
 
+/*
+ * PZ_FLOAT = float
+ */
 #define PZ_FLOAT float
+
+/*====================================================
+ * Fixed-point arithmetic (Q2.14)
+ * PZ_FIXED = short, operations upcast to int
+ *====================================================*/
+#ifndef PZ_FIXED
+#define PZ_FIXED short
+#endif
+
+#define PZ_FIXED_SHIFT     14
+#define PZ_FIXED_ONE       ((int)(1 << PZ_FIXED_SHIFT))
+#define PZ_FIXED_HALF      ((int)(1 << (PZ_FIXED_SHIFT - 1)))
+#define PZ_FIXED_NEG_ONE   (-PZ_FIXED_ONE)
+
+#define PZ_FLOAT_TO_FIXED(f)   ((PZ_FIXED)((float)(f) * PZ_FIXED_ONE + 0.5f))
+#define PZ_FIXED_TO_FLOAT(x)   ((float)(int)(x) / PZ_FIXED_ONE)
+#define PZ_INT_TO_FIXED(n)     ((PZ_FIXED)((int)(n) << PZ_FIXED_SHIFT))
+#define PZ_FIXED_MUL(a, b)     ((int)(((int)(a) * (int)(b) + PZ_FIXED_HALF) >> PZ_FIXED_SHIFT))
+#define PZ_FIXED_DIV(a, b)     ((int)((((int)(a)) << PZ_FIXED_SHIFT) / (int)(b)))
 
 #define isDigit(c)      ((c) >= '0' && (c) <= '9')
 #define isUppercase(c)  ((c) >= 'A' && (c) <= 'Z')
