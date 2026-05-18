@@ -10,7 +10,6 @@
 #include "../../common/constants.h"
 
 #define ABS(v)  ((v) < 0 ? -(v) : (v))
-#define PZ_PI   3.14159265
 
 #define CURRENT_FONT_WIDTH 6
 #define CURRENT_FONT_HEIGHT 8
@@ -618,18 +617,27 @@ static void redraw(void) {
 
 static void recalc(void) {
     int ix, iy;
-    float fz, fx, fy;
-    float fzMid = (float)(Camera.zMax + Camera.zMin) * 0.5f;
-    float fzRange = (float)(Camera.zMax - Camera.zMin);
-    float fxMid = (float)(Camera.xMax + Camera.xMin) * 0.5f;
-    float fxRange = (float)(Camera.xMax - Camera.xMin);
-    float fyMid = (float)(Camera.yMax + Camera.yMin) * 0.5f;
-    float fyRange = (float)(Camera.yMax - Camera.yMin);
+    PZ_FLOAT fXbuf[sizeof(xBuf)], fYbuf[sizeof(yBuf)];
+    PZ_FLOAT fz, fx, fy;
+    PZ_FLOAT fzMid = (PZ_FLOAT)(Camera.zMax + Camera.zMin) * 0.5f;
+    PZ_FLOAT fzRange = (PZ_FLOAT)(Camera.zMax - Camera.zMin);
+    PZ_FLOAT fxMid = (PZ_FLOAT)(Camera.xMax + Camera.xMin) * 0.5f;
+    PZ_FLOAT fxRange = (PZ_FLOAT)(Camera.xMax - Camera.xMin);
+    PZ_FLOAT fyMid = (PZ_FLOAT)(Camera.yMax + Camera.yMin) * 0.5f;
+    PZ_FLOAT fyRange = (PZ_FLOAT)(Camera.yMax - Camera.yMin);
 
     for (ix = 0; ix < Camera.xGrid; ++ix) {
-        fx = (float)Camera.xMin + (float)(Camera.xMax - Camera.xMin) * ix / (float)(Camera.xGrid - 1);
+        fXbuf[ix] = (PZ_FLOAT)Camera.xMin + (PZ_FLOAT)(Camera.xMax - Camera.xMin) * ix / (PZ_FLOAT)(Camera.xGrid - 1);
+    }
+
+    for (iy = 0; iy < Camera.yGrid; ++iy) {
+        fYbuf[iy] = (PZ_FLOAT)Camera.yMin + (PZ_FLOAT)(Camera.yMax - Camera.yMin) * iy / (PZ_FLOAT)(Camera.yGrid - 1);
+    }
+
+    for (ix = 0; ix < Camera.xGrid; ++ix) {
+        fx = fXbuf[ix];
         for (iy = 0; iy < Camera.yGrid; ++iy) {
-            fy = (float)Camera.yMin + (float)(Camera.yMax - Camera.yMin) * iy / (float)(Camera.yGrid - 1);
+            fy = fYbuf[iy];
 
             EzMachine_SetVariableByIndex(pVm, 0, fx);
             EzMachine_SetVariableByIndex(pVm, 1, fy);

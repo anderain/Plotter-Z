@@ -10,7 +10,6 @@
 #include "../../common/constants.h"
 
 #define ABS(v)  ((v) < 0 ? -(v) : (v))
-#define PZ_PI   3.14159265
 
 #define CURRENT_FONT_WIDTH 6
 #define CURRENT_FONT_HEIGHT 8

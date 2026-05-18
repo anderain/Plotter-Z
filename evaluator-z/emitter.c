@@ -1,4 +1,3 @@
-#include <stdio.h>
 #include <stdlib.h>
 #include "ez.h"
 #include "../common/constants.h"

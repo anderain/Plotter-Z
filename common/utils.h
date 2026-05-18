@@ -1,5 +1,5 @@
-#ifndef _UTILS_H_
-#define _UTILS_H_
+#ifndef _PZ_UTILS_H_
+#define _PZ_UTILS_H_
 
 #ifndef BOOL
 #   define BOOL int
@@ -18,6 +18,8 @@
  */
 #define PZ_FLOAT float
 
+#define PZ_PI   ((PZ_FLOAT)3.14159265f)
+
 /*====================================================
  * Fixed-point arithmetic (Q2.14)
  * PZ_FIXED = short, operations upcast to int
@@ -31,7 +33,7 @@
 #define PZ_FIXED_HALF      ((int)(1 << (PZ_FIXED_SHIFT - 1)))
 #define PZ_FIXED_NEG_ONE   (-PZ_FIXED_ONE)
 
-#define PZ_FLOAT_TO_FIXED(f)   ((PZ_FIXED)((float)(f) * PZ_FIXED_ONE + 0.5f))
+#define PZ_FLOAT_TO_FIXED(f)   ((PZ_FIXED)((float)(f) * PZ_FIXED_ONE))
 #define PZ_FIXED_TO_FLOAT(x)   ((float)(int)(x) / PZ_FIXED_ONE)
 #define PZ_INT_TO_FIXED(n)     ((PZ_FIXED)((int)(n) << PZ_FIXED_SHIFT))
 #define PZ_FIXED_MUL(a, b)     ((int)(((int)(a) * (int)(b) + PZ_FIXED_HALF) >> PZ_FIXED_SHIFT))

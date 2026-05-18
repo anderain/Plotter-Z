@@ -8,3 +8,5 @@ std*.txt
 
 plotter-z/sdl/sdl
 *.dll
+
+*.cmd
