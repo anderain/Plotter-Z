@@ -17,6 +17,7 @@
 
 HINSTANCE   hInst;
 HWND        hwndCB;
+DWORD       g_dwLastMouseRefresh;
 
 int         recalc(HWND hWnd);
 void        CenterDialog(HWND hDlg);
@@ -139,11 +140,7 @@ static int      g_bMouseDown    = 0;
 static int      g_iMousePrevX   = 0;
 static int      g_iMousePrevY   = 0;
 static int      g_iZoomAccum    = 0;
-
-static DWORD    g_dwLastMouseRefresh = 0;
-
-/* Progress dialog */
-static HWND     g_hDlgProgress  = NULL;
+#define ZOOM_DRAG_THRESHOLD     15
 
 /*====================================================
  * 2bpp canvas (4-level grayscale, packed pixels)
@@ -650,20 +647,6 @@ static void resetView(HWND hWnd) {
 }
 
 /*====================================================
- * Progress dialog procedure
- *====================================================*/
-static LRESULT CALLBACK ProgressDlgProc(HWND hDlg, UINT message,
-                                         WPARAM wParam, LPARAM lParam) {
-    (void)wParam;
-    (void)lParam;
-    switch (message) {
-        case WM_INITDIALOG:
-            return TRUE;
-    }
-    return FALSE;
-}
-
-/*====================================================
  * Expression edit dialog procedure
  *   Auto-completes unbalanced parentheses on confirm.
  *   Re-parses and re-evaluates the expression.
@@ -737,13 +720,6 @@ static LRESULT CALLBACK ExprDlgProc( HWND hDlg, UINT message,
 
                     /* Update expression and re-evaluate */
                     Utils_StringCopy(szExpr, EXPR_MAX, szNew);
-
-                    if (recalc(hWndParent)) {
-                        redrawCanvas(hWndParent);
-                        InvalidateRect(hWndParent, NULL, FALSE);
-                    } else {
-                        drawErrorScreen(hWndParent);
-                    }
 
                     EndDialog(hDlg, IDOK);
                     return TRUE;
@@ -842,28 +818,6 @@ static LRESULT CALLBACK WindowDlgProc(HWND hDlg, UINT message,
                     if (iGrid > GRID_MAX) iGrid = GRID_MAX;
                     Camera.yGrid = iGrid;
 
-                    /* Destroy old state and recalc */
-                    if (g_pRenderNode != NULL) {
-                        RenderNode_Destroy(g_pRenderNode);
-                        g_pRenderNode = NULL;
-                    }
-                    if (g_pAstExpr != NULL) {
-                        FzAstNode_Destroy(g_pAstExpr);
-                        g_pAstExpr = NULL;
-                    }
-                    if (g_pVm != NULL) {
-                        EzMachine_Destroy(g_pVm);
-                        g_pVm = NULL;
-                    }
-                    g_pVm = EzMachine_Create();
-
-                    if (recalc(hWndParent)) {
-                        redrawCanvas(hWndParent);
-                        InvalidateRect(hWndParent, NULL, FALSE);
-                    } else {
-                        drawErrorScreen(hWndParent);
-                    }
-
                     EndDialog(hDlg, IDOK);
                     return TRUE;
                 }
@@ -874,24 +828,6 @@ static LRESULT CALLBACK WindowDlgProc(HWND hDlg, UINT message,
             break;
     }
     return FALSE;
-}
-
-/*====================================================
- * Update progress dialog text
- *====================================================*/
-static void updateProgress(int iPct) {
-    TCHAR szText[32];
-    MSG msg;
-    if (g_hDlgProgress == NULL) return;
-    wsprintf(szText, TEXT("%d%%"), iPct);
-    SetDlgItemText(g_hDlgProgress, IDC_PROGRESS_TEXT, szText);
-    /* Pump messages to keep dialog responsive */
-    while (PeekMessage(&msg, NULL, 0, 0, PM_REMOVE)) {
-        if (!IsDialogMessage(g_hDlgProgress, &msg)) {
-            TranslateMessage(&msg);
-            DispatchMessage(&msg);
-        }
-    }
 }
 
 /*====================================================
@@ -951,10 +887,28 @@ int recalc(HWND hWnd) {
     for (iy = 0; iy < Camera.yGrid; ++iy)
         fYbuf[iy] = Camera.yMin + (Camera.yMax - Camera.yMin) * iy / (PZ_FLOAT)(Camera.yGrid - 1);
 
-    /* Show progress dialog */
-    g_hDlgProgress = CreateDialog(hInst, MAKEINTRESOURCE(IDD_PROGRESS),
-                                   hWnd, (DLGPROC)ProgressDlgProc);
-    updateProgress(0);
+    /* Show progress on canvas */
+    {
+        TCHAR szBufT[32];
+        char szBuf[32];
+        int x, y, iLen;
+        fillRectCanvas(0, 0, g_iCanvasW, g_iCanvasH, COLOR_WHITE);
+        y = g_iCanvasH / 2 - CURRENT_FONT_HEIGHT;
+        if (y < 0) y = 0;
+        iLen = 10 * CURRENT_FONT_WIDTH;
+        x = (g_iCanvasW - iLen) / 2;
+        if (x < 2) x = 2;
+        putTextCanvas(x, y, (const unsigned char*)"Recalc ...", COLOR_BLACK);
+        wsprintf(szBufT, TEXT("0%%"));
+        tcharToChar(szBuf, szBufT, 32);
+        iLen = (int)strlen(szBuf) * CURRENT_FONT_WIDTH;
+        x = (g_iCanvasW - iLen) / 2;
+        if (x < 2) x = 2;
+        putTextCanvas(x, y + CURRENT_FONT_HEIGHT + 2,
+            (const unsigned char*)szBuf, COLOR_BLACK);
+        InvalidateRect(hWnd, NULL, FALSE);
+        UpdateWindow(hWnd);
+    }
 
     iLastPct = -1;
     for (ix = 0; ix < Camera.xGrid; ++ix) {
@@ -970,15 +924,27 @@ int recalc(HWND hWnd) {
         }
         iPct = (ix + 1) * 100 / Camera.xGrid;
         if (iPct != iLastPct) {
-            updateProgress(iPct);
+            TCHAR szBufT[32];
+            char szBuf[32];
+            int x, y, iLen;
+            MSG msg;
+            y = g_iCanvasH / 2 + 2;
+            if (y < 0) y = 0;
+            wsprintf(szBufT, TEXT("%d%%"), iPct);
+            tcharToChar(szBuf, szBufT, 32);
+            fillRectCanvas(0, y, g_iCanvasW, CURRENT_FONT_HEIGHT, COLOR_WHITE);
+            iLen = (int)strlen(szBuf) * CURRENT_FONT_WIDTH;
+            x = (g_iCanvasW - iLen) / 2;
+            if (x < 2) x = 2;
+            putTextCanvas(x, y, (const unsigned char*)szBuf, COLOR_BLACK);
+            InvalidateRect(hWnd, NULL, FALSE);
+            UpdateWindow(hWnd);
+            while (PeekMessage(&msg, NULL, 0, 0, PM_REMOVE)) {
+                TranslateMessage(&msg);
+                DispatchMessage(&msg);
+            }
             iLastPct = iPct;
         }
-    }
-
-    /* Close progress dialog */
-    if (g_hDlgProgress != NULL) {
-        DestroyWindow(g_hDlgProgress);
-        g_hDlgProgress = NULL;
     }
     g_bError = 0;
     return 1;
@@ -1082,14 +1048,47 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
                 case IDM_FILE_EXIT:
                     DestroyWindow(hWnd);
                     break;
-                case IDM_EDIT_EXPRESSION:
-                    DialogBox(hInst, MAKEINTRESOURCE(IDD_EXPRESSION),
-                              hWnd, (DLGPROC)ExprDlgProc);
+                case IDM_EDIT_EXPRESSION: {
+                    int iRet;
+                    iRet = DialogBox(hInst, MAKEINTRESOURCE(IDD_EXPRESSION), hWnd, (DLGPROC)ExprDlgProc);
+                    if (iRet == IDOK) {
+                        if (recalc(hWnd)) {
+                            redrawCanvas(hWnd);
+                            InvalidateRect(hWnd, NULL, FALSE);
+                        } else {
+                            drawErrorScreen(hWnd);
+                        }
+                    }
                     break;
-                case IDM_EDIT_WINDOW:
-                    DialogBox(hInst, MAKEINTRESOURCE(IDD_WINDOWEDIT),
-                              hWnd, (DLGPROC)WindowDlgProc);
+                }
+                case IDM_EDIT_WINDOW: {
+                    int iRet;
+                    iRet = DialogBox(hInst, MAKEINTRESOURCE(IDD_WINDOWEDIT), hWnd, (DLGPROC)WindowDlgProc);
+                    if (iRet == IDOK) {
+                        /* Destroy old state and recalc */
+                        if (g_pRenderNode != NULL) {
+                            RenderNode_Destroy(g_pRenderNode);
+                            g_pRenderNode = NULL;
+                        }
+                        if (g_pAstExpr != NULL) {
+                            FzAstNode_Destroy(g_pAstExpr);
+                            g_pAstExpr = NULL;
+                        }
+                        if (g_pVm != NULL) {
+                            EzMachine_Destroy(g_pVm);
+                            g_pVm = NULL;
+                        }
+                        g_pVm = EzMachine_Create();
+
+                        if (recalc(hWnd)) {
+                            redrawCanvas(hWnd);
+                            InvalidateRect(hWnd, NULL, FALSE);
+                        } else {
+                            drawErrorScreen(hWnd);
+                        }
+                    }
                     break;
+                }
                 case IDM_VIEW_CAMERA:
                     g_iMouseMode = MOUSE_MODE_CAMERA;
                     if (g_bShowFooter) { redrawCanvas(hWnd); InvalidateRect(hWnd, NULL, FALSE); }
