@@ -8,9 +8,13 @@
 #include "../../common/constants.h"
 #include "../../formula-z/fz.h"
 #include "../../evaluator-z/ez.h"
+#include "../../renderer-z/rz.h"
+#include "../../renderer-z/ascii_extended_mapping.h"
 
 #define MAX_LOADSTRING 100
 #define EXPR_MAX 300
+#define CURRENT_FONT_WIDTH  6
+#define CURRENT_FONT_HEIGHT 8
 
 /*====================================================
  * Color palette (grayscale)
@@ -20,12 +24,23 @@
 #define COLOR_LIGHT_GRAY    2
 #define COLOR_WHITE         3
 
+#define HIGH_CONTRAST_COLOR 1
+
+#ifdef HIGH_CONTRAST_COLOR
 static const COLORREF g_rgbPalette[] = {
-    RGB(0,   0,   0),       /* COLOR_BLACK       */
-    RGB(68,  68,  68),      /* COLOR_DARK_GRAY   */
-    RGB(136, 136, 136),     /* COLOR_LIGHT_GRAY  */
-   RGB(204, 204, 204),     /* COLOR_WHITE       */
+    RGB(0xff, 0xff, 0xff),      /* COLOR_BLACK       */
+    RGB(0xaa, 0xaa, 0xaa),      /* COLOR_DARK_GRAY   */
+    RGB(0x66, 0x66, 0x66),      /* COLOR_LIGHT_GRAY  */
+    RGB(0x00, 0x00, 0x00),      /* COLOR_WHITE       */
 };
+#else
+static const COLORREF g_rgbPalette[] = {
+    RGB(0x11, 0x50, 0x00),      /* COLOR_BLACK       */
+    RGB(0x22, 0x66, 0x00),      /* COLOR_DARK_GRAY   */
+    RGB(0x43, 0x7f, 0x00),      /* COLOR_LIGHT_GRAY  */
+    RGB(0xaa, 0xcc, 0x00),      /* COLOR_WHITE       */
+};
+#endif
 
 /*====================================================
  * Expression & Camera
@@ -35,6 +50,19 @@ static char szExpr[EXPR_MAX] = "sin(sqr(x^2+y^2))*cos(sqr(x^2+y^2))";
 
 #define DEFAULT_VIEW_ALPHA 30
 #define DEFAULT_VIEW_BETA 30
+
+const int arrZoomLevels[] = {
+    PZ_FLOAT_TO_FIXED(0.33f),
+    PZ_FLOAT_TO_FIXED(0.50f),
+    PZ_FLOAT_TO_FIXED(0.75f),
+    (int)PZ_FIXED_ONE,
+    PZ_FLOAT_TO_FIXED(1.50f),
+    (int)PZ_FIXED_ONE * 2,
+    (int)PZ_FIXED_ONE * 4,
+    (int)PZ_FIXED_ONE * 8,
+};
+const int iNumZoomLevel = sizeof(arrZoomLevels) / sizeof(arrZoomLevels[0]);
+#define ZOOM_LEVEL_DEFAULT 3
 
 struct {
     int iViewportX;
@@ -46,13 +74,15 @@ struct {
     PZ_FLOAT xMin;  PZ_FLOAT xMax;  int xGrid;
     PZ_FLOAT yMin;  PZ_FLOAT yMax;  int yGrid;
     PZ_FLOAT zMin;  PZ_FLOAT zMax;
+    int iZoomLevel;
 } Camera = {
     0, 0, 0,
     DEFAULT_VIEW_ALPHA, DEFAULT_VIEW_BETA,
     0, 0, 0, 0,
     -6.0f, 6.0f, 20,
     -6.0f, 6.0f, 20,
-    -3.0f, 3.0f
+    -3.0f, 3.0f,
+    ZOOM_LEVEL_DEFAULT
 };
 
 PZ_FIXED zBuf[2000];
@@ -63,7 +93,14 @@ PZ_FIXED yBuf[50];
 
 FzAstNode*      g_pAstExpr = NULL;
 EzMachine*      g_pVm = NULL;
+RenderNode*     g_pRenderNode = NULL;
+RenderConfig    g_RenderConfig;
 char            g_szErrorBuf[EZ_ERROR_CONTENT_LENGTH];
+int             g_bShowBox      = 1;
+int             g_bMouseDown    = 0;
+int             g_bPanMode      = 0;
+int             g_iMousePrevX   = 0;
+int             g_iMousePrevY   = 0;
 
 /*====================================================
  * 2bpp canvas
@@ -144,19 +181,46 @@ static void draw1bppCanvas(const unsigned char *raw,
     }
 }
 
+static void putCharCanvas(int x, int y, unsigned char ch, int iColor) {
+    draw1bppCanvas(FONT_HYBIRD_6x8 + 8 * (int)ch, x, y, 8, 8, iColor);
+}
+
+static void putTextCanvas(int x, int y, const unsigned char* usz, int iColor) {
+    for (; *usz; ++usz, x += CURRENT_FONT_WIDTH)
+        putCharCanvas(x, y, *usz, iColor);
+}
+
+/*====================================================
+ * rz interface wrappers (fixed color = black)
+ *====================================================*/
+
+static void rzSetPixel(int x, int y) {
+    setPixelCanvas(x, y, COLOR_BLACK);
+}
+
+static void rzPlotLine(int x0, int y0, int x1, int y1) {
+    drawLineCanvas(x0, y0, x1, y1, COLOR_BLACK);
+}
+
+static void rzPutChar(int x, int y, unsigned char ch) {
+    putCharCanvas(x, y, ch, COLOR_BLACK);
+}
+
 /*====================================================
  * 3D projection (fixed-point)
  *====================================================*/
 
 static void xyz2xy(PZ_FIXED x, PZ_FIXED y, PZ_FIXED z, int *ox, int *oy) {
+    int iZoom = arrZoomLevels[Camera.iZoomLevel];
+    int iScale = (int)(((int)Camera.iViewportS * iZoom + PZ_FIXED_HALF) >> PZ_FIXED_SHIFT);
     int nx, ny;
 
     nx = PZ_FIXED_MUL(x, Camera.cosB) - PZ_FIXED_MUL(y, Camera.sinB);
     ny = PZ_FIXED_MUL(PZ_FIXED_MUL(x, Camera.sinB) + PZ_FIXED_MUL(y, Camera.cosB), Camera.sinA)
        - PZ_FIXED_MUL(z, Camera.cosA);
 
-    *ox = Camera.iViewportX + (int)(((int)Camera.iViewportS * nx + PZ_FIXED_HALF) >> PZ_FIXED_SHIFT);
-    *oy = Camera.iViewportY + (int)(((int)Camera.iViewportS * ny + PZ_FIXED_HALF) >> PZ_FIXED_SHIFT);
+    *ox = Camera.iViewportX + (int)(((int)iScale * nx + PZ_FIXED_HALF) >> PZ_FIXED_SHIFT);
+    *oy = Camera.iViewportY + (int)(((int)iScale * ny + PZ_FIXED_HALF) >> PZ_FIXED_SHIFT);
 }
 
 /*====================================================
@@ -190,6 +254,11 @@ static int recalc(void) {
 
         iCompileErr = EzMachine_Compile(g_pVm, g_pAstExpr, g_szErrorBuf);
         if (iCompileErr != EZERR_NONE) return 0;
+
+        if (g_pRenderNode == NULL) {
+            g_pRenderNode = Render_Transform(g_pAstExpr);
+            RenderNode_EstimateSize(g_pRenderNode, &g_RenderConfig);
+        }
     }
 
     for (ix = 0; ix < Camera.xGrid; ++ix)
@@ -243,6 +312,70 @@ static void drawSurfaceWireframeCanvas(void) {
                 drawLineCanvas(x0, y0, x1, y1, COLOR_BLACK);
             x0 = x1; y0 = y1; z0 = z1;
         }
+    }
+}
+
+/*====================================================
+ * Bounding box edges
+ *====================================================*/
+
+typedef struct { PZ_FIXED x, y, z; } Vertex;
+typedef struct { int i0, i1; } Edge;
+
+static void drawBoxEdgesCanvas(void) {
+    static const Vertex BoxVertices[] = {
+        {   PZ_FIXED_ONE,       PZ_FIXED_ONE,       PZ_FIXED_ONE },
+        {   PZ_FIXED_NEG_ONE,   PZ_FIXED_ONE,       PZ_FIXED_ONE },
+        {   PZ_FIXED_NEG_ONE,   PZ_FIXED_NEG_ONE,   PZ_FIXED_ONE },
+        {   PZ_FIXED_ONE,       PZ_FIXED_NEG_ONE,   PZ_FIXED_ONE },
+        {   PZ_FIXED_ONE,       PZ_FIXED_ONE,       PZ_FIXED_NEG_ONE },
+        {   PZ_FIXED_NEG_ONE,   PZ_FIXED_ONE,       PZ_FIXED_NEG_ONE },
+        {   PZ_FIXED_NEG_ONE,   PZ_FIXED_NEG_ONE,   PZ_FIXED_NEG_ONE },
+        {   PZ_FIXED_ONE,       PZ_FIXED_NEG_ONE,   PZ_FIXED_NEG_ONE },
+    };
+
+    static const Edge BoxEdges[] = {
+        { 0, 1 }, { 1, 2 }, { 2, 3 }, { 3, 0 },
+        { 4, 5 }, { 5, 6 }, { 6, 7 }, { 7, 4 },
+        { 0, 4 }, { 1, 5 }, { 2, 6 }, { 3, 7 }
+    };
+
+    static const int numEdges = sizeof(BoxEdges) / sizeof(BoxEdges[0]);
+    int i;
+
+    for (i = 0; i < numEdges; ++i) {
+        const Edge* e = BoxEdges + i;
+        const Vertex* v0 = BoxVertices + e->i0;
+        const Vertex* v1 = BoxVertices + e->i1;
+        int x0, y0, x1, y1;
+        xyz2xy(v0->x, v0->y, v0->z, &x0, &y0); 
+        xyz2xy(v1->x, v1->y, v1->z, &x1, &y1); 
+        drawLineCanvas(x0, y0, x1, y1, COLOR_LIGHT_GRAY);
+    }
+}
+
+/*====================================================
+ * Full redraw (clear → box → surface)
+ *====================================================*/
+
+static void redrawCanvas(void) {
+    int iBaseline;
+
+    Camera.sinA = PZ_FLOAT_TO_FIXED(sin(Camera.iAlphaDeg * PZ_PI / 180));
+    Camera.cosA = PZ_FLOAT_TO_FIXED(cos(Camera.iAlphaDeg * PZ_PI / 180));
+    Camera.sinB = PZ_FLOAT_TO_FIXED(sin(Camera.iBetaDeg * PZ_PI / 180));
+    Camera.cosB = PZ_FLOAT_TO_FIXED(cos(Camera.iBetaDeg * PZ_PI / 180));
+
+    fillRectCanvas(0, 0, g_iCanvasW, g_iCanvasH, COLOR_WHITE);
+
+    if (g_bShowBox)
+        drawBoxEdgesCanvas();
+
+    drawSurfaceWireframeCanvas();
+
+    if (g_pRenderNode != NULL) {
+        iBaseline = g_pRenderNode->sLayout.iAscent;
+        RenderNode_Draw(g_pRenderNode, &g_RenderConfig, 0, iBaseline);
     }
 }
 
@@ -328,10 +461,11 @@ static int createBackBuffer(HWND hWnd, int iWidth, int iHeight) {
 
     /* Write palette for indexed modes */
     if (g_iScreenBpp == 2) {
+        static const BYTE byteGrayscale[] = { 0x00, 0x80, 0xc0, 0xff };
         for (i = 0; i < 4; ++i) {
-            pbmi->bmiColors[i].rgbRed   = GetRValue(g_rgbPalette[i]);
-            pbmi->bmiColors[i].rgbGreen = GetGValue(g_rgbPalette[i]);
-            pbmi->bmiColors[i].rgbBlue  = GetBValue(g_rgbPalette[i]);
+            pbmi->bmiColors[i].rgbRed   = byteGrayscale[i];
+            pbmi->bmiColors[i].rgbGreen = byteGrayscale[i];
+            pbmi->bmiColors[i].rgbBlue  = byteGrayscale[i];
         }
     } else if (g_iScreenBpp == 8) {
         for (i = 0; i < 4; ++i) {
@@ -459,7 +593,7 @@ ATOM                MyRegisterClass     (HINSTANCE hInstance, LPTSTR szWindowCla
 BOOL                InitInstance        (HINSTANCE, int);
 LRESULT CALLBACK    WndProc             (HWND, UINT, WPARAM, LPARAM);
 LRESULT CALLBACK    About               (HWND, UINT, WPARAM, LPARAM);
-
+BOOL                SetTaskbarVisible   (BOOL bVisible);
 int WINAPI WinMain( HINSTANCE hInstance,
                     HINSTANCE hPrevInstance,
                     LPTSTR    lpCmdLine,
@@ -470,6 +604,8 @@ int WINAPI WinMain( HINSTANCE hInstance,
     if (!InitInstance (hInstance, nCmdShow)) {
         return FALSE;
     }
+
+    SetTaskbarVisible(FALSE);
 
     hAccelTable = LoadAccelerators(hInstance, (LPCTSTR)IDC_PLOTTERZCLASSIC);
 
@@ -504,16 +640,38 @@ ATOM MyRegisterClass(HINSTANCE hInstance, LPTSTR szWindowClass) {
 
 BOOL InitInstance(HINSTANCE hInstance, int nCmdShow) {
     HWND    hWnd;
-    TCHAR    szTitle[MAX_LOADSTRING];
-    TCHAR    szWindowClass[MAX_LOADSTRING];
+    TCHAR   szTitle[MAX_LOADSTRING];
+    TCHAR   szWindowClass[MAX_LOADSTRING];
+    int     iScrWidth, iScrHeight;
+    int     iWinWidth, iWinHeight;
+    DWORD   dWindowStyle;
+    RECT    rcClient;
 
     hInst = hInstance;
     LoadString(hInstance, IDC_PLOTTERZCLASSIC, szWindowClass, MAX_LOADSTRING);
     MyRegisterClass(hInstance, szWindowClass);
 
     LoadString(hInstance, IDS_APP_TITLE, szTitle, MAX_LOADSTRING);
-    hWnd = CreateWindow(szWindowClass, szTitle, WS_VISIBLE,
-        0, 0, CW_USEDEFAULT, CW_USEDEFAULT, NULL, NULL, hInstance, NULL);
+
+    rcClient.left   = 0;
+    rcClient.top    = 0;
+#if !(VER_PLATFORM_WIN32_CE)
+    rcClient.right  = 640;
+    rcClient.bottom = 480;
+    dWindowStyle    = WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX;
+    AdjustWindowRect(&rcClient, dWindowStyle, FALSE);
+#else
+    iScrWidth       = GetSystemMetrics(SM_CXSCREEN);
+    iScrHeight      = GetSystemMetrics(SM_CYSCREEN);
+    rcClient.right  = iScrWidth;
+    rcClient.bottom = iScrHeight;
+    dWindowStyle    = WS_VISIBLE;
+#endif
+    iWinWidth   = rcClient.right - rcClient.left;
+    iWinHeight  = rcClient.bottom - rcClient.top;
+    
+    hWnd = CreateWindow(szWindowClass, szTitle, dWindowStyle,
+        0, 0, iWinWidth, iWinHeight, NULL, NULL, hInstance, NULL);
 
     if (!hWnd) {    
         return FALSE;
@@ -558,15 +716,99 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
                 Camera.iViewportS = (g_iCanvasH < g_iCanvasW ? g_iCanvasH : g_iCanvasW) / 2;
                 Camera.iViewportX = g_iCanvasW / 2;
                 Camera.iViewportY = g_iCanvasH / 2;
-                Camera.sinA = PZ_FLOAT_TO_FIXED(sin(Camera.iAlphaDeg * PZ_PI / 180));
-                Camera.cosA = PZ_FLOAT_TO_FIXED(cos(Camera.iAlphaDeg * PZ_PI / 180));
-                Camera.sinB = PZ_FLOAT_TO_FIXED(sin(Camera.iBetaDeg * PZ_PI / 180));
-                Camera.cosB = PZ_FLOAT_TO_FIXED(cos(Camera.iBetaDeg * PZ_PI / 180));
+
+                g_RenderConfig.sInterfaces.setPixel = rzSetPixel;
+                g_RenderConfig.sInterfaces.plotLine = rzPlotLine;
+                g_RenderConfig.sInterfaces.putChar = rzPutChar;
+                RenderConfig_GetDefaultStyle(&g_RenderConfig);
+
                 g_pVm = EzMachine_Create();
-                if (recalc()) {
-                    fillRectCanvas(0, 0, g_iCanvasW, g_iCanvasH, COLOR_WHITE);
-                    drawSurfaceWireframeCanvas();
+                if (recalc())
+                    redrawCanvas();
+                InvalidateRect(hWnd, NULL, FALSE);
+            }
+            break;
+        case WM_KEYDOWN:
+            switch (wParam) {
+                case VK_TAB:
+                    DestroyWindow(hWnd);
+                    return 0;
+                case VK_LEFT:
+                    Camera.iBetaDeg -= 5; break;
+                case VK_RIGHT:
+                    Camera.iBetaDeg += 5; break;
+                case VK_UP:
+                    Camera.iAlphaDeg -= 5; break;
+                case VK_DOWN:
+                    Camera.iAlphaDeg += 5; break;
+                case 'R':
+                    Camera.iViewportX = g_iCanvasW / 2;
+                    Camera.iViewportY = g_iCanvasH / 2;
+                    Camera.iZoomLevel = ZOOM_LEVEL_DEFAULT;
+                    Camera.iBetaDeg = DEFAULT_VIEW_BETA;
+                    Camera.iAlphaDeg = DEFAULT_VIEW_ALPHA;
+                    break;
+                case 'B':
+                    g_bShowBox = !g_bShowBox;
+                    break;
+                case 'Z':
+                    Camera.iZoomLevel--;
+                    if (Camera.iZoomLevel < 0) Camera.iZoomLevel = 0;
+                    break;
+                case 'X':
+                    Camera.iZoomLevel++;
+                    if (Camera.iZoomLevel >= iNumZoomLevel) Camera.iZoomLevel = iNumZoomLevel - 1;
+                    break;
+                case 'M':
+                    g_bPanMode = 1;
+                    return 0;
+                default:
+                    return DefWindowProc(hWnd, message, wParam, lParam);
+            }
+            Camera.iBetaDeg = Camera.iBetaDeg % 360;
+            if (Camera.iBetaDeg < 0) Camera.iBetaDeg += 360;
+            Camera.iAlphaDeg = Camera.iAlphaDeg % 360;
+            if (Camera.iAlphaDeg < 0) Camera.iAlphaDeg += 360;
+            redrawCanvas();
+            InvalidateRect(hWnd, NULL, FALSE);
+            break;
+        case WM_KEYUP:
+            if (wParam == 'M') {
+                g_bPanMode = 0;
+            }
+            break;
+        case WM_LBUTTONDOWN:
+            g_bMouseDown = 1;
+            g_iMousePrevX = LOWORD(lParam);
+            g_iMousePrevY = HIWORD(lParam);
+            SetCapture(hWnd);
+            break;
+        case WM_LBUTTONUP:
+            g_bMouseDown = 0;
+            ReleaseCapture();
+            break;
+        case WM_MOUSEMOVE:
+            if (g_bMouseDown) {
+                int iDeltaX, iDeltaY;
+                int iMouseX = LOWORD(lParam);
+                int iMouseY = HIWORD(lParam);
+                iDeltaX = iMouseX - g_iMousePrevX;
+                iDeltaY = iMouseY - g_iMousePrevY;
+                g_iMousePrevX = iMouseX;
+                g_iMousePrevY = iMouseY;
+                if (iDeltaX == 0 && iDeltaY == 0) break;
+                if (g_bPanMode) {
+                    Camera.iViewportX += iDeltaX;
+                    Camera.iViewportY += iDeltaY;
+                } else {
+                    Camera.iBetaDeg  -= iDeltaX;
+                    Camera.iAlphaDeg -= iDeltaY;
+                    Camera.iBetaDeg = Camera.iBetaDeg % 360;
+                    if (Camera.iBetaDeg < 0) Camera.iBetaDeg += 360;
+                    Camera.iAlphaDeg = Camera.iAlphaDeg % 360;
+                    if (Camera.iAlphaDeg < 0) Camera.iAlphaDeg += 360;
                 }
+                redrawCanvas();
                 InvalidateRect(hWnd, NULL, FALSE);
             }
             break;
@@ -574,11 +816,13 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
             paintCanvasToWindow(hWnd);
             break;
         case WM_DESTROY:
+            if (g_pRenderNode != NULL) RenderNode_Destroy(g_pRenderNode);
             if (g_pVm != NULL) EzMachine_Destroy(g_pVm);
             if (g_pAstExpr != NULL) FzAstNode_Destroy(g_pAstExpr);
             destroyBackBuffer();
             destroyCanvas();
             PostQuitMessage(0);
+            SetTaskbarVisible(TRUE);
             break;
         default:
             return DefWindowProc(hWnd, message, wParam, lParam);
@@ -600,9 +844,9 @@ LRESULT CALLBACK About(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam) {
             if (GetWindowRect(hDlg, &rt1)) {
                 GetClientRect(GetParent(hDlg), &rt);
                 DlgWidth    = rt1.right - rt1.left;
-                DlgHeight    = rt1.bottom - rt1.top ;
-                NewPosX        = (rt.right - rt.left - DlgWidth)/2;
-                NewPosY        = (rt.bottom - rt.top - DlgHeight)/2;
+                DlgHeight   = rt1.bottom - rt1.top ;
+                NewPosX     = (rt.right - rt.left - DlgWidth)/2;
+                NewPosY     = (rt.bottom - rt.top - DlgHeight)/2;
                 
                 if (NewPosX < 0) NewPosX = 0;
                 if (NewPosY < 0) NewPosY = 0;
@@ -619,4 +863,22 @@ LRESULT CALLBACK About(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam) {
             break;
     }
     return FALSE;
+}
+
+/*====================================================
+ * Taskbar 
+ *====================================================*/
+BOOL SetTaskbarVisible(BOOL bVisible) {
+#if (VER_PLATFORM_WIN32_CE)
+    HWND hWndTaskbar = FindWindow(_T("HHTaskBar"), NULL);
+    if (!hWndTaskbar) {
+        return bVisible;
+    }
+    if (!bVisible) {
+        SetWindowPos(hWndTaskbar, NULL, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_HIDEWINDOW);
+    } else {
+        SetWindowPos(hWndTaskbar, NULL, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW);
+    }
+#endif
+    return bVisible;
 }

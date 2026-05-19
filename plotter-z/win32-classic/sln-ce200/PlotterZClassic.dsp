@@ -577,6 +577,8 @@ DEP_CPP_PLOTT=\
 	"..\..\..\common\vlist.h"\
 	"..\..\..\evaluator-z\ez.h"\
 	"..\..\..\formula-z\fz.h"\
+	"..\..\..\renderer-z\ascii_extended_mapping.h"\
+	"..\..\..\renderer-z\rz.h"\
 	"..\..\utils\hybird_6x8.h"\
 	
 
@@ -599,6 +601,8 @@ DEP_CPP_PLOTT=\
 	"..\..\..\common\vlist.h"\
 	"..\..\..\evaluator-z\ez.h"\
 	"..\..\..\formula-z\fz.h"\
+	"..\..\..\renderer-z\ascii_extended_mapping.h"\
+	"..\..\..\renderer-z\rz.h"\
 	"..\..\utils\hybird_6x8.h"\
 	
 
@@ -621,6 +625,8 @@ DEP_CPP_PLOTT=\
 	"..\..\..\common\vlist.h"\
 	"..\..\..\evaluator-z\ez.h"\
 	"..\..\..\formula-z\fz.h"\
+	"..\..\..\renderer-z\ascii_extended_mapping.h"\
+	"..\..\..\renderer-z\rz.h"\
 	"..\..\utils\hybird_6x8.h"\
 	
 
@@ -643,6 +649,8 @@ DEP_CPP_PLOTT=\
 	"..\..\..\common\vlist.h"\
 	"..\..\..\evaluator-z\ez.h"\
 	"..\..\..\formula-z\fz.h"\
+	"..\..\..\renderer-z\ascii_extended_mapping.h"\
+	"..\..\..\renderer-z\rz.h"\
 	"..\..\utils\hybird_6x8.h"\
 	
 
@@ -720,6 +728,8 @@ DEP_CPP_PLOTT=\
 	"..\..\..\common\vlist.h"\
 	"..\..\..\evaluator-z\ez.h"\
 	"..\..\..\formula-z\fz.h"\
+	"..\..\..\renderer-z\ascii_extended_mapping.h"\
+	"..\..\..\renderer-z\rz.h"\
 	"..\..\utils\hybird_6x8.h"\
 	
 
@@ -748,10 +758,6 @@ DEP_CPP_PLOTT=\
 !ENDIF 
 
 # End Source File
-# End Group
-# Begin Group "PlotterZ"
-
-# PROP Default_Filter ""
 # End Group
 # Begin Group "Resources"
 
