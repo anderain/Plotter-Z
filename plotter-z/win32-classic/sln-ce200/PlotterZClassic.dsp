@@ -726,11 +726,18 @@ DEP_CPP_PLOTT=\
 	"..\..\..\common\constants.h"\
 	"..\..\..\common\utils.h"\
 	"..\..\..\common\vlist.h"\
+	"..\..\..\deps\salvia89\salvia.h"\
 	"..\..\..\evaluator-z\ez.h"\
 	"..\..\..\formula-z\fz.h"\
 	"..\..\..\renderer-z\ascii_extended_mapping.h"\
 	"..\..\..\renderer-z\rz.h"\
 	"..\..\utils\hybird_6x8.h"\
+	"..\stage-common.h"\
+	"..\stage-error.c"\
+	"..\stage-expression.c"\
+	"..\stage-recalc.c"\
+	"..\stage-window-editor.c"\
+	"..\stage-wireframe.c"\
 	
 
 !ELSEIF  "$(CFG)" == "PlotterZClassic - Win32 (WCE PPC) Release"
@@ -2095,6 +2102,113 @@ DEP_CPP_VLIST=\
 # Begin Source File
 
 SOURCE=..\..\..\common\vlist.h
+# End Source File
+# End Group
+# Begin Group "Deps"
+
+# PROP Default_Filter ""
+# Begin Source File
+
+SOURCE=..\..\..\deps\salvia89\salvia.c
+
+!IF  "$(CFG)" == "PlotterZClassic - Win32 (WCE MIPS) Release"
+
+DEP_CPP_SALVI=\
+	"..\..\..\deps\salvia89\salvia.h"\
+	
+
+!ELSEIF  "$(CFG)" == "PlotterZClassic - Win32 (WCE MIPS) Debug"
+
+DEP_CPP_SALVI=\
+	"..\..\..\deps\salvia89\salvia.h"\
+	
+
+!ELSEIF  "$(CFG)" == "PlotterZClassic - Win32 (WCE SH4) Release"
+
+DEP_CPP_SALVI=\
+	"..\..\..\deps\salvia89\salvia.h"\
+	
+
+!ELSEIF  "$(CFG)" == "PlotterZClassic - Win32 (WCE SH4) Debug"
+
+DEP_CPP_SALVI=\
+	"..\..\..\deps\salvia89\salvia.h"\
+	
+
+!ELSEIF  "$(CFG)" == "PlotterZClassic - Win32 (WCE SH3) Release"
+
+DEP_CPP_SALVI=\
+	"..\..\..\deps\salvia89\salvia.h"\
+	
+
+!ELSEIF  "$(CFG)" == "PlotterZClassic - Win32 (WCE SH3) Debug"
+
+DEP_CPP_SALVI=\
+	"..\..\..\deps\salvia89\salvia.h"\
+	
+
+!ELSEIF  "$(CFG)" == "PlotterZClassic - Win32 (WCE ARM) Release"
+
+DEP_CPP_SALVI=\
+	"..\..\..\deps\salvia89\salvia.h"\
+	
+
+!ELSEIF  "$(CFG)" == "PlotterZClassic - Win32 (WCE ARM) Debug"
+
+DEP_CPP_SALVI=\
+	"..\..\..\deps\salvia89\salvia.h"\
+	
+
+!ELSEIF  "$(CFG)" == "PlotterZClassic - Win32 (WCE MIPSFP) Release"
+
+DEP_CPP_SALVI=\
+	"..\..\..\deps\salvia89\salvia.h"\
+	
+
+!ELSEIF  "$(CFG)" == "PlotterZClassic - Win32 (WCE MIPSFP) Debug"
+
+DEP_CPP_SALVI=\
+	"..\..\..\deps\salvia89\salvia.h"\
+	
+
+!ELSEIF  "$(CFG)" == "PlotterZClassic - Win32 (WCE x86) Release"
+
+DEP_CPP_SALVI=\
+	"..\..\..\deps\salvia89\salvia.h"\
+	
+
+!ELSEIF  "$(CFG)" == "PlotterZClassic - Win32 (WCE x86) Debug"
+
+DEP_CPP_SALVI=\
+	"..\..\..\deps\salvia89\salvia.h"\
+	
+
+!ELSEIF  "$(CFG)" == "PlotterZClassic - Win32 (WCE x86em) Release"
+
+DEP_CPP_SALVI=\
+	"..\..\..\deps\salvia89\salvia.h"\
+	
+
+!ELSEIF  "$(CFG)" == "PlotterZClassic - Win32 (WCE x86em) Debug"
+
+DEP_CPP_SALVI=\
+	"..\..\..\deps\salvia89\salvia.h"\
+	
+
+!ELSEIF  "$(CFG)" == "PlotterZClassic - Win32 (WCE PPC) Release"
+
+DEP_CPP_SALVI=\
+	"..\..\..\deps\salvia89\salvia.h"\
+	
+
+!ELSEIF  "$(CFG)" == "PlotterZClassic - Win32 (WCE PPC) Debug"
+
+DEP_CPP_SALVI=\
+	"..\..\..\deps\salvia89\salvia.h"\
+	
+
+!ENDIF 
+
 # End Source File
 # End Group
 # Begin Source File

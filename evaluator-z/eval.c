@@ -131,7 +131,7 @@ void EzMachine_SetVariableByIndex(EzMachine* pVm, int iIndex, PZ_FLOAT fValue) {
 
 #define evalPush(fValue)    (pVm->pStack[pVm->iStackSize++] = (fValue))
 #define evalPop()           (pVm->pStack[--pVm->iStackSize])
-#define handleSingleParamFunc(funcName) { fArg = evalPop(); evalPush(funcName(fArg)); } return
+#define handleSingleParamFunc(funcName) { fArg = evalPop(); evalPush((PZ_FLOAT)funcName(fArg)); } return
 
 static void EzMachine_Function (EzMachine* pVm, PzFuncIndex iFuncIndex) {
     PZ_FLOAT fArg;
@@ -151,7 +151,7 @@ static void EzMachine_Function (EzMachine* pVm, PzFuncIndex iFuncIndex) {
         case PZF_LOG:   handleSingleParamFunc(log);
         case PZF_LN: {
             fArg = evalPop();
-            evalPush(log(fArg) / log(exp(1)));
+            evalPush((PZ_FLOAT)(log(fArg) / log(exp(1))));
             return;
         }
     }
@@ -195,61 +195,61 @@ PZ_FLOAT EzMachine_Eval (EzMachine* pVm) {
             case EZOP_POW:
                 fRight = evalPop();
                 fLeft = evalPop();
-                evalPush(pow(fLeft, fRight));
+                evalPush((PZ_FLOAT)pow(fLeft, fRight));
                 break;
             case EZOP_INTDIV:
                 fRight = evalPop();
                 fLeft = evalPop();
-                evalPush((int)fLeft / (int)fRight);
+                evalPush((PZ_FLOAT)((int)fLeft / (int)fRight));
                 break;
             case EZOP_MOD:
                 fRight = evalPop();
                 fLeft = evalPop();
-                evalPush((int)fLeft % (int)fRight);
+                evalPush((PZ_FLOAT)((int)fLeft % (int)fRight));
                 break;
             case EZOP_NOT:
                 fLeft = evalPop();
-                evalPush(!(int)fLeft);
+                evalPush((PZ_FLOAT)(!(int)fLeft));
                 break;
             case EZOP_AND:
                 fRight = evalPop();
                 fLeft = evalPop();
-                evalPush((int)fLeft && (int)fRight);
+                evalPush((PZ_FLOAT)((int)fLeft && (int)fRight));
                 break;
             case EZOP_OR:
                 fRight = evalPop();
                 fLeft = evalPop();
-                evalPush((int)fLeft || (int)fRight);
+                evalPush((PZ_FLOAT)((int)fLeft || (int)fRight));
                 break;
             case EZOP_EQUAL:
                 fRight = evalPop();
                 fLeft = evalPop();
-                evalPush(fLeft == fRight);
+                evalPush((PZ_FLOAT)(fLeft == fRight));
                 break;
             case EZOP_NEQ:
                 fRight = evalPop();
                 fLeft = evalPop();
-                evalPush(fLeft != fRight);
+                evalPush((PZ_FLOAT)(fLeft != fRight));
                 break;
             case EZOP_GT:
                 fRight = evalPop();
                 fLeft = evalPop();
-                evalPush(fLeft > fRight);
+                evalPush((PZ_FLOAT)(fLeft > fRight));
                 break;
             case EZOP_LT:
                 fRight = evalPop();
                 fLeft = evalPop();
-                evalPush(fLeft < fRight);
+                evalPush((PZ_FLOAT)(fLeft < fRight));
                 break;
             case EZOP_GTEQ:
                 fRight = evalPop();
                 fLeft = evalPop();
-                evalPush(fLeft >= fRight);
+                evalPush((PZ_FLOAT)(fLeft >= fRight));
                 break;
             case EZOP_LTEQ:
                 fRight = evalPop();
                 fLeft = evalPop();
-                evalPush(fLeft <= fRight);
+                evalPush((PZ_FLOAT)(fLeft <= fRight));
                 break;
             case EZOP_PUSH_IMD:
                 evalPush(pInst->uData.fImmediate);

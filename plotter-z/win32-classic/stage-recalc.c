@@ -6,7 +6,7 @@ void drawRecalcScreen(HWND hWnd) {
     int iPercent;
     char szBuf[32];
     const char* szTitle = "Recalc ...";
-    int iTW, iTY, iPW, iPX, iPY;
+    int iTW, iTY, iPW, iPY;
 
     if (g_iRecalcTotal > 0)
         iPercent = g_iRecalcProgress * 100 / g_iRecalcTotal;
