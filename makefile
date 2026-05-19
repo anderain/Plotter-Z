@@ -9,6 +9,8 @@ CC		  		= gcc
 LD				= gcc
 C_FLAGS	 		= -c -ansi -Werror -pedantic 
 #----------------------------------------------------
+DEPS_PATH		= deps
+#----------------------------------------------------
 COMMON_SRC_PATH = common
 COMMON_OBJS		= vlist.o utils.o constants.o
 #----------------------------------------------------
@@ -102,6 +104,18 @@ eval.o: $(EZ_SRC_PATH)/eval.c $(EZ_SRC_PATH)/ez.h
 
 ez-test-main.o: $(EZ_SRC_PATH)/ez-test-main.c $(EZ_SRC_PATH)/ez.h
 	$(CC) $(C_FLAGS) -DIS_TEST_PROGRAM $(EZ_SRC_PATH)/ez-test-main.c -o ez-test-main.o
+
+#====================================================
+# * Target: Renderer-Z Files
+#====================================================
+transform.o: $(RZ_SRC_PATH)/transform.c $(RZ_SRC_PATH)/rz.h
+	$(CC) $(C_FLAGS)  $(RZ_SRC_PATH)/transform.c -o transform.o
+
+render.o: $(RZ_SRC_PATH)/render.c $(RZ_SRC_PATH)/rz.h
+	$(CC) $(C_FLAGS)  $(RZ_SRC_PATH)/render.c -o render.o
+
+rz-test-main.o: $(RZ_SRC_PATH)/rz-test-main.c $(RZ_SRC_PATH)/rz.h
+	$(CC) $(C_FLAGS) -DIS_TEST_PROGRAM $(RZ_SRC_PATH)/rz-test-main.c -o rz-test-main.o
 
 #====================================================
 # * Target: Renderer-Z Files

@@ -10,3 +10,5 @@ plotter-z/sdl/sdl
 *.dll
 
 *.cmd
+
+deps/
