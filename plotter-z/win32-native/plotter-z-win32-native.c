@@ -12,6 +12,9 @@
 #include "../../renderer-z/rz.h"
 #include "../../renderer-z/ascii_extended_mapping.h"
 
+#define ZOOM_DRAG_THRESHOLD     15
+#define MOUSE_REFRESH_MS        120
+
 HINSTANCE   hInst;
 HWND        hwndCB;
 
@@ -136,7 +139,8 @@ static int      g_bMouseDown    = 0;
 static int      g_iMousePrevX   = 0;
 static int      g_iMousePrevY   = 0;
 static int      g_iZoomAccum    = 0;
-#define ZOOM_DRAG_THRESHOLD     15
+
+static DWORD    g_dwLastMouseRefresh = 0;
 
 /* Progress dialog */
 static HWND     g_hDlgProgress  = NULL;
@@ -559,7 +563,7 @@ static void redrawCanvas(HWND hWnd) {
         char szBuf[64];
         iStartY = g_iCanvasH - CURRENT_FONT_HEIGHT - 2;
         if (iStartY < 0) iStartY = 0;
-        fillRectCanvas(0, iStartY, g_iCanvasW, CURRENT_FONT_HEIGHT + 2, COLOR_LIGHT_GRAY);
+        fillRectCanvas(0, iStartY, g_iCanvasW, CURRENT_FONT_HEIGHT + 2, COLOR_DARK_GRAY);
 
         /* Left: alpha / beta */
         wsprintf(szBufT, TEXT("%c=%d, %c=%d"),
@@ -1182,6 +1186,9 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
             g_bMouseDown = 0;
             g_iZoomAccum = 0;
             ReleaseCapture();
+            redrawCanvas(hWnd);
+            InvalidateRect(hWnd, NULL, FALSE);
+            g_dwLastMouseRefresh = 0;
             break;
         case WM_MOUSEMOVE:
             if (g_bError) break;
@@ -1226,8 +1233,79 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
                     default:
                         break;
                 }
-                redrawCanvas(hWnd);
-                InvalidateRect(hWnd, NULL, FALSE);
+                {
+                    DWORD dwNow = GetTickCount();
+                    if (dwNow - g_dwLastMouseRefresh >= MOUSE_REFRESH_MS
+                        || dwNow < g_dwLastMouseRefresh) {
+                        redrawCanvas(hWnd);
+                        InvalidateRect(hWnd, NULL, FALSE);
+                        g_dwLastMouseRefresh = dwNow;
+                    }
+                }
+            }
+            break;
+        case WM_KEYDOWN:
+            {
+                /* Mode and toggle shortcuts (work regardless of g_bError) */
+                switch (wParam) {
+                    case 'C': g_iMouseMode = MOUSE_MODE_CAMERA;  break;
+                    case 'P': g_iMouseMode = MOUSE_MODE_POSITION; break;
+                    case 'Z': g_iMouseMode = MOUSE_MODE_ZOOM;    break;
+                    case 'F': g_iMouseMode = MOUSE_MODE_FORMULA;  break;
+                    case 'R': resetView(hWnd); return 0;
+                    case 'T':
+                        g_bShowFooter = !g_bShowFooter;
+                        redrawCanvas(hWnd);
+                        InvalidateRect(hWnd, NULL, FALSE);
+                        return 0;
+                    case 'B':
+                        g_bShowBox = !g_bShowBox;
+                        redrawCanvas(hWnd);
+                        InvalidateRect(hWnd, NULL, FALSE);
+                        return 0;
+                }
+            }
+            if (g_bError) break;
+            {
+                int bRedraw = 0;
+                switch (g_iMouseMode) {
+                    case MOUSE_MODE_CAMERA:
+                        if (wParam == VK_LEFT)  { Camera.iBetaDeg -= 5; bRedraw = 1; }
+                        if (wParam == VK_RIGHT) { Camera.iBetaDeg += 5; bRedraw = 1; }
+                        if (wParam == VK_UP)    { Camera.iAlphaDeg -= 5; bRedraw = 1; }
+                        if (wParam == VK_DOWN)  { Camera.iAlphaDeg += 5; bRedraw = 1; }
+                        if (bRedraw) {
+                            Camera.iBetaDeg  = Camera.iBetaDeg % 360;
+                            if (Camera.iBetaDeg < 0) Camera.iBetaDeg += 360;
+                            Camera.iAlphaDeg = Camera.iAlphaDeg % 360;
+                            if (Camera.iAlphaDeg < 0) Camera.iAlphaDeg += 360;
+                        }
+                        break;
+                    case MOUSE_MODE_POSITION:
+                        if (wParam == VK_LEFT)  { Camera.iViewportX -= 10; bRedraw = 1; }
+                        if (wParam == VK_RIGHT) { Camera.iViewportX += 10; bRedraw = 1; }
+                        if (wParam == VK_UP)    { Camera.iViewportY -= 10; bRedraw = 1; }
+                        if (wParam == VK_DOWN)  { Camera.iViewportY += 10; bRedraw = 1; }
+                        break;
+                    case MOUSE_MODE_ZOOM:
+                        if (wParam == VK_UP && Camera.iZoomLevel < iNumZoomLevel - 1)
+                            { Camera.iZoomLevel++; bRedraw = 1; }
+                        if (wParam == VK_DOWN && Camera.iZoomLevel > 0)
+                            { Camera.iZoomLevel--; bRedraw = 1; }
+                        break;
+                    case MOUSE_MODE_FORMULA:
+                        if (wParam == VK_LEFT)  { g_iExprPosX -= 10; bRedraw = 1; }
+                        if (wParam == VK_RIGHT) { g_iExprPosX += 10; bRedraw = 1; }
+                        if (wParam == VK_UP)    { g_iExprPosY -= 10; bRedraw = 1; }
+                        if (wParam == VK_DOWN)  { g_iExprPosY += 10; bRedraw = 1; }
+                        break;
+                    default:
+                        break;
+                }
+                if (bRedraw) {
+                    redrawCanvas(hWnd);
+                    InvalidateRect(hWnd, NULL, FALSE);
+                }
             }
             break;
         case WM_PAINT:
