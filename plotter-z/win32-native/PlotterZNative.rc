@@ -67,6 +67,23 @@ BEGIN
     BEGIN
         MENUITEM "E&xit",                       IDM_FILE_EXIT
     END
+    POPUP "&Edit"
+    BEGIN
+        MENUITEM "&Expression",                 IDM_EDIT_EXPRESSION
+        MENUITEM "&Window",                     IDM_EDIT_WINDOW
+    END
+    POPUP "&View"
+    BEGIN
+        MENUITEM "&Camera",                     IDM_VIEW_CAMERA
+        MENUITEM "&Position",                   IDM_VIEW_POSITION
+        MENUITEM "&Zoom",                       IDM_VIEW_ZOOM
+        MENUITEM "&Formula",                    IDM_VIEW_FORMULA
+        MENUITEM SEPARATOR
+        MENUITEM "&Reset",                      IDM_VIEW_RESET
+        MENUITEM SEPARATOR
+        MENUITEM "Toggle &Footer",              IDM_VIEW_TOGGLEFOOTER
+        MENUITEM "Toggle &Boundary Box",         IDM_VIEW_TOGGLEBOX
+    END
     POPUP "&Help"
     BEGIN
         MENUITEM "&About",                      IDM_HELP_ABOUT
@@ -79,7 +96,7 @@ END
 // Dialog
 //
 
-IDD_ABOUTBOX DIALOGEX 0, 0, 111, 73
+IDD_ABOUTBOX DIALOG DISCARDABLE  0, 0, 111, 73
 STYLE DS_MODALFRAME | WS_POPUP | WS_CAPTION | WS_SYSMENU
 EXSTYLE WS_EX_CAPTIONOKBTN
 CAPTION "About Plotter-Z"
@@ -89,6 +106,51 @@ BEGIN
     CTEXT           "Plotter-Z CE Version 0.1",IDC_STATIC,7,37,94,8,
                     SS_NOPREFIX
     LTEXT           "Copyright (C) 2026",IDC_STATIC,21,49,66,8
+END
+
+IDD_PROGRESS DIALOG DISCARDABLE  0, 0, 120, 60
+STYLE DS_MODALFRAME | WS_POPUP | WS_CAPTION
+CAPTION "Plotter-Z"
+FONT 8, "Tahoma"
+BEGIN
+    LTEXT           "Recalc ...",IDC_STATIC,7,10,106,12
+    LTEXT           "0%",IDC_PROGRESS_TEXT,7,28,106,12
+END
+
+IDD_EXPRESSION DIALOG DISCARDABLE  0, 0, 136, 43
+STYLE DS_MODALFRAME | WS_POPUP | WS_CAPTION
+CAPTION "Edit Expression"
+FONT 8, "Tahoma"
+BEGIN
+    EDITTEXT        IDC_EXPR_EDIT,37,6,92,14,ES_AUTOHSCROLL
+    PUSHBUTTON      "Cancel",IDCANCEL,7,24,40,14
+    PUSHBUTTON      "Confirm",IDOK,88,24,41,14
+    LTEXT           "f(x,y) =",IDC_STATIC,7,8,35,8
+END
+
+IDD_WINDOWEDIT DIALOG DISCARDABLE  0, 0, 133, 98
+STYLE DS_MODALFRAME | WS_POPUP | WS_CAPTION
+CAPTION "Edit Window"
+FONT 8, "Tahoma"
+BEGIN
+    LTEXT           "xMin:",IDC_STATIC,5,7,24,12
+    EDITTEXT        IDC_WIN_XMIN,29,5,32,14,ES_AUTOHSCROLL
+    LTEXT           "xMax:",IDC_STATIC,68,6,24,12
+    EDITTEXT        IDC_WIN_XMAX,94,5,32,14,ES_AUTOHSCROLL
+    LTEXT           "yMin:",IDC_STATIC,5,25,24,12
+    EDITTEXT        IDC_WIN_YMIN,29,23,32,14,ES_AUTOHSCROLL
+    LTEXT           "yMax:",IDC_STATIC,68,24,24,12
+    EDITTEXT        IDC_WIN_YMAX,94,23,32,14,ES_AUTOHSCROLL
+    LTEXT           "zMin:",IDC_STATIC,5,43,24,12
+    EDITTEXT        IDC_WIN_ZMIN,29,41,32,14,ES_AUTOHSCROLL
+    LTEXT           "zMax:",IDC_STATIC,68,43,24,12
+    EDITTEXT        IDC_WIN_ZMAX,94,41,32,14,ES_AUTOHSCROLL
+    LTEXT           "xGrid:",IDC_STATIC,5,61,24,12
+    EDITTEXT        IDC_WIN_XGRID,29,59,32,14,ES_AUTOHSCROLL
+    LTEXT           "yGrid:",IDC_STATIC,68,60,24,12
+    EDITTEXT        IDC_WIN_YGRID,94,59,32,14,ES_AUTOHSCROLL
+    PUSHBUTTON      "Cancel",IDCANCEL,7,79,56,14
+    PUSHBUTTON      "Confirm",IDOK,70,79,56,14
 END
 
 
@@ -130,8 +192,7 @@ END
 
 STRINGTABLE DISCARDABLE 
 BEGIN
-    IDS_APP_TITLE           "PlotterZNative"
-    IDS_HELLO               "Hello World!"
+    IDS_APP_TITLE           "Plotter-Z CE"
     IDC_PLOTTERZNATIVE      "PLOTTERZNATIVE"
 END
 

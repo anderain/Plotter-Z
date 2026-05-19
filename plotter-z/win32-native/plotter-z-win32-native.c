@@ -1,171 +1,1297 @@
 #include <windows.h>
 #include <commctrl.h>
+#include <stdlib.h>
+#include <string.h>
+#include <math.h>
 #include "resource.h"
+#include "../utils/hybird_6x8.h"
+#include "../../common/utils.h"
+#include "../../common/constants.h"
+#include "../../formula-z/fz.h"
+#include "../../evaluator-z/ez.h"
+#include "../../renderer-z/rz.h"
+#include "../../renderer-z/ascii_extended_mapping.h"
 
-#define MAX_LOADSTRING 100
+HINSTANCE   hInst;
+HWND        hwndCB;
 
+int         recalc(HWND hWnd);
+void        CenterDialog(HWND hDlg);
 
-HINSTANCE           hInst;            // The current instance
-HWND                hwndCB;            // The command bar handle
+/*====================================================
+ * Macros
+ *====================================================*/
+#define MAX_LOADSTRING      100
+#define EXPR_MAX            300
+#define CURRENT_FONT_WIDTH  6
+#define CURRENT_FONT_HEIGHT 8
 
-ATOM            MyRegisterClass    (HINSTANCE hInstance, LPTSTR szWindowClass);
-BOOL                InitInstance    (HINSTANCE, int);
-LRESULT CALLBACK    WndProc            (HWND, UINT, WPARAM, LPARAM);
-LRESULT CALLBACK    About            (HWND, UINT, WPARAM, LPARAM);
+/*====================================================
+ * Color palette (grayscale, 4 levels)
+ *====================================================*/
+#define HIGH_CONTRAST_COLOR 1
 
-int WINAPI WinMain( HINSTANCE hInstance,
-                    HINSTANCE hPrevInstance,
-                    LPTSTR    lpCmdLine,
-                    int       nCmdShow)
-{
-    MSG msg;
-    HACCEL hAccelTable;
+#ifdef HIGH_CONTRAST_COLOR
+const COLORREF g_rgbPalette[] = {
+    RGB(0x00, 0x00, 0x00),      /* COLOR_BLACK       */
+    RGB(0x66, 0x66, 0x66),      /* COLOR_DARK_GRAY   */
+    RGB(0xaa, 0xaa, 0xaa),      /* COLOR_LIGHT_GRAY  */
+    RGB(0xff, 0xff, 0xff),      /* COLOR_WHITE       */
+};
+#else
+const COLORREF g_rgbPalette[] = {
+    RGB(0xaa, 0xcc, 0x00),      /* COLOR_BLACK       */
+    RGB(0x43, 0x7f, 0x00),      /* COLOR_DARK_GRAY   */
+    RGB(0x22, 0x66, 0x00),      /* COLOR_LIGHT_GRAY  */
+    RGB(0x11, 0x50, 0x00),      /* COLOR_WHITE       */
+};
+#endif
 
-    if (!InitInstance (hInstance, nCmdShow)) 
-    {
-        return FALSE;
+#define COLOR_BLACK         0
+#define COLOR_DARK_GRAY     1
+#define COLOR_LIGHT_GRAY    2
+#define COLOR_WHITE         3
+
+/*====================================================
+ * Canvas zoom factor
+ *   Higher values reduce canvas resolution for
+ *   low-performance devices.  e.g. factor=2 means
+ *   canvas is half the width/height of the DIB.
+ *====================================================*/
+static int iCanvasZoomFactor = 1;
+static int g_iBarHeight      = 0;
+
+/*====================================================
+ * Expression & Camera
+ *====================================================*/
+char szExpr[EXPR_MAX] = "sin(sqr(x^2+y^2))*cos(sqr(x^2+y^2))";
+
+const int arrZoomLevels[] = {
+    PZ_FLOAT_TO_FIXED(0.20f),
+    PZ_FLOAT_TO_FIXED(0.40f),
+    PZ_FLOAT_TO_FIXED(0.60f),
+    PZ_FLOAT_TO_FIXED(0.80f),
+    (int)PZ_FIXED_ONE,
+    PZ_FLOAT_TO_FIXED(1.20f),
+    PZ_FLOAT_TO_FIXED(1.60f),
+    (int)PZ_FIXED_ONE * 2,
+    PZ_FLOAT_TO_FIXED(2.5f),
+    (int)PZ_FIXED_ONE * 4,
+    (int)PZ_FIXED_ONE * 8,
+};
+const int iNumZoomLevel = sizeof(arrZoomLevels) / sizeof(arrZoomLevels[0]);
+
+#define DEFAULT_VIEW_ALPHA  30
+#define DEFAULT_VIEW_BETA   30
+#define ZOOM_LEVEL_DEFAULT  4
+#define GRID_MAX            30
+
+struct CameraStruct {
+    int iViewportX;
+    int iViewportY;
+    int iViewportS;
+    int iAlphaDeg;
+    int iBetaDeg;
+    PZ_FIXED cosA;  PZ_FIXED sinA;  PZ_FIXED cosB;  PZ_FIXED sinB;
+    PZ_FLOAT xMin;  PZ_FLOAT xMax;  int xGrid;
+    PZ_FLOAT yMin;  PZ_FLOAT yMax;  int yGrid;
+    PZ_FLOAT zMin;  PZ_FLOAT zMax;
+    int iZoomLevel;
+};
+
+struct CameraStruct Camera = {
+    0, 0, 0,
+    DEFAULT_VIEW_ALPHA, DEFAULT_VIEW_BETA,
+    0, 0, 0, 0,
+    -6.0f, 6.0f, 20,
+    -6.0f, 6.0f, 20,
+    -3.0f, 3.0f,
+    ZOOM_LEVEL_DEFAULT
+};
+
+PZ_FIXED zBuf[GRID_MAX * GRID_MAX];
+PZ_FIXED xBuf[GRID_MAX];
+PZ_FIXED yBuf[GRID_MAX];
+#define Z_BUF(x,y) (zBuf[(x) + (y) * Camera.xGrid])
+
+FzAstNode*      g_pAstExpr      = NULL;
+EzMachine*      g_pVm           = NULL;
+RenderNode*     g_pRenderNode   = NULL;
+RenderConfig    g_RenderConfig;
+char            g_szErrorBuf[EZ_ERROR_CONTENT_LENGTH];
+int             g_bShowBox      = 1;
+int             g_iExprPosX     = 0;
+int             g_iExprPosY     = 0;
+static int      g_bError        = 0;
+
+/* Mouse interaction modes */
+#define MOUSE_MODE_CAMERA      0
+#define MOUSE_MODE_POSITION    1
+#define MOUSE_MODE_ZOOM        2
+#define MOUSE_MODE_FORMULA     3
+
+static int      g_iMouseMode    = MOUSE_MODE_CAMERA;
+static int      g_bShowFooter   = 1;
+static int      g_bMouseDown    = 0;
+static int      g_iMousePrevX   = 0;
+static int      g_iMousePrevY   = 0;
+static int      g_iZoomAccum    = 0;
+#define ZOOM_DRAG_THRESHOLD     15
+
+/* Progress dialog */
+static HWND     g_hDlgProgress  = NULL;
+
+/*====================================================
+ * 2bpp canvas (4-level grayscale, packed pixels)
+ *====================================================*/
+static unsigned char*   g_pCanvas       = NULL;
+static int              g_iCanvasW      = 0;
+static int              g_iCanvasH      = 0;
+static int              g_iCanvasPitch  = 0;
+
+static int canvasByteIndex(int x, int y) {
+    return y * g_iCanvasPitch + (x >> 2);
+}
+
+static int canvasShift(int x) {
+    return 6 - ((x & 3) << 1);
+}
+
+#define CANVAS_MASK(x)  (~(0x03 << canvasShift(x)))
+
+/*====================================================
+ * Drawing primitives (2bpp canvas)
+ *====================================================*/
+#define ABS(v)  ((v) < 0 ? -(v) : (v))
+
+static void setPixelCanvas(int x, int y, int iColor) {
+    unsigned char ucMask;
+    int iByte;
+    if (x < 0 || x >= g_iCanvasW || y < 0 || y >= g_iCanvasH) return;
+    iByte = canvasByteIndex(x, y);
+    ucMask = CANVAS_MASK(x);
+    g_pCanvas[iByte] = (unsigned char)((g_pCanvas[iByte] & ucMask)
+                     | ((iColor & 0x03) << canvasShift(x)));
+}
+
+static int getPixelCanvas(int x, int y) {
+    if (x < 0 || x >= g_iCanvasW || y < 0 || y >= g_iCanvasH) return 0;
+    return (g_pCanvas[canvasByteIndex(x, y)] >> canvasShift(x)) & 0x03;
+}
+
+static void fillRectCanvas(int dx, int dy, int w, int h, int iColor) {
+    int x, y;
+    for (y = 0; y < h; ++y)
+        for (x = 0; x < w; ++x)
+            setPixelCanvas(dx + x, dy + y, iColor);
+}
+
+static void drawLineCanvas(int x0, int y0, int x1, int y1, int iColor) {
+    int dx = ABS(x1 - x0), sx = x0 < x1 ? 1 : -1;
+    int dy = -ABS(y1 - y0), sy = y0 < y1 ? 1 : -1;
+    int err = dx + dy, e2;
+    for (;;) {
+        setPixelCanvas(x0, y0, iColor);
+        if (x0 == x1 && y0 == y1) break;
+        e2 = 2 * err;
+        if (e2 >= dy) { err += dy; x0 += sx; }
+        if (e2 <= dx) { err += dx; y0 += sy; }
+    }
+}
+
+static void draw1bppCanvas(const unsigned char *raw,
+                           int dx, int dy, int w, int h, int iColor) {
+    int pitch = (w >> 3) + (w % 8 ? 1 : 0);
+    int x, y, dot;
+    unsigned char ucEight;
+    for (y = 0; y < h; ++y) {
+        for (x = 0; x < w; ++x) {
+            ucEight = raw[y * pitch + (x >> 3)];
+            dot = (ucEight >> (7 - (x & 7))) & 1;
+            if (dot) setPixelCanvas(dx + x, dy + y, iColor);
+        }
+    }
+}
+
+static void putCharCanvas(int x, int y, unsigned char ch, int iColor) {
+    draw1bppCanvas(FONT_HYBIRD_6x8 + 8 * (int)ch, x, y, 8, 8, iColor);
+}
+
+static void putTextCanvas(int x, int y, const unsigned char* usz, int iColor) {
+    for (; *usz; ++usz, x += CURRENT_FONT_WIDTH)
+        putCharCanvas(x, y, *usz, iColor);
+}
+
+/*====================================================
+ * Canvas lifecycle
+ *====================================================*/
+static int createCanvas(int iWidth, int iHeight) {
+    int iByteCount;
+    g_iCanvasW = iWidth;
+    g_iCanvasH = iHeight;
+    g_iCanvasPitch = (iWidth + 3) / 4;
+    iByteCount = g_iCanvasPitch * iHeight;
+    if (iByteCount <= 0) return 0;
+    g_pCanvas = (unsigned char *)malloc((size_t)iByteCount);
+    if (g_pCanvas == NULL) return 0;
+    memset(g_pCanvas, (int)((unsigned char)COLOR_BLACK), (size_t)iByteCount);
+    return 1;
+}
+
+static void destroyCanvas(void) {
+    if (g_pCanvas != NULL) { free(g_pCanvas); g_pCanvas = NULL; }
+    g_iCanvasW = 0; g_iCanvasH = 0; g_iCanvasPitch = 0;
+}
+
+/*====================================================
+ * Back buffer: memory HDC + DIB section
+ *====================================================*/
+static HDC       g_hdcBuffer     = NULL;
+static HBITMAP   g_hBmpBuffer    = NULL;
+static HBITMAP   g_hBmpOld       = NULL;
+static BYTE*     g_pDibPixels    = NULL;
+static int       g_iScreenBpp    = 0;
+static int       g_iDibPitch     = 0;
+static int       g_iDibW         = 0;
+static int       g_iDibH         = 0;
+
+static int createBackBuffer(HWND hWnd, int iWidth, int iHeight) {
+    HDC hdc;
+    HBITMAP hBmpTest;
+    BITMAP bmTest;
+    BITMAPINFO* pbmi;
+    int iPaletteSize = 0, iBitCount, i, iBmiSize;
+
+    hdc = GetDC(hWnd);
+    if (hdc == NULL) return 0;
+    hBmpTest = CreateCompatibleBitmap(hdc, 8, 8);
+    if (hBmpTest == NULL) { ReleaseDC(hWnd, hdc); return 0; }
+    GetObject(hBmpTest, sizeof(BITMAP), &bmTest);
+    DeleteObject(hBmpTest);
+    ReleaseDC(hWnd, hdc);
+
+    g_iScreenBpp = bmTest.bmBitsPixel;
+    switch (g_iScreenBpp) {
+        case 2:  iBitCount = 2;  iPaletteSize = 4;   break;
+        case 8:  iBitCount = 8;  iPaletteSize = 256; break;
+        case 16: iBitCount = 16; iPaletteSize = 0;   break;
+        case 32: iBitCount = 32; iPaletteSize = 0;   break;
+        default: return 0;
     }
 
-    hAccelTable = LoadAccelerators(hInstance, (LPCTSTR)IDC_PLOTTERZNATIVE);
+    iBmiSize = sizeof(BITMAPINFO) + iPaletteSize * sizeof(RGBQUAD);
+    pbmi = (BITMAPINFO*)malloc((size_t)iBmiSize);
+    if (pbmi == NULL) return 0;
+    memset(pbmi, 0, (size_t)iBmiSize);
+    pbmi->bmiHeader.biSize        = sizeof(BITMAPINFOHEADER);
+    pbmi->bmiHeader.biWidth       = iWidth;
+    pbmi->bmiHeader.biHeight      = -iHeight;
+    pbmi->bmiHeader.biPlanes      = 1;
+    pbmi->bmiHeader.biBitCount    = iBitCount;
+    pbmi->bmiHeader.biCompression = BI_RGB;
+    pbmi->bmiHeader.biClrUsed     = (g_iScreenBpp == 2) ? 0 : iPaletteSize;
 
-    // Main message loop:
-    while (GetMessage(&msg, NULL, 0, 0)) 
+    if (g_iScreenBpp == 2) {
+        static const BYTE byteGrayscale[] = { 0x00, 0x80, 0xc0, 0xff };
+        for (i = 0; i < 4; ++i) {
+            pbmi->bmiColors[i].rgbRed   = byteGrayscale[i];
+            pbmi->bmiColors[i].rgbGreen = byteGrayscale[i];
+            pbmi->bmiColors[i].rgbBlue  = byteGrayscale[i];
+        }
+    } else if (g_iScreenBpp == 8) {
+        for (i = 0; i < 4; ++i) {
+            pbmi->bmiColors[i].rgbRed   = GetRValue(g_rgbPalette[i]);
+            pbmi->bmiColors[i].rgbGreen = GetGValue(g_rgbPalette[i]);
+            pbmi->bmiColors[i].rgbBlue  = GetBValue(g_rgbPalette[i]);
+        }
+    }
+
+    g_hdcBuffer = CreateCompatibleDC(NULL);
+    if (g_hdcBuffer == NULL) { free(pbmi); return 0; }
+    g_hBmpBuffer = CreateDIBSection(g_hdcBuffer, pbmi, DIB_RGB_COLORS,
+                                     (void**)&g_pDibPixels, NULL, 0);
+    free(pbmi);
+    if (g_hBmpBuffer == NULL || g_pDibPixels == NULL) {
+        DeleteDC(g_hdcBuffer); g_hdcBuffer = NULL; return 0;
+    }
+    g_hBmpOld = SelectObject(g_hdcBuffer, g_hBmpBuffer);
     {
-        if (!TranslateAccelerator(msg.hwnd, hAccelTable, &msg)) 
+        BITMAP bm;
+        GetObject(g_hBmpBuffer, sizeof(BITMAP), &bm);
+        g_iDibPitch = (int)bm.bmWidthBytes;
+    }
+    if (g_iDibPitch <= 0) g_iDibPitch = (iWidth * iBitCount + 7) / 8;
+    g_iDibW = iWidth;
+    g_iDibH = iHeight;
+    return 1;
+}
+
+static void destroyBackBuffer(void) {
+    if (g_hdcBuffer != NULL) {
+        if (g_hBmpOld != NULL) SelectObject(g_hdcBuffer, g_hBmpOld);
+        if (g_hBmpBuffer != NULL) DeleteObject(g_hBmpBuffer);
+        DeleteDC(g_hdcBuffer);
+    }
+    g_hdcBuffer = NULL; g_hBmpBuffer = NULL; g_hBmpOld = NULL;
+    g_pDibPixels = NULL; g_iScreenBpp = 0; g_iDibPitch = 0;
+    g_iDibW = 0; g_iDibH = 0;
+}
+
+/*====================================================
+ * Paint canvas to window
+ *   Scales canvas pixels by iCanvasZoomFactor
+ *   into the full-resolution DIB, then BitBlt.
+ *====================================================*/
+static void paintCanvasToWindow(HWND hWnd) {
+    HDC hdc;
+    PAINTSTRUCT ps;
+    int iX, iY;
+    hdc = BeginPaint(hWnd, &ps);
+    if (g_pCanvas == NULL || g_iCanvasW <= 0 || g_iCanvasH <= 0) {
+        EndPaint(hWnd, &ps); return;
+    }
+    if (g_pDibPixels != NULL && g_iScreenBpp != 0) {
+        int iZoom = iCanvasZoomFactor;
+        int iY2, iX2;
+        BYTE* pRow;
+
+        if (iZoom < 1) iZoom = 1;
+
+        /* Fill DIB rows with scaled canvas pixels */
+        for (iY = 0; iY < g_iCanvasH; ++iY) {
+            int iColor;
+
+            for (iX = 0; iX < g_iCanvasW; ++iX) {
+                iColor = getPixelCanvas(iX, iY);
+
+                for (iY2 = 0; iY2 < iZoom; ++iY2) {
+                    int iDstY = iY * iZoom + iY2;
+                    if (iDstY >= g_iDibH) break;
+
+                    pRow = g_pDibPixels + iDstY * g_iDibPitch;
+
+                    switch (g_iScreenBpp) {
+                        case 2: {
+                            int iDstX = iX * iZoom;
+                            int iXEnd = iDstX + iZoom;
+                            int iSrcShift, iByteIdx, iMask;
+                            unsigned char ucByte;
+                            for (iX2 = iDstX; iX2 < iXEnd && iX2 < g_iDibW; ++iX2) {
+                                iByteIdx = iX2 >> 2;
+                                iSrcShift = 6 - ((iX2 & 3) << 1);
+                                iMask = ~(0x03 << iSrcShift);
+                                ucByte = (unsigned char)((pRow[iByteIdx] & iMask)
+                                       | ((iColor & 0x03) << iSrcShift));
+                                pRow[iByteIdx] = ucByte;
+                            }
+                            break;
+                        }
+                        case 8:
+                            for (iX2 = iX * iZoom; iX2 < (iX + 1) * iZoom && iX2 < g_iDibW; ++iX2)
+                                pRow[iX2] = (BYTE)iColor;
+                            break;
+                        case 16: {
+                            WORD* pDst16 = (WORD*)pRow;
+                            COLORREF rgb = g_rgbPalette[iColor];
+                            WORD wColor = (WORD)(((GetRValue(rgb) >> 3) << 11)
+                                               | ((GetGValue(rgb) >> 2) << 5)
+                                               |  (GetBValue(rgb) >> 3));
+                            for (iX2 = iX * iZoom; iX2 < (iX + 1) * iZoom && iX2 < g_iDibW; ++iX2)
+                                pDst16[iX2] = wColor;
+                            break;
+                        }
+                        case 32: {
+                            DWORD* pDst32 = (DWORD*)pRow;
+                            COLORREF rgb = g_rgbPalette[iColor];
+                            DWORD dwColor = (DWORD)((GetRValue(rgb) << 16)
+                                                  | (GetGValue(rgb) << 8)
+                                                  |  GetBValue(rgb));
+                            for (iX2 = iX * iZoom; iX2 < (iX + 1) * iZoom && iX2 < g_iDibW; ++iX2)
+                                pDst32[iX2] = dwColor;
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+        BitBlt(hdc, 0, g_iBarHeight, g_iDibW, g_iDibH, g_hdcBuffer, 0, 0, SRCCOPY);
+    } else {
+        int iZoom = iCanvasZoomFactor;
+        if (iZoom < 1) iZoom = 1;
+        for (iY = 0; iY < g_iDibH; ++iY)
+            for (iX = 0; iX < g_iDibW; ++iX)
+                SetPixel(hdc, iX, iY + g_iBarHeight,
+                    g_rgbPalette[getPixelCanvas(iX / iZoom, iY / iZoom)]);
+    }
+    EndPaint(hWnd, &ps);
+}
+
+/*====================================================
+ * rz interface wrappers
+ *====================================================*/
+static void rzSetPixel(int x, int y) {
+    setPixelCanvas(x, y, COLOR_BLACK);
+}
+
+static void rzPlotLine(int x0, int y0, int x1, int y1) {
+    drawLineCanvas(x0, y0, x1, y1, COLOR_BLACK);
+}
+
+static void rzPutChar(int x, int y, unsigned char ch) {
+    putCharCanvas(x, y, ch, COLOR_BLACK);
+}
+
+/*====================================================
+ * 3D projection (fixed-point)
+ *====================================================*/
+static void xyz2xy(PZ_FIXED x, PZ_FIXED y, PZ_FIXED z, int *ox, int *oy) {
+    int iZoom = arrZoomLevels[Camera.iZoomLevel];
+    int iScale = (int)(((int)Camera.iViewportS * iZoom + PZ_FIXED_HALF) >> PZ_FIXED_SHIFT);
+    int nx, ny;
+    nx = PZ_FIXED_MUL(x, Camera.cosB) - PZ_FIXED_MUL(y, Camera.sinB);
+    ny = PZ_FIXED_MUL(PZ_FIXED_MUL(x, Camera.sinB) + PZ_FIXED_MUL(y, Camera.cosB), Camera.sinA)
+       - PZ_FIXED_MUL(z, Camera.cosA);
+    *ox = Camera.iViewportX + (int)(((int)iScale * nx + PZ_FIXED_HALF) >> PZ_FIXED_SHIFT);
+    *oy = Camera.iViewportY + (int)(((int)iScale * ny + PZ_FIXED_HALF) >> PZ_FIXED_SHIFT);
+}
+
+/*====================================================
+ * Draw surface wireframe onto the 2bpp canvas
+ *====================================================*/
+static void drawSurfaceWireframeCanvas(void) {
+    int ix, iy, x0, y0, x1, y1;
+    PZ_FIXED z0, z1;
+
+    for (ix = 0; ix < Camera.xGrid; ++ix) {
+        iy = 0;
+        xyz2xy(xBuf[ix], yBuf[iy], z0 = Z_BUF(ix, iy), &x0, &y0);
+        for (iy = 0; iy < Camera.yGrid; ++iy) {
+            xyz2xy(xBuf[ix], yBuf[iy], z1 = Z_BUF(ix, iy), &x1, &y1);
+            if (z0 <= PZ_FIXED_ONE && z0 >= PZ_FIXED_NEG_ONE
+                && z1 <= PZ_FIXED_ONE && z1 >= PZ_FIXED_NEG_ONE)
+                drawLineCanvas(x0, y0, x1, y1, COLOR_BLACK);
+            x0 = x1; y0 = y1; z0 = z1;
+        }
+    }
+    for (iy = 0; iy < Camera.yGrid; ++iy) {
+        ix = 0;
+        xyz2xy(xBuf[ix], yBuf[iy], z0 = Z_BUF(ix, iy), &x0, &y0);
+        for (ix = 0; ix < Camera.xGrid; ++ix) {
+            xyz2xy(xBuf[ix], yBuf[iy], z1 = Z_BUF(ix, iy), &x1, &y1);
+            if (z0 <= PZ_FIXED_ONE && z0 >= PZ_FIXED_NEG_ONE
+                && z1 <= PZ_FIXED_ONE && z1 >= PZ_FIXED_NEG_ONE)
+                drawLineCanvas(x0, y0, x1, y1, COLOR_BLACK);
+            x0 = x1; y0 = y1; z0 = z1;
+        }
+    }
+}
+
+/*====================================================
+ * Bounding box edges
+ *====================================================*/
+typedef struct { PZ_FIXED x, y, z; } Vertex;
+typedef struct { int i0, i1; } Edge;
+
+static void drawBoxEdgesCanvas(void) {
+    static const Vertex BoxVertices[] = {
+        {   PZ_FIXED_ONE,       PZ_FIXED_ONE,       PZ_FIXED_ONE },
+        {   PZ_FIXED_NEG_ONE,   PZ_FIXED_ONE,       PZ_FIXED_ONE },
+        {   PZ_FIXED_NEG_ONE,   PZ_FIXED_NEG_ONE,   PZ_FIXED_ONE },
+        {   PZ_FIXED_ONE,       PZ_FIXED_NEG_ONE,   PZ_FIXED_ONE },
+        {   PZ_FIXED_ONE,       PZ_FIXED_ONE,       PZ_FIXED_NEG_ONE },
+        {   PZ_FIXED_NEG_ONE,   PZ_FIXED_ONE,       PZ_FIXED_NEG_ONE },
+        {   PZ_FIXED_NEG_ONE,   PZ_FIXED_NEG_ONE,   PZ_FIXED_NEG_ONE },
+        {   PZ_FIXED_ONE,       PZ_FIXED_NEG_ONE,   PZ_FIXED_NEG_ONE },
+    };
+    static const Edge BoxEdges[] = {
+        { 0, 1 }, { 1, 2 }, { 2, 3 }, { 3, 0 },
+        { 4, 5 }, { 5, 6 }, { 6, 7 }, { 7, 4 },
+        { 0, 4 }, { 1, 5 }, { 2, 6 }, { 3, 7 }
+    };
+    static const int numEdges = sizeof(BoxEdges) / sizeof(BoxEdges[0]);
+    int i;
+    for (i = 0; i < numEdges; ++i) {
+        const Edge* e = BoxEdges + i;
+        const Vertex* v0 = BoxVertices + e->i0;
+        const Vertex* v1 = BoxVertices + e->i1;
+        int x0, y0, x1, y1;
+        xyz2xy(v0->x, v0->y, v0->z, &x0, &y0);
+        xyz2xy(v1->x, v1->y, v1->z, &x1, &y1);
+        drawLineCanvas(x0, y0, x1, y1, COLOR_LIGHT_GRAY);
+    }
+}
+
+/*====================================================
+ * Copy TCHAR string to char buffer (ASCII-safe)
+ *====================================================*/
+static void tcharToChar(char* dst, const TCHAR* src, int maxLen) {
+    int i;
+    for (i = 0; i < maxLen - 1 && src[i] != _T('\0'); ++i)
+        dst[i] = (char)src[i];
+    dst[i] = '\0';
+}
+
+/*====================================================
+ * Full redraw (clear -> box -> surface -> footer)
+ *====================================================*/
+static void redrawCanvas(HWND hWnd) {
+    int iBaseline;
+    int iStartY, iLen;
+
+    Camera.sinA = PZ_FLOAT_TO_FIXED(sin(Camera.iAlphaDeg * PZ_PI / 180));
+    Camera.cosA = PZ_FLOAT_TO_FIXED(cos(Camera.iAlphaDeg * PZ_PI / 180));
+    Camera.sinB = PZ_FLOAT_TO_FIXED(sin(Camera.iBetaDeg * PZ_PI / 180));
+    Camera.cosB = PZ_FLOAT_TO_FIXED(cos(Camera.iBetaDeg * PZ_PI / 180));
+    fillRectCanvas(0, 0, g_iCanvasW, g_iCanvasH, COLOR_WHITE);
+    if (g_bShowBox)
+        drawBoxEdgesCanvas();
+    drawSurfaceWireframeCanvas();
+    if (g_pRenderNode != NULL) {
+        iBaseline = g_pRenderNode->sLayout.iAscent;
+        RenderNode_Draw(g_pRenderNode, &g_RenderConfig,
+            g_iExprPosX, g_iExprPosY + iBaseline);
+    }
+
+    /* Footer bar */
+    if (g_bShowFooter) {
+        int iZoomPct;
+        TCHAR szBufT[64];
+        char szBuf[64];
+        iStartY = g_iCanvasH - CURRENT_FONT_HEIGHT - 2;
+        if (iStartY < 0) iStartY = 0;
+        fillRectCanvas(0, iStartY, g_iCanvasW, CURRENT_FONT_HEIGHT + 2, COLOR_LIGHT_GRAY);
+
+        /* Left: alpha / beta */
+        wsprintf(szBufT, TEXT("%c=%d, %c=%d"),
+            PZ_AE_GREEK_alpha, Camera.iAlphaDeg,
+            PZ_AE_GREEK_beta,  Camera.iBetaDeg);
+        tcharToChar(szBuf, szBufT, 64);
+        putTextCanvas(2, iStartY + 2, (const unsigned char*)szBuf, COLOR_WHITE);
+
+        /* Center: mode display */
         {
+            const char* szCenter;
+            switch (g_iMouseMode) {
+                case MOUSE_MODE_CAMERA:   szCenter = "Mode: Camera";   break;
+                case MOUSE_MODE_POSITION: szCenter = "Mode: Position"; break;
+                case MOUSE_MODE_ZOOM:     szCenter = "Mode: Zoom";     break;
+                case MOUSE_MODE_FORMULA:  szCenter = "Mode: Formula";  break;
+                default:                  szCenter = "Mode: ?";        break;
+            }
+            iLen = (int)strlen(szCenter) * CURRENT_FONT_WIDTH;
+            putTextCanvas((g_iCanvasW - iLen) / 2, iStartY + 2,
+                (const unsigned char*)szCenter, COLOR_WHITE);
+        }
+
+        /* Right: zoom%, (viewportX, viewportY) */
+        iZoomPct = (int)(PZ_FIXED_TO_FLOAT(arrZoomLevels[Camera.iZoomLevel]) * 100.0f);
+        wsprintf(szBufT, TEXT("%d%% (%d, %d)"), iZoomPct,
+            Camera.iViewportX, Camera.iViewportY);
+        tcharToChar(szBuf, szBufT, 64);
+        iLen = (int)strlen(szBuf) * CURRENT_FONT_WIDTH;
+        putTextCanvas(g_iCanvasW - iLen - 2, iStartY + 2,
+            (const unsigned char*)szBuf, COLOR_WHITE);
+    }
+    (void)hWnd;
+}
+
+/*====================================================
+ * Draw error screen (centered specific message)
+ *====================================================*/
+static void drawErrorScreen(HWND hWnd) {
+    const char* szMsg;
+    int iMsgLen, x, y;
+
+    if (g_pAstExpr == NULL)
+        szMsg = "Syntax Error - could not parse expression";
+    else
+        szMsg = g_szErrorBuf;
+
+    fillRectCanvas(0, 0, g_iCanvasW, g_iCanvasH, COLOR_WHITE);
+
+    /* Main error line */
+    iMsgLen = (int)strlen(szMsg) * CURRENT_FONT_WIDTH;
+    x = (g_iCanvasW - iMsgLen) / 2;
+    if (x < 2) x = 2;
+    y = g_iCanvasH / 2 - CURRENT_FONT_HEIGHT;
+    if (y < 0) y = 0;
+    putTextCanvas(x, y, (const unsigned char*)szMsg, COLOR_BLACK);
+
+    /* Hint line */
+    {
+        const char* szHint = "Edit > Expression to retry";
+        iMsgLen = (int)strlen(szHint) * CURRENT_FONT_WIDTH;
+        x = (g_iCanvasW - iMsgLen) / 2;
+        if (x < 2) x = 2;
+        putTextCanvas(x, y + CURRENT_FONT_HEIGHT + 2,
+            (const unsigned char*)szHint, COLOR_DARK_GRAY);
+    }
+    InvalidateRect(hWnd, NULL, FALSE);
+}
+
+/*====================================================
+ * Reset camera and formula position to defaults
+ *====================================================*/
+static void resetView(HWND hWnd) {
+    Camera.iAlphaDeg  = DEFAULT_VIEW_ALPHA;
+    Camera.iBetaDeg   = DEFAULT_VIEW_BETA;
+    Camera.iViewportX = g_iCanvasW / 2;
+    Camera.iViewportY = g_iCanvasH / 2;
+    Camera.iZoomLevel = ZOOM_LEVEL_DEFAULT;
+    g_iExprPosX = 0;
+    g_iExprPosY = 0;
+    g_iZoomAccum = 0;
+    redrawCanvas(hWnd);
+    InvalidateRect(hWnd, NULL, FALSE);
+}
+
+/*====================================================
+ * Progress dialog procedure
+ *====================================================*/
+static LRESULT CALLBACK ProgressDlgProc(HWND hDlg, UINT message,
+                                         WPARAM wParam, LPARAM lParam) {
+    (void)wParam;
+    (void)lParam;
+    switch (message) {
+        case WM_INITDIALOG:
+            return TRUE;
+    }
+    return FALSE;
+}
+
+/*====================================================
+ * Expression edit dialog procedure
+ *   Auto-completes unbalanced parentheses on confirm.
+ *   Re-parses and re-evaluates the expression.
+ *====================================================*/
+static LRESULT CALLBACK ExprDlgProc( HWND hDlg, UINT message,
+                                     WPARAM wParam, LPARAM lParam) {
+    (void)lParam;
+    switch (message) {
+        case WM_INITDIALOG: {
+            /* Assign expression to edit control */
+            TCHAR wszTemp[EXPR_MAX];
+            int i;
+            for (i = 0; szExpr[i]; ++i) {
+                wszTemp[i] = szExpr[i];
+            }
+            wszTemp[i] = 0;
+            SetDlgItemText(hDlg, IDC_EXPR_EDIT, wszTemp);
+            /* Center the dialog */
+            CenterDialog(hDlg);
+            return TRUE;
+        }
+        case WM_COMMAND:
+            switch (LOWORD(wParam)) {
+                case IDOK:
+                {
+                    HWND hWndParent;
+                    TCHAR szBufT[EXPR_MAX];
+                    char szNew[EXPR_MAX];
+                    int iLen, iParenCount;
+
+                    hWndParent = GetParent(hDlg);
+                    GetDlgItemText(hDlg, IDC_EXPR_EDIT, szBufT, EXPR_MAX);
+
+                    /* Convert TCHAR to char */
+                    iLen = 0;
+                    while (iLen < EXPR_MAX - 1 && szBufT[iLen] != _T('\0')) {
+                        szNew[iLen] = (char)szBufT[iLen];
+                        ++iLen;
+                    }
+                    szNew[iLen] = '\0';
+
+                    /* Count and auto-complete parentheses */
+                    iParenCount = 0;
+                    {
+                        int i;
+                        for (i = 0; szNew[i] != '\0'; ++i) {
+                            if (szNew[i] == '(') ++iParenCount;
+                            else if (szNew[i] == ')') --iParenCount;
+                        }
+                    }
+                    while (iParenCount > 0 && iLen < EXPR_MAX - 1) {
+                        szNew[iLen++] = ')';
+                        --iParenCount;
+                    }
+                    szNew[iLen] = '\0';
+
+                    /* Destroy old state */
+                    if (g_pRenderNode != NULL) {
+                        RenderNode_Destroy(g_pRenderNode);
+                        g_pRenderNode = NULL;
+                    }
+                    if (g_pAstExpr != NULL) {
+                        FzAstNode_Destroy(g_pAstExpr);
+                        g_pAstExpr = NULL;
+                    }
+                    if (g_pVm != NULL) {
+                        EzMachine_Destroy(g_pVm);
+                        g_pVm = NULL;
+                    }
+                    g_pVm = EzMachine_Create();
+
+                    /* Update expression and re-evaluate */
+                    Utils_StringCopy(szExpr, EXPR_MAX, szNew);
+
+                    if (recalc(hWndParent)) {
+                        redrawCanvas(hWndParent);
+                        InvalidateRect(hWndParent, NULL, FALSE);
+                    } else {
+                        drawErrorScreen(hWndParent);
+                    }
+
+                    EndDialog(hDlg, IDOK);
+                    return TRUE;
+                }
+                case IDCANCEL:
+                    EndDialog(hDlg, IDCANCEL);
+                    return TRUE;
+            }
+            break;
+    }
+    return FALSE;
+}
+
+/*====================================================
+ * Window Editor dialog helpers
+ *====================================================*/
+static void setDlgFloat(HWND hDlg, int id, PZ_FLOAT f) {
+    TCHAR szBufT[32];
+    char szBuf[32];
+    int i;
+    Utils_Ftoa((double)f, szBuf, 4);
+    for (i = 0; szBuf[i] != '\0' && i < 31; ++i)
+        szBufT[i] = (TCHAR)szBuf[i];
+    szBufT[i] = _T('\0');
+    SetDlgItemText(hDlg, id, szBufT);
+}
+
+static PZ_FLOAT getDlgFloat(HWND hDlg, int id) {
+    TCHAR szBufT[64];
+    char szBuf[64];
+    int i;
+    GetDlgItemText(hDlg, id, szBufT, 64);
+    for (i = 0; szBufT[i] != _T('\0') && i < 63; ++i)
+        szBuf[i] = (char)szBufT[i];
+    szBuf[i] = '\0';
+    return (PZ_FLOAT)Utils_Atof(szBuf);
+}
+
+static int getDlgInt(HWND hDlg, int id) {
+    TCHAR szBufT[64];
+    char szBuf[64];
+    int i;
+    GetDlgItemText(hDlg, id, szBufT, 64);
+    for (i = 0; szBufT[i] != _T('\0') && i < 63; ++i)
+        szBuf[i] = (char)szBufT[i];
+    szBuf[i] = '\0';
+    return (int)Utils_Atoi(szBuf);
+}
+
+/*====================================================
+ * Window Editor dialog procedure
+ *   Edit Camera x/y/z bounds and grid resolution.
+ *====================================================*/
+static LRESULT CALLBACK WindowDlgProc(HWND hDlg, UINT message,
+                                       WPARAM wParam, LPARAM lParam) {
+    (void)lParam;
+    switch (message) {
+        case WM_INITDIALOG:
+            setDlgFloat(hDlg, IDC_WIN_XMIN, Camera.xMin);
+            setDlgFloat(hDlg, IDC_WIN_XMAX, Camera.xMax);
+            setDlgFloat(hDlg, IDC_WIN_YMIN, Camera.yMin);
+            setDlgFloat(hDlg, IDC_WIN_YMAX, Camera.yMax);
+            setDlgFloat(hDlg, IDC_WIN_ZMIN, Camera.zMin);
+            setDlgFloat(hDlg, IDC_WIN_ZMAX, Camera.zMax);
+            {
+                TCHAR szBufT[16];
+                wsprintf(szBufT, TEXT("%d"), Camera.xGrid);
+                SetDlgItemText(hDlg, IDC_WIN_XGRID, szBufT);
+                wsprintf(szBufT, TEXT("%d"), Camera.yGrid);
+                SetDlgItemText(hDlg, IDC_WIN_YGRID, szBufT);
+            }
+            CenterDialog(hDlg);
+            return TRUE;
+        case WM_COMMAND:
+            switch (LOWORD(wParam)) {
+                case IDOK:
+                {
+                    HWND hWndParent;
+                    int iGrid;
+                    hWndParent = GetParent(hDlg);
+
+                    Camera.xMin = getDlgFloat(hDlg, IDC_WIN_XMIN);
+                    Camera.xMax = getDlgFloat(hDlg, IDC_WIN_XMAX);
+                    Camera.yMin = getDlgFloat(hDlg, IDC_WIN_YMIN);
+                    Camera.yMax = getDlgFloat(hDlg, IDC_WIN_YMAX);
+                    Camera.zMin = getDlgFloat(hDlg, IDC_WIN_ZMIN);
+                    Camera.zMax = getDlgFloat(hDlg, IDC_WIN_ZMAX);
+
+                    iGrid = getDlgInt(hDlg, IDC_WIN_XGRID);
+                    if (iGrid < 5) iGrid = 5;
+                    if (iGrid > GRID_MAX) iGrid = GRID_MAX;
+                    Camera.xGrid = iGrid;
+
+                    iGrid = getDlgInt(hDlg, IDC_WIN_YGRID);
+                    if (iGrid < 5) iGrid = 5;
+                    if (iGrid > GRID_MAX) iGrid = GRID_MAX;
+                    Camera.yGrid = iGrid;
+
+                    /* Destroy old state and recalc */
+                    if (g_pRenderNode != NULL) {
+                        RenderNode_Destroy(g_pRenderNode);
+                        g_pRenderNode = NULL;
+                    }
+                    if (g_pAstExpr != NULL) {
+                        FzAstNode_Destroy(g_pAstExpr);
+                        g_pAstExpr = NULL;
+                    }
+                    if (g_pVm != NULL) {
+                        EzMachine_Destroy(g_pVm);
+                        g_pVm = NULL;
+                    }
+                    g_pVm = EzMachine_Create();
+
+                    if (recalc(hWndParent)) {
+                        redrawCanvas(hWndParent);
+                        InvalidateRect(hWndParent, NULL, FALSE);
+                    } else {
+                        drawErrorScreen(hWndParent);
+                    }
+
+                    EndDialog(hDlg, IDOK);
+                    return TRUE;
+                }
+                case IDCANCEL:
+                    EndDialog(hDlg, IDCANCEL);
+                    return TRUE;
+            }
+            break;
+    }
+    return FALSE;
+}
+
+/*====================================================
+ * Update progress dialog text
+ *====================================================*/
+static void updateProgress(int iPct) {
+    TCHAR szText[32];
+    MSG msg;
+    if (g_hDlgProgress == NULL) return;
+    wsprintf(szText, TEXT("%d%%"), iPct);
+    SetDlgItemText(g_hDlgProgress, IDC_PROGRESS_TEXT, szText);
+    /* Pump messages to keep dialog responsive */
+    while (PeekMessage(&msg, NULL, 0, 0, PM_REMOVE)) {
+        if (!IsDialogMessage(g_hDlgProgress, &msg)) {
             TranslateMessage(&msg);
             DispatchMessage(&msg);
         }
     }
+}
 
+/*====================================================
+ * Recalculate surface geometry
+ *====================================================*/
+int recalc(HWND hWnd) {
+    char szErrorBuf[200];
+    int ix, iy;
+    int iPct, iLastPct;
+    PZ_FLOAT fXbuf[GRID_MAX], fYbuf[GRID_MAX];
+    PZ_FLOAT fz, fx, fy;
+    PZ_FLOAT fzMid   = (PZ_FLOAT)(Camera.zMax + Camera.zMin) * 0.5f;
+    PZ_FLOAT fzRange = (PZ_FLOAT)(Camera.zMax - Camera.zMin);
+    PZ_FLOAT fxMid   = (PZ_FLOAT)(Camera.xMax + Camera.xMin) * 0.5f;
+    PZ_FLOAT fxRange = (PZ_FLOAT)(Camera.xMax - Camera.xMin);
+    PZ_FLOAT fyMid   = (PZ_FLOAT)(Camera.yMax + Camera.yMin) * 0.5f;
+    PZ_FLOAT fyRange = (PZ_FLOAT)(Camera.yMax - Camera.yMin);
+    EzError iCompileErr;
+
+    if (g_pVm == NULL) { g_bError = 1; return 0; }
+
+    if (g_pAstExpr == NULL) {
+        g_pAstExpr = FzParser_ParseExpression(szExpr);
+        if (g_pAstExpr == NULL) { g_bError = 1; return 0; }
+        EzMachine_DeclareVariable(g_pVm, "x");
+        EzMachine_DeclareVariable(g_pVm, "y");
+        EzMachine_DeclareVariable(g_pVm, "pi");
+        EzMachine_AllocateVariables(g_pVm);
+        EzMachine_SetVariableByIndex(g_pVm, 2, PZ_PI);
+        iCompileErr = EzMachine_Compile(g_pVm, g_pAstExpr, szErrorBuf);
+        if (iCompileErr != EZERR_NONE) {
+            g_bError = 1;
+            switch (iCompileErr) {
+                case EZERR_VARIABLE_UNDEFINED:
+                    strcpy(g_szErrorBuf, "Undefined Variable: ");
+                    strcpy(strchr(g_szErrorBuf, '\0'), szErrorBuf);
+                    break;
+                case EZERR_FUNCTION_UNDEFINED:
+                    strcpy(g_szErrorBuf, "Undefined Function: ");
+                    strcpy(strchr(g_szErrorBuf, '\0'), szErrorBuf);
+                    break;
+                case EZERR_FUNCTION_PARAM_MISMATCH:
+                    strcpy(g_szErrorBuf, "Function parameters mismatch: ");
+                    strcpy(strchr(g_szErrorBuf, '\0'), szErrorBuf);
+                    break;
+            }
+            return 0;
+        }
+        if (g_pRenderNode == NULL) {
+            g_pRenderNode = Render_Transform(g_pAstExpr);
+            RenderNode_EstimateSize(g_pRenderNode, &g_RenderConfig);
+        }
+    }
+
+    for (ix = 0; ix < Camera.xGrid; ++ix)
+        fXbuf[ix] = Camera.xMin + (Camera.xMax - Camera.xMin) * ix / (PZ_FLOAT)(Camera.xGrid - 1);
+    for (iy = 0; iy < Camera.yGrid; ++iy)
+        fYbuf[iy] = Camera.yMin + (Camera.yMax - Camera.yMin) * iy / (PZ_FLOAT)(Camera.yGrid - 1);
+
+    /* Show progress dialog */
+    g_hDlgProgress = CreateDialog(hInst, MAKEINTRESOURCE(IDD_PROGRESS),
+                                   hWnd, (DLGPROC)ProgressDlgProc);
+    updateProgress(0);
+
+    iLastPct = -1;
+    for (ix = 0; ix < Camera.xGrid; ++ix) {
+        fx = fXbuf[ix];
+        for (iy = 0; iy < Camera.yGrid; ++iy) {
+            fy = fYbuf[iy];
+            EzMachine_SetVariableByIndex(g_pVm, 0, fx);
+            EzMachine_SetVariableByIndex(g_pVm, 1, fy);
+            fz = EzMachine_Eval(g_pVm);
+            xBuf[ix] = PZ_FLOAT_TO_FIXED(2.0f * (fx - fxMid) / fxRange);
+            yBuf[iy] = PZ_FLOAT_TO_FIXED(2.0f * (fy - fyMid) / fyRange);
+            Z_BUF(ix, iy) = PZ_FLOAT_TO_FIXED(2.0f * (fz - fzMid) / fzRange);
+        }
+        iPct = (ix + 1) * 100 / Camera.xGrid;
+        if (iPct != iLastPct) {
+            updateProgress(iPct);
+            iLastPct = iPct;
+        }
+    }
+
+    /* Close progress dialog */
+    if (g_hDlgProgress != NULL) {
+        DestroyWindow(g_hDlgProgress);
+        g_hDlgProgress = NULL;
+    }
+    g_bError = 0;
+    return 1;
+}
+
+/*====================================================
+ * Win32 standard boilerplate
+ *====================================================*/
+BOOL                SetTaskbarVisible   (BOOL bVisible);
+ATOM                MyRegisterClass     (HINSTANCE hInstance, LPTSTR szWindowClass);
+BOOL                InitInstance        (HINSTANCE, int);
+LRESULT CALLBACK    WndProc             (HWND, UINT, WPARAM, LPARAM);
+LRESULT CALLBACK    About               (HWND, UINT, WPARAM, LPARAM);
+
+int WINAPI WinMain( HINSTANCE hInstance,
+                    HINSTANCE hPrevInstance,
+                    LPTSTR    lpCmdLine,
+                    int       nCmdShow) {
+    MSG msg;
+    HACCEL hAccelTable;
+
+    /* SetTaskbarVisible(FALSE); */
+
+    if (!InitInstance(hInstance, nCmdShow)) return FALSE;
+    hAccelTable = LoadAccelerators(hInstance, (LPCTSTR)IDC_PLOTTERZNATIVE);
+    while (GetMessage(&msg, NULL, 0, 0)) {
+        if (!TranslateAccelerator(msg.hwnd, hAccelTable, &msg)) {
+            TranslateMessage(&msg);
+            DispatchMessage(&msg);
+        }
+    }
     return msg.wParam;
 }
 
-ATOM MyRegisterClass(HINSTANCE hInstance, LPTSTR szWindowClass)
-{
-    WNDCLASS    wc;
-
+ATOM MyRegisterClass(HINSTANCE hInstance, LPTSTR szWindowClass) {
+    WNDCLASS wc;
     wc.style            = CS_HREDRAW | CS_VREDRAW;
-    wc.lpfnWndProc        = (WNDPROC) WndProc;
-    wc.cbClsExtra        = 0;
-    wc.cbWndExtra        = 0;
+    wc.lpfnWndProc      = (WNDPROC) WndProc;
+    wc.cbClsExtra       = 0;
+    wc.cbWndExtra       = 0;
     wc.hInstance        = hInstance;
     wc.hIcon            = LoadIcon(hInstance, MAKEINTRESOURCE(IDI_PLOTTERZNATIVE));
-    wc.hCursor            = 0;
-    wc.hbrBackground    = (HBRUSH) GetStockObject(WHITE_BRUSH);
-    wc.lpszMenuName        = 0;
+    wc.hCursor          = 0;
+    wc.hbrBackground    = (HBRUSH) GetStockObject(BLACK_BRUSH);
+    wc.lpszMenuName     = 0;
     wc.lpszClassName    = szWindowClass;
-
     return RegisterClass(&wc);
 }
 
-
-BOOL InitInstance(HINSTANCE hInstance, int nCmdShow)
-{
+BOOL InitInstance(HINSTANCE hInstance, int nCmdShow) {
     HWND    hWnd;
-    TCHAR    szTitle[MAX_LOADSTRING];
-    TCHAR    szWindowClass[MAX_LOADSTRING];
+    TCHAR   szTitle[MAX_LOADSTRING];
+    TCHAR   szWindowClass[MAX_LOADSTRING];
+#if !(VER_PLATFORM_WIN32_CE)
+    int     iScrWidth, iScrHeight;
+    int     iWinWidth, iWinHeight;
+#endif
+    RECT    rcClient;
 
     hInst = hInstance;
     LoadString(hInstance, IDC_PLOTTERZNATIVE, szWindowClass, MAX_LOADSTRING);
     MyRegisterClass(hInstance, szWindowClass);
-
     LoadString(hInstance, IDS_APP_TITLE, szTitle, MAX_LOADSTRING);
+
+    rcClient.left   = 0;
+    rcClient.top    = 0;
+#if !(VER_PLATFORM_WIN32_CE)
+    rcClient.right  = 640;
+    rcClient.bottom = 480;
+    iWinWidth       = rcClient.right;
+    iWinHeight      = rcClient.bottom;
+    {
+        DWORD dWindowStyle = WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX;
+        AdjustWindowRect(&rcClient, dWindowStyle, FALSE);
+    }
+    hWnd = CreateWindow(szWindowClass, szTitle,
+        WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX,
+        CW_USEDEFAULT, CW_USEDEFAULT, rcClient.right - rcClient.left,
+        rcClient.bottom - rcClient.top, NULL, NULL, hInstance, NULL);
+#else
     hWnd = CreateWindow(szWindowClass, szTitle, WS_VISIBLE,
         0, 0, CW_USEDEFAULT, CW_USEDEFAULT, NULL, NULL, hInstance, NULL);
-
-    if (!hWnd)
-    {    
-        return FALSE;
-    }
-
+#endif
+    if (!hWnd) return FALSE;
     ShowWindow(hWnd, nCmdShow);
     UpdateWindow(hWnd);
     if (hwndCB)
         CommandBar_Show(hwndCB, TRUE);
-
     return TRUE;
 }
 
-LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
-{
-    HDC hdc;
+LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) {
     int wmId, wmEvent;
-    PAINTSTRUCT ps;
-    TCHAR szHello[MAX_LOADSTRING];
-    RECT rt;
-
-    switch (message) 
-    {
+    switch (message) {
         case WM_COMMAND:
-            wmId    = LOWORD(wParam); 
-            wmEvent = HIWORD(wParam); 
-            // Parse the menu selections:
-            switch (wmId)
-            {
+            wmId = LOWORD(wParam); wmEvent = HIWORD(wParam);
+            switch (wmId) {
                 case IDM_HELP_ABOUT:
-                   DialogBox(hInst, (LPCTSTR)IDD_ABOUTBOX, hWnd, (DLGPROC)About);
-                   break;
+                    DialogBox(hInst, (LPCTSTR)IDD_ABOUTBOX, hWnd, (DLGPROC)About);
+                    break;
                 case IDM_FILE_EXIT:
-                   DestroyWindow(hWnd);
-                   break;
+                    DestroyWindow(hWnd);
+                    break;
+                case IDM_EDIT_EXPRESSION:
+                    DialogBox(hInst, MAKEINTRESOURCE(IDD_EXPRESSION),
+                              hWnd, (DLGPROC)ExprDlgProc);
+                    break;
+                case IDM_EDIT_WINDOW:
+                    DialogBox(hInst, MAKEINTRESOURCE(IDD_WINDOWEDIT),
+                              hWnd, (DLGPROC)WindowDlgProc);
+                    break;
+                case IDM_VIEW_CAMERA:
+                    g_iMouseMode = MOUSE_MODE_CAMERA;
+                    if (g_bShowFooter) { redrawCanvas(hWnd); InvalidateRect(hWnd, NULL, FALSE); }
+                    break;
+                case IDM_VIEW_POSITION:
+                    g_iMouseMode = MOUSE_MODE_POSITION;
+                    if (g_bShowFooter) { redrawCanvas(hWnd); InvalidateRect(hWnd, NULL, FALSE); }
+                    break;
+                case IDM_VIEW_ZOOM:
+                    g_iMouseMode = MOUSE_MODE_ZOOM;
+                    g_iZoomAccum = 0;
+                    if (g_bShowFooter) { redrawCanvas(hWnd); InvalidateRect(hWnd, NULL, FALSE); }
+                    break;
+                case IDM_VIEW_FORMULA:
+                    g_iMouseMode = MOUSE_MODE_FORMULA;
+                    if (g_bShowFooter) { redrawCanvas(hWnd); InvalidateRect(hWnd, NULL, FALSE); }
+                    break;
+                case IDM_VIEW_RESET:
+                    resetView(hWnd);
+                    break;
+                case IDM_VIEW_TOGGLEFOOTER:
+                    g_bShowFooter = !g_bShowFooter;
+                    redrawCanvas(hWnd);
+                    InvalidateRect(hWnd, NULL, FALSE);
+                    break;
+                case IDM_VIEW_TOGGLEBOX:
+                    g_bShowBox = !g_bShowBox;
+                    redrawCanvas(hWnd);
+                    InvalidateRect(hWnd, NULL, FALSE);
+                    break;
                 default:
-                   return DefWindowProc(hWnd, message, wParam, lParam);
+                    return DefWindowProc(hWnd, message, wParam, lParam);
             }
             break;
         case WM_CREATE:
-            hwndCB = CommandBar_Create(hInst, hWnd, 1);            
-            CommandBar_InsertMenubar(hwndCB, hInst, IDM_MENU, 0);
-            CommandBar_AddAdornments(hwndCB, 0, 0);
+            {
+                RECT rcClient, rcBar;
+                int iCw, iCh;
+
+                hwndCB = CommandBar_Create(hInst, hWnd, 1);
+                CommandBar_InsertMenubar(hwndCB, hInst, IDM_MENU, 0);
+                CommandBar_AddAdornments(hwndCB, 0, 0);
+
+                GetClientRect(hWnd, &rcClient);
+                if (rcClient.right <= 0) rcClient.right = 320;
+                if (rcClient.bottom <= 0) rcClient.bottom = 240;
+
+                /* Get command bar height and subtract from client area */
+                GetWindowRect(hwndCB, &rcBar);
+                g_iBarHeight = rcBar.bottom - rcBar.top;
+                rcClient.bottom -= g_iBarHeight;
+                if (rcClient.bottom < 1) rcClient.bottom = 1;
+
+                if (iCanvasZoomFactor < 1) iCanvasZoomFactor = 1;
+                iCw = rcClient.right / iCanvasZoomFactor;
+                iCh = rcClient.bottom / iCanvasZoomFactor;
+                if (iCw < 1) iCw = 1;
+                if (iCh < 1) iCh = 1;
+
+                if (!createCanvas(iCw, iCh)) return -1;
+                if (!createBackBuffer(hWnd, rcClient.right, rcClient.bottom)) {}
+
+                Camera.iViewportS = (g_iCanvasH < g_iCanvasW ? g_iCanvasH : g_iCanvasW) / 2;
+                Camera.iViewportX = g_iCanvasW / 2;
+                Camera.iViewportY = g_iCanvasH / 2;
+
+                g_RenderConfig.sInterfaces.setPixel = rzSetPixel;
+                g_RenderConfig.sInterfaces.plotLine = rzPlotLine;
+                g_RenderConfig.sInterfaces.putChar  = rzPutChar;
+                RenderConfig_GetDefaultStyle(&g_RenderConfig);
+                g_pVm = EzMachine_Create();
+
+                /* Clear canvas and draw "hello world" as initial test */
+                fillRectCanvas(0, 0, g_iCanvasW, g_iCanvasH, COLOR_WHITE);
+                putTextCanvas(2, g_iCanvasH / 2 - CURRENT_FONT_HEIGHT / 2,
+                    (const unsigned char*)"hello world", COLOR_BLACK);
+
+                if (recalc(hWnd)) {
+                    redrawCanvas(hWnd);
+                    InvalidateRect(hWnd, NULL, FALSE);
+                } else {
+                    drawErrorScreen(hWnd);
+                }
+            }
+            break;
+        case WM_LBUTTONDOWN:
+            if (g_bError) break;
+            g_bMouseDown = 1;
+            g_iMousePrevX = LOWORD(lParam);
+            g_iMousePrevY = HIWORD(lParam);
+            SetCapture(hWnd);
+            break;
+        case WM_LBUTTONUP:
+            g_bMouseDown = 0;
+            g_iZoomAccum = 0;
+            ReleaseCapture();
+            break;
+        case WM_MOUSEMOVE:
+            if (g_bError) break;
+            if (g_bMouseDown) {
+                int iDeltaX, iDeltaY;
+                int iMouseX = LOWORD(lParam);
+                int iMouseY = HIWORD(lParam);
+                iDeltaX = iMouseX - g_iMousePrevX;
+                iDeltaY = iMouseY - g_iMousePrevY;
+                g_iMousePrevX = iMouseX;
+                g_iMousePrevY = iMouseY;
+                if (iDeltaX == 0 && iDeltaY == 0) break;
+
+                switch (g_iMouseMode) {
+                    case MOUSE_MODE_CAMERA:
+                        Camera.iBetaDeg  -= iDeltaX;
+                        Camera.iAlphaDeg -= iDeltaY;
+                        Camera.iBetaDeg  = Camera.iBetaDeg % 360;
+                        if (Camera.iBetaDeg < 0) Camera.iBetaDeg += 360;
+                        Camera.iAlphaDeg = Camera.iAlphaDeg % 360;
+                        if (Camera.iAlphaDeg < 0) Camera.iAlphaDeg += 360;
+                        break;
+                    case MOUSE_MODE_POSITION:
+                        Camera.iViewportX += iDeltaX;
+                        Camera.iViewportY += iDeltaY;
+                        break;
+                    case MOUSE_MODE_ZOOM:
+                        g_iZoomAccum += iDeltaY;
+                        if (g_iZoomAccum >= ZOOM_DRAG_THRESHOLD) {
+                            if (Camera.iZoomLevel > 0) Camera.iZoomLevel--;
+                            g_iZoomAccum = 0;
+                        } else if (g_iZoomAccum <= -ZOOM_DRAG_THRESHOLD) {
+                            if (Camera.iZoomLevel < iNumZoomLevel - 1)
+                                Camera.iZoomLevel++;
+                            g_iZoomAccum = 0;
+                        }
+                        break;
+                    case MOUSE_MODE_FORMULA:
+                        g_iExprPosX += iDeltaX;
+                        g_iExprPosY += iDeltaY;
+                        break;
+                    default:
+                        break;
+                }
+                redrawCanvas(hWnd);
+                InvalidateRect(hWnd, NULL, FALSE);
+            }
             break;
         case WM_PAINT:
-            hdc = BeginPaint(hWnd, &ps);
-            GetClientRect(hWnd, &rt);
-            LoadString(hInst, IDS_HELLO, szHello, MAX_LOADSTRING);
-            DrawText(hdc, szHello, _tcslen(szHello), &rt, 
-                DT_SINGLELINE | DT_VCENTER | DT_CENTER);
-            EndPaint(hWnd, &ps);
+            paintCanvasToWindow(hWnd);
             break;
         case WM_DESTROY:
             CommandBar_Destroy(hwndCB);
+            if (g_pRenderNode != NULL) RenderNode_Destroy(g_pRenderNode);
+            if (g_pVm != NULL) EzMachine_Destroy(g_pVm);
+            if (g_pAstExpr != NULL) FzAstNode_Destroy(g_pAstExpr);
+            destroyBackBuffer();
+            destroyCanvas();
             PostQuitMessage(0);
+            /* SetTaskbarVisible(TRUE); */
             break;
         default:
             return DefWindowProc(hWnd, message, wParam, lParam);
-   }
-   return 0;
+    }
+    return 0;
 }
 
-LRESULT CALLBACK About(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam)
-{
-    RECT rt, rt1;
-    int DlgWidth, DlgHeight;
-    int NewPosX, NewPosY;
-
-    switch (message)
-    {
+LRESULT CALLBACK About(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam) {
+    switch (message) {
         case WM_INITDIALOG:
-            if (GetWindowRect(hDlg, &rt1)) {
-                GetClientRect(GetParent(hDlg), &rt);
-                DlgWidth    = rt1.right - rt1.left;
-                DlgHeight    = rt1.bottom - rt1.top ;
-                NewPosX        = (rt.right - rt.left - DlgWidth)/2;
-                NewPosY        = (rt.bottom - rt.top - DlgHeight)/2;
-                
-                if (NewPosX < 0) NewPosX = 0;
-                if (NewPosY < 0) NewPosY = 0;
-                SetWindowPos(hDlg, 0, NewPosX, NewPosY,
-                    0, 0, SWP_NOZORDER | SWP_NOSIZE);
-            }
+            CenterDialog(hDlg);
             return TRUE;
-
         case WM_COMMAND:
-            if ((LOWORD(wParam) == IDOK) || (LOWORD(wParam) == IDCANCEL))
-            {
+            if ((LOWORD(wParam) == IDOK) || (LOWORD(wParam) == IDCANCEL)) {
                 EndDialog(hDlg, LOWORD(wParam));
                 return TRUE;
             }
             break;
     }
     return FALSE;
+}
+
+BOOL SetTaskbarVisible(BOOL bVisible) {
+#if defined(VER_PLATFORM_WIN32_CE)
+    HWND hWndTaskbar = FindWindow(_T("HHTaskBar"), NULL);
+    if (!bVisible) {
+        SetWindowPos(hWndTaskbar, NULL, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_HIDEWINDOW);
+    } else {
+        SetWindowPos(hWndTaskbar, NULL, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW);
+    }
+    return TRUE;
+#else
+    (void)bVisible;
+    return FALSE;
+#endif
+}
+
+void CenterDialog(HWND hDlg) {
+    RECT rt, rt1;
+    int DlgWidth, DlgHeight;
+    int NewPosX, NewPosY;
+    if (GetWindowRect(hDlg, &rt1)) {
+        GetClientRect(GetParent(hDlg), &rt);
+        DlgWidth  = rt1.right - rt1.left;
+        DlgHeight = rt1.bottom - rt1.top;
+        NewPosX = (rt.right - rt.left - DlgWidth) / 2;
+        NewPosY = (rt.bottom - rt.top - DlgHeight) / 2;
+        if (NewPosX < 0) NewPosX = 0;
+        if (NewPosY < 0) NewPosY = 0;
+        SetWindowPos(hDlg, 0, NewPosX, NewPosY,
+            0, 0, SWP_NOZORDER | SWP_NOSIZE);
+    }
 }
