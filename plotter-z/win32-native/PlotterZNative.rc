@@ -65,6 +65,8 @@ IDM_MENU MENU DISCARDABLE
 BEGIN
     POPUP "&File"
     BEGIN
+        MENUITEM "&Normal / Low-res Mode",      IDM_FILE_LOWRES
+        MENUITEM SEPARATOR
         MENUITEM "E&xit",                       IDM_FILE_EXIT
     END
     POPUP "&Edit"
@@ -82,7 +84,7 @@ BEGIN
         MENUITEM "&Reset",                      IDM_VIEW_RESET
         MENUITEM SEPARATOR
         MENUITEM "Toggle &Footer",              IDM_VIEW_TOGGLEFOOTER
-        MENUITEM "Toggle &Boundary Box",         IDM_VIEW_TOGGLEBOX
+        MENUITEM "Toggle &Boundary Box",        IDM_VIEW_TOGGLEBOX
     END
     POPUP "&Help"
     BEGIN

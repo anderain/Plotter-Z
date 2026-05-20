@@ -9,7 +9,8 @@
 #define IDM_MENU						102
 #define IDD_ABOUTBOX					103
 #define IDM_FILE_EXIT					40002
-#define IDM_HELP_ABOUT					40003
+#define IDM_FILE_LOWRES					40003
+#define IDM_HELP_ABOUT					40004
 #define IDM_VIEW_CAMERA					40010
 #define IDM_VIEW_POSITION				40011
 #define IDM_VIEW_ZOOM					40012

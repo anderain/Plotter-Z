@@ -56,13 +56,15 @@ const COLORREF g_rgbPalette[] = {
 #define COLOR_LIGHT_GRAY    2
 #define COLOR_WHITE         3
 
+#define RGB888_TO_WORD_RGB555(r,g,b)    ((WORD)(((r) >> 3 << 10) | ((g) >> 3 << 5) | ((b) >> 3)))
+
 /*====================================================
  * Canvas zoom factor
  *   Higher values reduce canvas resolution for
  *   low-performance devices.  e.g. factor=2 means
  *   canvas is half the width/height of the DIB.
  *====================================================*/
-static int iCanvasZoomFactor = 1;
+static int iCanvasScaleFactor = 1;
 static int g_iBarHeight      = 0;
 
 /*====================================================
@@ -272,6 +274,7 @@ static int createBackBuffer(HWND hWnd, int iWidth, int iHeight) {
     ReleaseDC(hWnd, hdc);
 
     g_iScreenBpp = bmTest.bmBitsPixel;
+
     switch (g_iScreenBpp) {
         case 2:  iBitCount = 2;  iPaletteSize = 4;   break;
         case 8:  iBitCount = 8;  iPaletteSize = 256; break;
@@ -340,7 +343,7 @@ static void destroyBackBuffer(void) {
 
 /*====================================================
  * Paint canvas to window
- *   Scales canvas pixels by iCanvasZoomFactor
+ *   Scales canvas pixels by iCanvasScaleFactor
  *   into the full-resolution DIB, then BitBlt.
  *====================================================*/
 static void paintCanvasToWindow(HWND hWnd) {
@@ -352,7 +355,7 @@ static void paintCanvasToWindow(HWND hWnd) {
         EndPaint(hWnd, &ps); return;
     }
     if (g_pDibPixels != NULL && g_iScreenBpp != 0) {
-        int iZoom = iCanvasZoomFactor;
+        int iZoom = iCanvasScaleFactor;
         int iY2, iX2;
         BYTE* pRow;
 
@@ -394,9 +397,7 @@ static void paintCanvasToWindow(HWND hWnd) {
                         case 16: {
                             WORD* pDst16 = (WORD*)pRow;
                             COLORREF rgb = g_rgbPalette[iColor];
-                            WORD wColor = (WORD)(((GetRValue(rgb) >> 3) << 11)
-                                               | ((GetGValue(rgb) >> 2) << 5)
-                                               |  (GetBValue(rgb) >> 3));
+                            WORD wColor = RGB888_TO_WORD_RGB555(GetRValue(rgb), GetGValue(rgb), GetBValue(rgb));
                             for (iX2 = iX * iZoom; iX2 < (iX + 1) * iZoom && iX2 < g_iDibW; ++iX2)
                                 pDst16[iX2] = wColor;
                             break;
@@ -417,7 +418,7 @@ static void paintCanvasToWindow(HWND hWnd) {
         }
         BitBlt(hdc, 0, g_iBarHeight, g_iDibW, g_iDibH, g_hdcBuffer, 0, 0, SRCCOPY);
     } else {
-        int iZoom = iCanvasZoomFactor;
+        int iZoom = iCanvasScaleFactor;
         if (iZoom < 1) iZoom = 1;
         for (iY = 0; iY < g_iDibH; ++iY)
             for (iX = 0; iX < g_iDibW; ++iX)
@@ -563,7 +564,7 @@ static void redrawCanvas(HWND hWnd) {
         fillRectCanvas(0, iStartY, g_iCanvasW, CURRENT_FONT_HEIGHT + 2, COLOR_DARK_GRAY);
 
         /* Left: alpha / beta */
-        wsprintf(szBufT, TEXT("%c=%d, %c=%d"),
+        wsprintf(szBufT, TEXT("%c=%3d, %c=%3d"),
             PZ_AE_GREEK_alpha, Camera.iAlphaDeg,
             PZ_AE_GREEK_beta,  Camera.iBetaDeg);
         tcharToChar(szBuf, szBufT, 64);
@@ -573,11 +574,11 @@ static void redrawCanvas(HWND hWnd) {
         {
             const char* szCenter;
             switch (g_iMouseMode) {
-                case MOUSE_MODE_CAMERA:   szCenter = "Mode: Camera";   break;
-                case MOUSE_MODE_POSITION: szCenter = "Mode: Position"; break;
-                case MOUSE_MODE_ZOOM:     szCenter = "Mode: Zoom";     break;
-                case MOUSE_MODE_FORMULA:  szCenter = "Mode: Formula";  break;
-                default:                  szCenter = "Mode: ?";        break;
+                case MOUSE_MODE_CAMERA:   szCenter = "Camera";   break;
+                case MOUSE_MODE_POSITION: szCenter = "Position"; break;
+                case MOUSE_MODE_ZOOM:     szCenter = "Zoom";     break;
+                case MOUSE_MODE_FORMULA:  szCenter = "Formula";  break;
+                default:                  szCenter = "?";        break;
             }
             iLen = (int)strlen(szCenter) * CURRENT_FONT_WIDTH;
             putTextCanvas((g_iCanvasW - iLen) / 2, iStartY + 2,
@@ -586,7 +587,7 @@ static void redrawCanvas(HWND hWnd) {
 
         /* Right: zoom%, (viewportX, viewportY) */
         iZoomPct = (int)(PZ_FIXED_TO_FLOAT(arrZoomLevels[Camera.iZoomLevel]) * 100.0f);
-        wsprintf(szBufT, TEXT("%d%% (%d, %d)"), iZoomPct,
+        wsprintf(szBufT, TEXT("%d%%(%d,%d)"), iZoomPct,
             Camera.iViewportX, Camera.iViewportY);
         tcharToChar(szBuf, szBufT, 64);
         iLen = (int)strlen(szBuf) * CURRENT_FONT_WIDTH;
@@ -1048,22 +1049,32 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
                 case IDM_FILE_EXIT:
                     DestroyWindow(hWnd);
                     break;
+                case IDM_FILE_LOWRES:
+                    {
+                        RECT rc;
+                        int iCw, iCh;
+                        iCanvasScaleFactor = (iCanvasScaleFactor == 1) ? 2 : 1;
+                        destroyBackBuffer();
+                        destroyCanvas();
+                        GetClientRect(hWnd, &rc);
+                        rc.bottom -= g_iBarHeight;
+                        if (rc.bottom < 1) rc.bottom = 1;
+                        iCw = rc.right / iCanvasScaleFactor;
+                        iCh = rc.bottom / iCanvasScaleFactor;
+                        if (iCw < 1) iCw = 1;
+                        if (iCh < 1) iCh = 1;
+                        createCanvas(iCw, iCh);
+                        createBackBuffer(hWnd, rc.right, rc.bottom);
+                        Camera.iViewportS = (g_iCanvasH < g_iCanvasW ? g_iCanvasH : g_iCanvasW) / 2;
+                        Camera.iViewportX = g_iCanvasW / 2;
+                        Camera.iViewportY = g_iCanvasH / 2;
+                        redrawCanvas(hWnd);
+                        InvalidateRect(hWnd, NULL, FALSE);
+                    }
+                    break;
                 case IDM_EDIT_EXPRESSION: {
                     int iRet;
                     iRet = DialogBox(hInst, MAKEINTRESOURCE(IDD_EXPRESSION), hWnd, (DLGPROC)ExprDlgProc);
-                    if (iRet == IDOK) {
-                        if (recalc(hWnd)) {
-                            redrawCanvas(hWnd);
-                            InvalidateRect(hWnd, NULL, FALSE);
-                        } else {
-                            drawErrorScreen(hWnd);
-                        }
-                    }
-                    break;
-                }
-                case IDM_EDIT_WINDOW: {
-                    int iRet;
-                    iRet = DialogBox(hInst, MAKEINTRESOURCE(IDD_WINDOWEDIT), hWnd, (DLGPROC)WindowDlgProc);
                     if (iRet == IDOK) {
                         /* Destroy old state and recalc */
                         if (g_pRenderNode != NULL) {
@@ -1079,7 +1090,19 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
                             g_pVm = NULL;
                         }
                         g_pVm = EzMachine_Create();
-
+                        if (recalc(hWnd)) {
+                            redrawCanvas(hWnd);
+                            InvalidateRect(hWnd, NULL, FALSE);
+                        } else {
+                            drawErrorScreen(hWnd);
+                        }
+                    }
+                    break;
+                }
+                case IDM_EDIT_WINDOW: {
+                    int iRet;
+                    iRet = DialogBox(hInst, MAKEINTRESOURCE(IDD_WINDOWEDIT), hWnd, (DLGPROC)WindowDlgProc);
+                    if (iRet == IDOK) {
                         if (recalc(hWnd)) {
                             redrawCanvas(hWnd);
                             InvalidateRect(hWnd, NULL, FALSE);
@@ -1142,9 +1165,9 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
                 rcClient.bottom -= g_iBarHeight;
                 if (rcClient.bottom < 1) rcClient.bottom = 1;
 
-                if (iCanvasZoomFactor < 1) iCanvasZoomFactor = 1;
-                iCw = rcClient.right / iCanvasZoomFactor;
-                iCh = rcClient.bottom / iCanvasZoomFactor;
+                if (iCanvasScaleFactor < 1) iCanvasScaleFactor = 1;
+                iCw = rcClient.right / iCanvasScaleFactor;
+                iCh = rcClient.bottom / iCanvasScaleFactor;
                 if (iCw < 1) iCw = 1;
                 if (iCh < 1) iCh = 1;
 
@@ -1161,10 +1184,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
                 RenderConfig_GetDefaultStyle(&g_RenderConfig);
                 g_pVm = EzMachine_Create();
 
-                /* Clear canvas and draw "hello world" as initial test */
                 fillRectCanvas(0, 0, g_iCanvasW, g_iCanvasH, COLOR_WHITE);
-                putTextCanvas(2, g_iCanvasH / 2 - CURRENT_FONT_HEIGHT / 2,
-                    (const unsigned char*)"hello world", COLOR_BLACK);
 
                 if (recalc(hWnd)) {
                     redrawCanvas(hWnd);
@@ -1247,11 +1267,29 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
             {
                 /* Mode and toggle shortcuts (work regardless of g_bError) */
                 switch (wParam) {
-                    case 'C': g_iMouseMode = MOUSE_MODE_CAMERA;  break;
-                    case 'P': g_iMouseMode = MOUSE_MODE_POSITION; break;
-                    case 'Z': g_iMouseMode = MOUSE_MODE_ZOOM;    break;
-                    case 'F': g_iMouseMode = MOUSE_MODE_FORMULA;  break;
-                    case 'R': resetView(hWnd); return 0;
+                    case 'C':
+                        g_iMouseMode = MOUSE_MODE_CAMERA; 
+                        redrawCanvas(hWnd);
+                        InvalidateRect(hWnd, NULL, FALSE);
+                        break;
+                    case 'P':
+                        g_iMouseMode = MOUSE_MODE_POSITION;
+                        redrawCanvas(hWnd);
+                        InvalidateRect(hWnd, NULL, FALSE);
+                        break;
+                    case 'Z':
+                        g_iMouseMode = MOUSE_MODE_ZOOM;
+                        redrawCanvas(hWnd);
+                        InvalidateRect(hWnd, NULL, FALSE);
+                        break;
+                    case 'F':
+                        g_iMouseMode = MOUSE_MODE_FORMULA;
+                        redrawCanvas(hWnd);
+                        InvalidateRect(hWnd, NULL, FALSE);
+                        break;
+                    case 'R':
+                        resetView(hWnd);
+                        return 0;
                     case 'T':
                         g_bShowFooter = !g_bShowFooter;
                         redrawCanvas(hWnd);
