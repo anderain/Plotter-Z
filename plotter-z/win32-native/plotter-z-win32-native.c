@@ -717,7 +717,7 @@ static LRESULT CALLBACK ExprDlgProc( HWND hDlg, UINT message,
 
                     /* Convert TCHAR to char */
                     iLen = 0;
-                    while (iLen < EXPR_MAX - 1 && szBufT[iLen] != _T('\0')) {
+                    while (iLen < EXPR_MAX - 1 && szBufT[iLen] != TEXT('\0')) {
                         szNew[iLen] = (char)szBufT[iLen];
                         ++iLen;
                     }
@@ -778,7 +778,7 @@ static void setDlgFloat(HWND hDlg, int id, PZ_FLOAT f) {
     Utils_Ftoa((double)f, szBuf, 4);
     for (i = 0; szBuf[i] != '\0' && i < 31; ++i)
         szBufT[i] = (TCHAR)szBuf[i];
-    szBufT[i] = _T('\0');
+    szBufT[i] = TEXT('\0');
     SetDlgItemText(hDlg, id, szBufT);
 }
 
@@ -787,7 +787,7 @@ static PZ_FLOAT getDlgFloat(HWND hDlg, int id) {
     char szBuf[64];
     int i;
     GetDlgItemText(hDlg, id, szBufT, 64);
-    for (i = 0; szBufT[i] != _T('\0') && i < 63; ++i)
+    for (i = 0; szBufT[i] != TEXT('\0') && i < 63; ++i)
         szBuf[i] = (char)szBufT[i];
     szBuf[i] = '\0';
     return (PZ_FLOAT)Utils_Atof(szBuf);
@@ -798,7 +798,7 @@ static int getDlgInt(HWND hDlg, int id) {
     char szBuf[64];
     int i;
     GetDlgItemText(hDlg, id, szBufT, 64);
-    for (i = 0; szBufT[i] != _T('\0') && i < 63; ++i)
+    for (i = 0; szBufT[i] != TEXT('\0') && i < 63; ++i)
         szBuf[i] = (char)szBufT[i];
     szBuf[i] = '\0';
     return (int)Utils_Atoi(szBuf);
@@ -883,7 +883,7 @@ static LRESULT CALLBACK SampleDlgProc(HWND hDlg, UINT message,
                 szSrc = PlotterZSamples[i].szExpr;
                 for (j = 0; szSrc[j] != '\0' && j < EXPR_MAX - 1; ++j)
                     szBufT[j] = (TCHAR)szSrc[j];
-                szBufT[j] = _T('\0');
+                szBufT[j] = TEXT('\0');
                 SendDlgItemMessage(hDlg, IDC_SAMPLE_LIST,
                     LB_ADDSTRING, 0, (LPARAM)szBufT);
             }
@@ -1092,6 +1092,7 @@ int WINAPI WinMain(	HINSTANCE hInstance,
 }
 
 ATOM MyRegisterClass(HINSTANCE hInstance, LPTSTR szWindowClass) {
+#if VER_PLATFORM_WIN32_CE
 	WNDCLASS	wc;
 
     wc.style			= CS_HREDRAW | CS_VREDRAW;
@@ -1106,6 +1107,25 @@ ATOM MyRegisterClass(HINSTANCE hInstance, LPTSTR szWindowClass) {
     wc.lpszClassName	= szWindowClass;
 
 	return RegisterClass(&wc);
+#else
+	WNDCLASSEX wcex;
+
+	wcex.cbSize = sizeof(WNDCLASSEX); 
+
+	wcex.style			= CS_HREDRAW | CS_VREDRAW;
+	wcex.lpfnWndProc	= (WNDPROC)WndProc;
+	wcex.cbClsExtra		= 0;
+	wcex.cbWndExtra		= 0;
+	wcex.hInstance		= hInstance;
+	wcex.hIcon			= LoadIcon(hInstance, (LPCTSTR)IDI_PLOTTERZNATIVE);
+	wcex.hCursor		= LoadCursor(NULL, IDC_ARROW);
+	wcex.hbrBackground	= (HBRUSH)(COLOR_WINDOW+1);
+	wcex.lpszMenuName	= (LPCSTR)IDM_MENU;
+	wcex.lpszClassName	= szWindowClass;
+	wcex.hIconSm		= NULL;
+
+    return RegisterClassEx(&wcex);
+#endif
 }
 
 BOOL InitInstance(HINSTANCE hInstance, int nCmdShow) {
@@ -1119,8 +1139,13 @@ BOOL InitInstance(HINSTANCE hInstance, int nCmdShow) {
 	MyRegisterClass(hInstance, szWindowClass);
 
 	LoadString(hInstance, IDS_APP_TITLE, szTitle, MAX_LOADSTRING);
+#if VER_PLATFORM_WIN32_CE
 	hWnd = CreateWindow(szWindowClass, szTitle, WS_VISIBLE,
 		0, 0, CW_USEDEFAULT, CW_USEDEFAULT, NULL, NULL, hInstance, NULL);
+#else
+	hWnd = CreateWindow(szWindowClass, szTitle, WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX | WS_MAXIMIZEBOX,
+		0, 0, 640, 480, NULL, NULL, hInstance, NULL);
+#endif
 
 	if (!hWnd) {	
 		return FALSE;
@@ -1128,8 +1153,27 @@ BOOL InitInstance(HINSTANCE hInstance, int nCmdShow) {
 
 	ShowWindow(hWnd, nCmdShow);
 	UpdateWindow(hWnd);
-	if (hwndCB)
+#if VER_PLATFORM_WIN32_CE
+    if (hwndCB) {
 		CommandBar_Show(hwndCB, TRUE);
+    }
+#else
+    {
+        int iScrWidth, iScrHeight;
+        RECT rectWin;
+	    iScrWidth = GetSystemMetrics(SM_CXSCREEN);
+	    iScrHeight = GetSystemMetrics(SM_CYSCREEN);
+	    GetWindowRect(hWnd, &rectWin);
+	    SetWindowPos(
+		    hWnd,
+		    HWND_TOP,
+		    (iScrWidth - (rectWin.right - rectWin.left)) / 2,
+		    (iScrHeight - (rectWin.bottom - rectWin.top)) / 2,
+		    0, 0,
+		    SWP_NOSIZE
+	    );
+    }
+#endif
 
 	return TRUE;
 }
@@ -1287,9 +1331,11 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
                 RECT rcClient, rcBar;
                 int iCw, iCh;
 
-			    hwndCB = CommandBar_Create(hInst, hWnd, 1);			
-			    CommandBar_InsertMenubar(hwndCB, hInst, IDM_MENU, 0);
-			    CommandBar_AddAdornments(hwndCB, 0, 0);
+#if VER_PLATFORM_WIN32_CE
+               hwndCB = CommandBar_Create(hInst, hWnd, 1);			
+               CommandBar_InsertMenubar(hwndCB, hInst, IDM_MENU, 0);
+               CommandBar_AddAdornments(hwndCB, 0, 0);
+#endif
 
                 GetClientRect(hWnd, &rcClient);
                 if (rcClient.right <= 0) rcClient.right = 320;
@@ -1529,7 +1575,9 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
             paintCanvasToWindow(hWnd);
             break;
         case WM_DESTROY:
+#if VER_PLATFORM_WIN32_CE
             CommandBar_Destroy(hwndCB);
+#endif
             if (g_pRenderNode != NULL) RenderNode_Destroy(g_pRenderNode);
             if (g_pVm != NULL) EzMachine_Destroy(g_pVm);
             if (g_pAstExpr != NULL) FzAstNode_Destroy(g_pAstExpr);
@@ -1561,7 +1609,7 @@ LRESULT CALLBACK About(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam) {
 
 BOOL SetTaskbarVisible(BOOL bVisible) {
 #if defined(VER_PLATFORM_WIN32_CE)
-    HWND hWndTaskbar = FindWindow(_T("HHTaskBar"), NULL);
+    HWND hWndTaskbar = FindWindow(TEXT("HHTaskBar"), NULL);
     if (!bVisible) {
         SetWindowPos(hWndTaskbar, NULL, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_HIDEWINDOW);
     } else {
