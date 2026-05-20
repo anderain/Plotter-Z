@@ -5,6 +5,7 @@
 #include <math.h>
 #include "resource.h"
 #include "../utils/hybird_6x8.h"
+#include "../utils/samples.h"
 #include "../../common/utils.h"
 #include "../../common/constants.h"
 #include "../../formula-z/fz.h"
@@ -865,6 +866,53 @@ static LRESULT CALLBACK WindowDlgProc(HWND hDlg, UINT message,
 }
 
 /*====================================================
+ * Samples dialog procedure
+ *====================================================*/
+static LRESULT CALLBACK SampleDlgProc(HWND hDlg, UINT message,
+                                       WPARAM wParam, LPARAM lParam) {
+    (void)lParam;
+    switch (message) {
+        case WM_INITDIALOG:
+        {
+            int i, iCount;
+            iCount = sizeof(PlotterZSamples) / sizeof(PlotterZSamples[0]);
+            for (i = 0; i < iCount; ++i) {
+                TCHAR szBufT[EXPR_MAX];
+                const char* szSrc;
+                int j;
+                szSrc = PlotterZSamples[i].szExpr;
+                for (j = 0; szSrc[j] != '\0' && j < EXPR_MAX - 1; ++j)
+                    szBufT[j] = (TCHAR)szSrc[j];
+                szBufT[j] = _T('\0');
+                SendDlgItemMessage(hDlg, IDC_SAMPLE_LIST,
+                    LB_ADDSTRING, 0, (LPARAM)szBufT);
+            }
+            CenterDialog(hDlg);
+            return TRUE;
+        }
+        case WM_COMMAND:
+            switch (LOWORD(wParam)) {
+                case IDOK:
+                {
+                    LRESULT iSel;
+                    iSel = SendDlgItemMessage(hDlg, IDC_SAMPLE_LIST,
+                        LB_GETCURSEL, 0, 0);
+                    if (iSel == LB_ERR)
+                        EndDialog(hDlg, -1);
+                    else
+                        EndDialog(hDlg, (int)iSel);
+                    return TRUE;
+                }
+                case IDCANCEL:
+                    EndDialog(hDlg, -1);
+                    return TRUE;
+            }
+            break;
+    }
+    return FALSE;
+}
+
+/*====================================================
  * Draw progress bar
  *   barY   - top Y coordinate of the bar
  *   iPct   - progress percentage (0-100)
@@ -1098,6 +1146,45 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
                 case IDM_FILE_EXIT:
                     DestroyWindow(hWnd);
                     break;
+                case IDM_FILE_SAMPLES:
+                {
+                    int iSel;
+                    iSel = DialogBox(hInst, MAKEINTRESOURCE(IDD_SAMPLES),
+                                     hWnd, (DLGPROC)SampleDlgProc);
+                    if (iSel >= 0) {
+                        const PzSample* p;
+                        p = &PlotterZSamples[iSel];
+                        Camera.xMin  = p->xMin;
+                        Camera.xMax  = p->xMax;
+                        Camera.yMin  = p->yMin;
+                        Camera.yMax  = p->yMax;
+                        Camera.zMin  = p->zMin;
+                        Camera.zMax  = p->zMax;
+                        Camera.xGrid = 30;
+                        Camera.yGrid = 30;
+                        Utils_StringCopy(szExpr, EXPR_MAX, p->szExpr);
+                        if (g_pRenderNode != NULL) {
+                            RenderNode_Destroy(g_pRenderNode);
+                            g_pRenderNode = NULL;
+                        }
+                        if (g_pAstExpr != NULL) {
+                            FzAstNode_Destroy(g_pAstExpr);
+                            g_pAstExpr = NULL;
+                        }
+                        if (g_pVm != NULL) {
+                            EzMachine_Destroy(g_pVm);
+                            g_pVm = NULL;
+                        }
+                        g_pVm = EzMachine_Create();
+                        if (recalc(hWnd)) {
+                            redrawCanvas(hWnd);
+                            InvalidateRect(hWnd, NULL, FALSE);
+                        } else {
+                            drawErrorScreen(hWnd);
+                        }
+                    }
+                }
+                break;
                 case IDM_FILE_LOWRES:
                     {
                         RECT rc;

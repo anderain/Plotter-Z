@@ -65,6 +65,7 @@ IDM_MENU MENU DISCARDABLE
 BEGIN
     POPUP "&File"
     BEGIN
+        MENUITEM "&Samples",                    IDM_FILE_SAMPLES
         MENUITEM "&Normal / Low-res Mode",      IDM_FILE_LOWRES
         MENUITEM SEPARATOR
         MENUITEM "E&xit",                       IDM_FILE_EXIT
@@ -98,7 +99,7 @@ END
 // Dialog
 //
 
-IDD_ABOUTBOX DIALOGEX 0, 0, 111, 73
+IDD_ABOUTBOX DIALOG DISCARDABLE  0, 0, 111, 73
 STYLE DS_MODALFRAME | WS_POPUP | WS_CAPTION | WS_SYSMENU
 EXSTYLE WS_EX_CAPTIONOKBTN
 CAPTION "About Plotter-Z"
@@ -145,6 +146,18 @@ BEGIN
     EDITTEXT        IDC_WIN_YGRID,94,59,32,14,ES_AUTOHSCROLL
     PUSHBUTTON      "Cancel",IDCANCEL,7,79,56,14
     PUSHBUTTON      "Confirm",IDOK,70,79,56,14
+END
+
+IDD_SAMPLES DIALOG DISCARDABLE  0, 0, 123, 121
+STYLE DS_MODALFRAME | WS_POPUP | WS_CAPTION
+CAPTION "Samples"
+FONT 8, "Tahoma"
+BEGIN
+    LTEXT           "Clicking Render will overwrite your current expression and window settings.",
+                    IDC_STATIC,4,5,115,24
+    LISTBOX         IDC_SAMPLE_LIST,3,32,116,73,WS_VSCROLL
+    PUSHBUTTON      "Cancel",IDCANCEL,4,103,36,14
+    PUSHBUTTON      "Render",IDOK,82,103,36,14
 END
 
 

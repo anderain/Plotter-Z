@@ -10,6 +10,7 @@
 #define IDD_ABOUTBOX					103
 #define IDM_FILE_EXIT					40002
 #define IDM_FILE_LOWRES					40003
+#define IDM_FILE_SAMPLES				40005
 #define IDM_HELP_ABOUT					40004
 #define IDM_VIEW_CAMERA					40010
 #define IDM_VIEW_POSITION				40011
@@ -31,6 +32,8 @@
 #define IDC_WIN_ZMAX					1008
 #define IDC_WIN_XGRID					1009
 #define IDC_WIN_YGRID					1010
+#define IDD_SAMPLES						107
+#define IDC_SAMPLE_LIST					1011
 
 // Next default values for new objects
 // 
