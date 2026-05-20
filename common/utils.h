@@ -19,6 +19,7 @@
 #define PZ_FLOAT float
 
 #define PZ_PI   ((PZ_FLOAT)3.14159265f)
+#define PZ_E    ((PZ_FLOAT) 2.7182818f)
 
 /*====================================================
  * Fixed-point arithmetic (Q2.14)

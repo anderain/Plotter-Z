@@ -151,7 +151,7 @@ static void EzMachine_Function (EzMachine* pVm, PzFuncIndex iFuncIndex) {
         case PZF_LOG:   handleSingleParamFunc(log);
         case PZF_LN: {
             fArg = evalPop();
-            evalPush((PZ_FLOAT)(log(fArg) / log(exp(1))));
+            evalPush((PZ_FLOAT)(log(fArg) / log(PZ_E)));
             return;
         }
     }
