@@ -130,7 +130,12 @@ char            g_szErrorBuf[EZ_ERROR_CONTENT_LENGTH];
 int             g_bShowBox      = 1;
 int             g_iExprPosX     = 0;
 int             g_iExprPosY     = 0;
-static int      g_bError        = 0;
+
+/* Application stage */
+#define STAGE_IDLE      0
+#define STAGE_ERROR     1
+#define STAGE_READY     2
+static int      g_iStage        = STAGE_IDLE;
 
 /* Mouse interaction modes */
 #define MOUSE_MODE_CAMERA      0
@@ -632,6 +637,56 @@ static void redrawCanvas(HWND hWnd) {
 }
 
 /*====================================================
+ * Draw idle screen (centered, multi-line intro)
+ *====================================================*/
+static void drawIdleScreen(HWND hWnd) {
+    static const char* szLines[] = {
+        " \x17 Plotter-Z CE \x18 ",
+        "",
+        "A 3D function graph plotting tool",
+        "Edit > Expression to start",
+        "",
+        "Maintained by \xC2\xBD\xC1 \xD5\xDC\xC0\xE6"
+    };
+    static const int iColors[] = {
+        COLOR_BLACK,
+        COLOR_BLACK,
+        COLOR_DARK_GRAY,
+        COLOR_DARK_GRAY,
+        COLOR_BLACK,
+        COLOR_LIGHT_GRAY
+    };
+    static const BOOL bReverse[] = { TRUE, FALSE, FALSE, FALSE, FALSE, TRUE };
+    static const int iCount = sizeof(szLines) / sizeof(szLines[0]);
+    static const int iPadding = 2;
+    int iLine, iLen, x, y;
+    int iTotalH;
+    iTotalH = iCount * CURRENT_FONT_HEIGHT + 2 * iPadding;
+    y = (g_iCanvasH - iTotalH) / 2;
+    if (y < 0) y = 0;
+    fillRectCanvas(0, 0, g_iCanvasW, g_iCanvasH, COLOR_WHITE);
+    for (iLine = 0; iLine < iCount; ++iLine) {
+        iLen = (int)strlen(szLines[iLine]) * CURRENT_FONT_WIDTH;
+        x = (g_iCanvasW - iLen) / 2;
+        if (x < 2) x = 2;
+        if (bReverse[iLine]) {
+            fillRectCanvas(
+                x - iPadding,
+                y - iPadding / 2,
+                iLen + iPadding * 2,
+                CURRENT_FONT_HEIGHT + iPadding,
+                iColors[iLine]
+            );
+            putTextCanvas(x, y, (const unsigned char*)szLines[iLine], COLOR_WHITE);
+        } else {
+            putTextCanvas(x, y, (const unsigned char*)szLines[iLine], iColors[iLine]);
+        }
+        y += CURRENT_FONT_HEIGHT + iPadding;
+    }
+    InvalidateRect(hWnd, NULL, FALSE);
+}
+
+/*====================================================
  * Draw error screen (centered specific message)
  *====================================================*/
 static void drawErrorScreen(HWND hWnd) {
@@ -970,11 +1025,11 @@ int recalc(HWND hWnd) {
     PZ_FLOAT fyRange = (PZ_FLOAT)(Camera.yMax - Camera.yMin);
     EzError iCompileErr;
 
-    if (g_pVm == NULL) { g_bError = 1; return 0; }
+    if (g_pVm == NULL) { g_iStage = STAGE_ERROR; return 0; }
 
     if (g_pAstExpr == NULL) {
         g_pAstExpr = FzParser_ParseExpression(szExpr);
-        if (g_pAstExpr == NULL) { g_bError = 1; return 0; }
+        if (g_pAstExpr == NULL) { g_iStage = STAGE_ERROR; return 0; }
         EzMachine_DeclareVariable(g_pVm, "x");
         EzMachine_DeclareVariable(g_pVm, "y");
         EzMachine_DeclareVariable(g_pVm, "pi");
@@ -982,7 +1037,7 @@ int recalc(HWND hWnd) {
         EzMachine_SetVariableByIndex(g_pVm, 2, PZ_PI);
         iCompileErr = EzMachine_Compile(g_pVm, g_pAstExpr, szErrorBuf);
         if (iCompileErr != EZERR_NONE) {
-            g_bError = 1;
+            g_iStage = STAGE_ERROR;
             switch (iCompileErr) {
                 case EZERR_VARIABLE_UNDEFINED:
                     strcpy(g_szErrorBuf, "Undefined Variable: ");
@@ -1055,7 +1110,7 @@ int recalc(HWND hWnd) {
             iLastPct = iPct;
         }
     }
-    g_bError = 0;
+    g_iStage = STAGE_READY;
     return 1;
 }
 
@@ -1143,7 +1198,7 @@ BOOL InitInstance(HINSTANCE hInstance, int nCmdShow) {
 	hWnd = CreateWindow(szWindowClass, szTitle, WS_VISIBLE,
 		0, 0, CW_USEDEFAULT, CW_USEDEFAULT, NULL, NULL, hInstance, NULL);
 #else
-	hWnd = CreateWindow(szWindowClass, szTitle, WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX | WS_MAXIMIZEBOX,
+	hWnd = CreateWindow(szWindowClass, szTitle, WS_OVERLAPPEDWINDOW,
 		0, 0, 640, 480, NULL, NULL, hInstance, NULL);
 #endif
 
@@ -1365,69 +1420,20 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
                 g_RenderConfig.sInterfaces.putChar  = rzPutChar;
                 RenderConfig_GetDefaultStyle(&g_RenderConfig);
                 g_pVm = EzMachine_Create();
-                g_bError = 1;
 
-                /* Idle screen */
-                {
-                    static const char* szLines[] = {
-                        " \x17 Plotter-Z CE \x18 ",
-                        "",
-                        "A 3D function graph plotting tool",
-                        "Edit > Expression to start",
-                        "",
-                        "Maintained by \xC2\xBD\xC1 \xD5\xDC\xC0\xE6"
-                    };
-                    static const int iColors[] = {
-                        COLOR_BLACK,
-                        COLOR_BLACK,
-                        COLOR_DARK_GRAY,
-                        COLOR_DARK_GRAY,
-                        COLOR_BLACK,
-                        COLOR_LIGHT_GRAY
-                    };
-                    static const BOOL bReverse[] = { TRUE, FALSE, FALSE, FALSE, FALSE, TRUE };
-                    static const int iCount = sizeof(szLines) / sizeof(szLines[0]);
-                    static const int iPadding = 2;
-                    int iLine, iLen, x, y;
-                    int iTotalH;
-                    iTotalH = iCount * CURRENT_FONT_HEIGHT + 2 * iPadding;
-                    y = (g_iCanvasH - iTotalH) / 2;
-                    if (y < 0) y = 0;
-                    fillRectCanvas(0, 0, g_iCanvasW, g_iCanvasH, COLOR_WHITE);
-                    for (iLine = 0; iLine < iCount; ++iLine) {
-                        iLen = (int)strlen(szLines[iLine]) * CURRENT_FONT_WIDTH;
-                        x = (g_iCanvasW - iLen) / 2;
-                        if (x < 2) x = 2;
-                        if (bReverse[iLine]) {
-                            fillRectCanvas(
-                                x - iPadding,
-                                y - iPadding / 2,
-                                iLen + iPadding * 2,
-                                CURRENT_FONT_HEIGHT + iPadding,
-                                iColors[iLine]
-                            );
-                            putTextCanvas(x, y, (const unsigned char*)szLines[iLine], COLOR_WHITE);
-                        }
-                        else {
-                            putTextCanvas(x, y, (const unsigned char*)szLines[iLine], iColors[iLine]);
-                        }
-
-                        y += CURRENT_FONT_HEIGHT + iPadding;
-                    }
-                }
-                InvalidateRect(hWnd, NULL, FALSE);
+                drawIdleScreen(hWnd);
                 UpdateWindow(hWnd);
             }
             break;
         case WM_LBUTTONDOWN:
-            if (g_bError) break;
+            if (g_iStage != STAGE_READY) break;
             g_bMouseDown = 1;
             g_iMousePrevX = LOWORD(lParam);
             g_iMousePrevY = HIWORD(lParam);
             SetCapture(hWnd);
             break;
         case WM_LBUTTONUP:
-            if (g_bError) break;
+            if (g_iStage != STAGE_READY) break;
             g_bMouseDown = 0;
             g_iZoomAccum = 0;
             ReleaseCapture();
@@ -1436,7 +1442,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
             g_dwLastMouseRefresh = 0;
             break;
         case WM_MOUSEMOVE:
-            if (g_bError) break;
+            if (g_iStage != STAGE_READY) break;
             if (g_bMouseDown) {
                 int iDeltaX, iDeltaY;
                 int iMouseX = LOWORD(lParam);
@@ -1491,7 +1497,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
             break;
         case WM_KEYDOWN:
             {
-                /* Mode and toggle shortcuts (work regardless of g_bError) */
+                /* Mode and toggle shortcuts (work in any stage) */
                 switch (wParam) {
                     case 'C':
                         g_iMouseMode = MOUSE_MODE_CAMERA; 
@@ -1528,7 +1534,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
                         return 0;
                 }
             }
-            if (g_bError) break;
+            if (g_iStage != STAGE_READY) break;
             {
                 int bRedraw = 0;
                 switch (g_iMouseMode) {
@@ -1573,6 +1579,35 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
             break;
         case WM_PAINT:
             paintCanvasToWindow(hWnd);
+            break;
+        case WM_SIZE:
+            if (wParam != SIZE_MINIMIZED && g_iCanvasW > 0) {
+                int iNewW, iNewH, iCw, iCh;
+                iNewW = LOWORD(lParam);
+                iNewH = HIWORD(lParam);
+                iNewH -= g_iBarHeight;
+                if (iNewH < 1) iNewH = 1;
+                if (iNewW != g_iDibW || iNewH != g_iDibH) {
+                    iCw = iNewW / iCanvasScaleFactor;
+                    iCh = iNewH / iCanvasScaleFactor;
+                    if (iCw < 1) iCw = 1;
+                    if (iCh < 1) iCh = 1;
+                    destroyBackBuffer();
+                    destroyCanvas();
+                    createCanvas(iCw, iCh);
+                    createBackBuffer(hWnd, iNewW, iNewH);
+                    Camera.iViewportS = (g_iCanvasH < g_iCanvasW ? g_iCanvasH : g_iCanvasW) / 2;
+                    Camera.iViewportX = g_iCanvasW / 2;
+                    Camera.iViewportY = g_iCanvasH / 2;
+                    if (g_iStage == STAGE_IDLE)
+                        drawIdleScreen(hWnd);
+                    else if (g_iStage == STAGE_ERROR)
+                        drawErrorScreen(hWnd);
+                    else
+                        redrawCanvas(hWnd);
+                    InvalidateRect(hWnd, NULL, FALSE);
+                }
+            }
             break;
         case WM_DESTROY:
 #if VER_PLATFORM_WIN32_CE
