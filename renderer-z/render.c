@@ -144,9 +144,9 @@ void RenderNode_Draw(RenderNode* pNode, const RenderConfig* pConfig, int iStartX
         case RN_ENCLOSURE: {
             int x, y;
             int w;
-            int t = pNode->sLayout.iAscent;
-            int b = pNode->sLayout.iDescent;
-            int r = pConfig->sEnclosure.iRadius;
+            int asc = pNode->sLayout.iAscent;
+            int dsc = pNode->sLayout.iDescent;
+            int rad = pConfig->sEnclosure.iRadius;
 
             RenderNode* pContent = pNode->uData.sEnclosure.pContent;
 
@@ -158,31 +158,44 @@ void RenderNode_Draw(RenderNode* pNode, const RenderConfig* pConfig, int iStartX
             x = iStartX + pConfig->sEnclosure.iMargin;
             w = pNode->sLayout.iWidth - pConfig->sEnclosure.iMargin * 2 - 1;
 
-            pConfig->sInterfaces.plotLine(
-                x, y - t + r,
-                x, y + b - r
-            );
-            pConfig->sInterfaces.plotLine(
-                x, y - t + r,
-                x + r, y - t
-            );
-            pConfig->sInterfaces.plotLine(
-                x, y + b - r,
-                x + r, y + b
-            );
-            pConfig->sInterfaces.plotLine(
-                x + w, y - t + r,
-                x + w, y + b - r
-            );
-            pConfig->sInterfaces.plotLine(
-                x + w, y - t + r,
-                x + w - r, y - t
-            );
-            pConfig->sInterfaces.plotLine(
-                x + w, y + b - r,
-                x + w - r, y + b
-            );
-
+            /* Curved parentheses */
+            if (pNode->uData.sEnclosure.bCurve) {
+                pConfig->sInterfaces.plotLine(
+                    x, y - asc + rad,
+                    x, y + dsc - rad
+                );
+                pConfig->sInterfaces.plotLine(
+                    x, y - asc + rad,
+                    x + rad, y - asc
+                );
+                pConfig->sInterfaces.plotLine(
+                    x, y + dsc - rad,
+                    x + rad, y + dsc
+                );
+                pConfig->sInterfaces.plotLine(
+                    x + w, y - asc + rad,
+                    x + w, y + dsc - rad
+                );
+                pConfig->sInterfaces.plotLine(
+                    x + w, y - asc + rad,
+                    x + w - rad, y - asc
+                );
+                pConfig->sInterfaces.plotLine(
+                    x + w, y + dsc - rad,
+                    x + w - rad, y + dsc
+                );
+            }
+            /* Straight absolute value bars */
+            else {
+                pConfig->sInterfaces.plotLine(
+                    x, y - asc,
+                    x, y + dsc
+                );
+                pConfig->sInterfaces.plotLine(
+                    x + w, y - asc,
+                    x + w, y + dsc
+                );
+            }
             break;
         }
         case RN_STACK: {

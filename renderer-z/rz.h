@@ -33,6 +33,7 @@ typedef struct tagRenderNode {
         } sHorizontal;
         struct {
             struct tagRenderNode* pContent;
+            int bCurve;
         } sEnclosure;
         struct {
             struct tagRenderNode* pTop;

@@ -118,18 +118,6 @@ rz-test-main.o: $(RZ_SRC_PATH)/rz-test-main.c $(RZ_SRC_PATH)/rz.h
 	$(CC) $(C_FLAGS) -DIS_TEST_PROGRAM $(RZ_SRC_PATH)/rz-test-main.c -o rz-test-main.o
 
 #====================================================
-# * Target: Renderer-Z Files
-#====================================================
-transform.o: $(RZ_SRC_PATH)/transform.c $(RZ_SRC_PATH)/rz.h
-	$(CC) $(C_FLAGS)  $(RZ_SRC_PATH)/transform.c -o transform.o
-
-render.o: $(RZ_SRC_PATH)/render.c $(RZ_SRC_PATH)/rz.h
-	$(CC) $(C_FLAGS)  $(RZ_SRC_PATH)/render.c -o render.o
-
-rz-test-main.o: $(RZ_SRC_PATH)/rz-test-main.c $(RZ_SRC_PATH)/rz.h
-	$(CC) $(C_FLAGS) -DIS_TEST_PROGRAM $(RZ_SRC_PATH)/rz-test-main.c -o rz-test-main.o
-
-#====================================================
 # * Clean
 #====================================================
 .PHONY: clean

@@ -40,6 +40,7 @@ static RenderNode* createRenderNode(RenderNodeType iType) {
             pNode->uData.sHorizontal.pList = vlNewList();  
             break;
         case RN_ENCLOSURE:
+            pNode->uData.sEnclosure.bCurve = 1;
             pNode->uData.sEnclosure.pContent = NULL;
             break;
         case RN_STACK:
@@ -224,6 +225,17 @@ static void transform(RenderNode* pParentHorz, FzAstNode* pAstNode) {
                 transform(pScript, pAstContent);
 
                 vlPushBack(pParentHorz->uData.sHorizontal.pList, pSuperscriptNode);
+            }
+            else if (Utils_IsStringEqual(szFuncName, "abs") && iNumArg == 1) {
+                RenderNode* pEnclosureNode = createRenderNode(RN_ENCLOSURE);
+                RenderNode* pChildHorz = createRenderNode(RN_HORIZONTAL);
+                FzAstNode* pAstContent = (FzAstNode *)pAstNode->uData.sFunctionCall.pListArguments->pHead->pData;
+
+                pEnclosureNode->uData.sEnclosure.pContent = pChildHorz;
+                transform(pChildHorz, pAstContent);
+
+                pEnclosureNode->uData.sEnclosure.bCurve = 0;
+                vlPushBack(pParentHorz->uData.sHorizontal.pList, pEnclosureNode);
             }
             else {
                 VlistNode* pParam = NULL;

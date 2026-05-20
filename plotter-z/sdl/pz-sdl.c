@@ -41,7 +41,7 @@ static const PzSdlConfig DEFAULT_CONFIG = {
     -6.0f, 6.0f, 20,                            /* yMin, yMax, yGrid */
     -3.0f, 3.0f,                                /* zMin, zMax */
     0,                                          /* showBox */
-    "sin(sqr(x^2+y^2))*cos(sqr(x^2+y^2))"       /* default expression */
+    "exp(-abs(x/pi))*cos(sqr(x^2+y^2))*3"       /* default expression */
 };
 
 /*====================================================
