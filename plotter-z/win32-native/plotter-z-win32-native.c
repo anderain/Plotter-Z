@@ -217,6 +217,18 @@ static void draw1bppCanvas(const unsigned char *raw,
     }
 }
 
+/*====================================================
+ * Invert colors in a rectangle (0<->3, 1<->2)
+ *====================================================*/
+static void invertRectCanvas(int dx, int dy, int w, int h) {
+    int x, y, iColor;
+    for (y = 0; y < h; ++y)
+        for (x = 0; x < w; ++x) {
+            iColor = getPixelCanvas(dx + x, dy + y);
+            setPixelCanvas(dx + x, dy + y, 3 - iColor);
+        }
+}
+
 static void putCharCanvas(int x, int y, unsigned char ch, int iColor) {
     draw1bppCanvas(FONT_HYBIRD_6x8 + 8 * (int)ch, x, y, 8, 8, iColor);
 }
@@ -853,6 +865,47 @@ static LRESULT CALLBACK WindowDlgProc(HWND hDlg, UINT message,
 }
 
 /*====================================================
+ * Draw progress bar
+ *   barY   - top Y coordinate of the bar
+ *   iPct   - progress percentage (0-100)
+ *====================================================*/
+static void drawProgressBar(int barY, int iPct) {
+    int barW, barH, barX;
+    int iFillW;
+    char szBuf[16];
+    int iLen, tx, ty;
+
+    barW = g_iCanvasW / 2;
+    barH = CURRENT_FONT_HEIGHT * 2;
+    barX = (g_iCanvasW - barW) / 2;
+    if (barX < 0) barX = 0;
+
+    /* Border */
+    drawLineCanvas(barX, barY, barX + barW - 1, barY, COLOR_BLACK);
+    drawLineCanvas(barX, barY + barH - 1, barX + barW - 1,
+                   barY + barH - 1, COLOR_BLACK);
+    drawLineCanvas(barX, barY, barX, barY + barH - 1, COLOR_BLACK);
+    drawLineCanvas(barX + barW - 1, barY, barX + barW - 1,
+                   barY + barH - 1, COLOR_BLACK);
+
+    /* Interior fill WHITE */
+    fillRectCanvas(barX + 1, barY + 1, barW - 2, barH - 2, COLOR_WHITE);
+
+    /* Percentage text centered */
+    Salvia_Format(szBuf, "%d%%", iPct);
+    iLen = (int)strlen(szBuf) * CURRENT_FONT_WIDTH;
+    tx = barX + (barW - iLen) / 2;
+    ty = barY + (barH - CURRENT_FONT_HEIGHT) / 2;
+    putTextCanvas(tx, ty, (const unsigned char*)szBuf, COLOR_BLACK);
+
+    /* Invert filled portion */
+    iFillW = barW * iPct / 100;
+    if (iFillW > barW - 2) iFillW = barW - 2;
+    if (iFillW > 0)
+        invertRectCanvas(barX + 1, barY + 1, iFillW, barH - 2);
+}
+
+/*====================================================
  * Recalculate surface geometry
  *====================================================*/
 int recalc(HWND hWnd) {
@@ -911,21 +964,17 @@ int recalc(HWND hWnd) {
 
     /* Show progress on canvas */
     {
-        char szBuf[32];
-        int x, y, iLen;
+        int y;
         fillRectCanvas(0, 0, g_iCanvasW, g_iCanvasH, COLOR_WHITE);
-        y = g_iCanvasH / 2 - CURRENT_FONT_HEIGHT;
+        y = g_iCanvasH / 2 - CURRENT_FONT_HEIGHT - 4;
         if (y < 0) y = 0;
-        iLen = 10 * CURRENT_FONT_WIDTH;
-        x = (g_iCanvasW - iLen) / 2;
-        if (x < 2) x = 2;
-        putTextCanvas(x, y, (const unsigned char*)"Recalc ...", COLOR_BLACK);
-        Salvia_Format(szBuf, "0%%");
-        iLen = (int)strlen(szBuf) * CURRENT_FONT_WIDTH;
-        x = (g_iCanvasW - iLen) / 2;
-        if (x < 2) x = 2;
-        putTextCanvas(x, y + CURRENT_FONT_HEIGHT + 2,
-            (const unsigned char*)szBuf, COLOR_BLACK);
+        {
+            int iLen = 10 * CURRENT_FONT_WIDTH;
+            int x = (g_iCanvasW - iLen) / 2;
+            if (x < 2) x = 2;
+            putTextCanvas(x, y, (const unsigned char*)"Recalc ...", COLOR_BLACK);
+        }
+        drawProgressBar(y + CURRENT_FONT_HEIGHT + 4, 0);
         InvalidateRect(hWnd, NULL, FALSE);
         UpdateWindow(hWnd);
     }
@@ -944,17 +993,11 @@ int recalc(HWND hWnd) {
         }
         iPct = (ix + 1) * 100 / Camera.xGrid;
         if (iPct != iLastPct) {
-            char szBuf[32];
-            int x, y, iLen;
             MSG msg;
-            y = g_iCanvasH / 2 + 2;
+            int y;
+            y = g_iCanvasH / 2 - CURRENT_FONT_HEIGHT - 4;
             if (y < 0) y = 0;
-            Salvia_Format(szBuf, "%d%%", iPct);
-            fillRectCanvas(0, y, g_iCanvasW, CURRENT_FONT_HEIGHT, COLOR_WHITE);
-            iLen = (int)strlen(szBuf) * CURRENT_FONT_WIDTH;
-            x = (g_iCanvasW - iLen) / 2;
-            if (x < 2) x = 2;
-            putTextCanvas(x, y, (const unsigned char*)szBuf, COLOR_BLACK);
+            drawProgressBar(y + CURRENT_FONT_HEIGHT + 4, iPct);
             InvalidateRect(hWnd, NULL, FALSE);
             UpdateWindow(hWnd);
             while (PeekMessage(&msg, NULL, 0, 0, PM_REMOVE)) {
