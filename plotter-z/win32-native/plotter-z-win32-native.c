@@ -1194,28 +1194,49 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
                 /* Idle screen */
                 {
                     static const char* szLines[] = {
-                        "Plotter-Z CE",
+                        " \x17 Plotter-Z CE \x18 ",
+                        "",
                         "A 3D function graph plotting tool",
-                        "Edit > Expression to start"
+                        "Edit > Expression to start",
+                        "",
+                        "Maintained by \xC2\xBD\xC1 \xD5\xDC\xC0\xE6"
                     };
                     static const int iColors[] = {
                         COLOR_BLACK,
-                        COLOR_LIGHT_GRAY,
-                        COLOR_DARK_GRAY
+                        COLOR_BLACK,
+                        COLOR_DARK_GRAY,
+                        COLOR_DARK_GRAY,
+                        COLOR_BLACK,
+                        COLOR_LIGHT_GRAY
                     };
+                    static const BOOL bReverse[] = { TRUE, FALSE, FALSE, FALSE, FALSE, TRUE };
+                    static const int iCount = sizeof(szLines) / sizeof(szLines[0]);
+                    static const int iPadding = 2;
                     int iLine, iLen, x, y;
                     int iTotalH;
-                    iTotalH = 3 * CURRENT_FONT_HEIGHT + 2 * 2;
+                    iTotalH = iCount * CURRENT_FONT_HEIGHT + 2 * iPadding;
                     y = (g_iCanvasH - iTotalH) / 2;
                     if (y < 0) y = 0;
                     fillRectCanvas(0, 0, g_iCanvasW, g_iCanvasH, COLOR_WHITE);
-                    for (iLine = 0; iLine < 3; ++iLine) {
+                    for (iLine = 0; iLine < iCount; ++iLine) {
                         iLen = (int)strlen(szLines[iLine]) * CURRENT_FONT_WIDTH;
                         x = (g_iCanvasW - iLen) / 2;
                         if (x < 2) x = 2;
-                        putTextCanvas(x, y,
-                            (const unsigned char*)szLines[iLine], iColors[iLine]);
-                        y += CURRENT_FONT_HEIGHT + 2;
+                        if (bReverse[iLine]) {
+                            fillRectCanvas(
+                                x - iPadding,
+                                y - iPadding / 2,
+                                iLen + iPadding * 2,
+                                CURRENT_FONT_HEIGHT + iPadding,
+                                iColors[iLine]
+                            );
+                            putTextCanvas(x, y, (const unsigned char*)szLines[iLine], COLOR_WHITE);
+                        }
+                        else {
+                            putTextCanvas(x, y, (const unsigned char*)szLines[iLine], iColors[iLine]);
+                        }
+
+                        y += CURRENT_FONT_HEIGHT + iPadding;
                     }
                 }
                 InvalidateRect(hWnd, NULL, FALSE);
