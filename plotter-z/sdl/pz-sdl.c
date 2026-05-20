@@ -396,7 +396,7 @@ static void putText(int x, int y, const unsigned char* usz, Uint32 uColor) {
 static void xyz2xy(PZ_FLOAT x, PZ_FLOAT y, PZ_FLOAT z, int *ox, int *oy) {
     PZ_FLOAT zoom = arrZoomLevels[Camera.iZoomLevel];
     PZ_FLOAT scale = Camera.iViewportS * zoom;
-    PZ_FLOAT nx = x * Camera.cosB - y * Camera.sinB;
+    PZ_FLOAT nx = y * Camera.sinB - x * Camera.cosB;
     PZ_FLOAT ny = (x * Camera.sinB + y * Camera.cosB) * Camera.sinA - z * Camera.cosA;
     *ox = (int)(Camera.iViewportX + scale * nx);
     *oy = (int)(Camera.iViewportY + scale * ny);

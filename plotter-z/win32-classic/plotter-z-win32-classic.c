@@ -173,7 +173,7 @@ void xyz2xy(PZ_FIXED x, PZ_FIXED y, PZ_FIXED z, int *ox, int *oy) {
     int iZoom = arrZoomLevels[Camera.iZoomLevel];
     int iScale = (int)(((int)Camera.iViewportS * iZoom + PZ_FIXED_HALF) >> PZ_FIXED_SHIFT);
     int nx, ny;
-    nx = PZ_FIXED_MUL(x, Camera.cosB) - PZ_FIXED_MUL(y, Camera.sinB);
+    nx = PZ_FIXED_MUL(y, Camera.sinB) - PZ_FIXED_MUL(x, Camera.cosB);
     ny = PZ_FIXED_MUL(PZ_FIXED_MUL(x, Camera.sinB) + PZ_FIXED_MUL(y, Camera.cosB), Camera.sinA)
        - PZ_FIXED_MUL(z, Camera.cosA);
     *ox = Camera.iViewportX + (int)(((int)iScale * nx + PZ_FIXED_HALF) >> PZ_FIXED_SHIFT);
