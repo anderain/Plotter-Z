@@ -11,6 +11,7 @@
 #include "../../evaluator-z/ez.h"
 #include "../../renderer-z/rz.h"
 #include "../../renderer-z/ascii_extended_mapping.h"
+#include "../../deps/salvia89/salvia.h"
 
 #define ZOOM_DRAG_THRESHOLD     15
 #define MOUSE_REFRESH_MS        120
@@ -524,16 +525,6 @@ static void drawBoxEdgesCanvas(void) {
 }
 
 /*====================================================
- * Copy TCHAR string to char buffer (ASCII-safe)
- *====================================================*/
-static void tcharToChar(char* dst, const TCHAR* src, int maxLen) {
-    int i;
-    for (i = 0; i < maxLen - 1 && src[i] != _T('\0'); ++i)
-        dst[i] = (char)src[i];
-    dst[i] = '\0';
-}
-
-/*====================================================
  * Full redraw (clear -> box -> surface -> footer)
  *====================================================*/
 static void redrawCanvas(HWND hWnd) {
@@ -557,28 +548,55 @@ static void redrawCanvas(HWND hWnd) {
     /* Footer bar */
     if (g_bShowFooter) {
         int iZoomPct;
-        TCHAR szBufT[64];
         char szBuf[64];
+        BOOL bIsWideCanvas = g_iCanvasW >= 240;
+
         iStartY = g_iCanvasH - CURRENT_FONT_HEIGHT - 2;
         if (iStartY < 0) iStartY = 0;
         fillRectCanvas(0, iStartY, g_iCanvasW, CURRENT_FONT_HEIGHT + 2, COLOR_DARK_GRAY);
 
         /* Left: alpha / beta */
-        wsprintf(szBufT, TEXT("%c=%3d, %c=%3d"),
-            PZ_AE_GREEK_alpha, Camera.iAlphaDeg,
-            PZ_AE_GREEK_beta,  Camera.iBetaDeg);
-        tcharToChar(szBuf, szBufT, 64);
+        if (bIsWideCanvas) {
+            Salvia_Format(szBuf, "%c=%d,%c=%d",
+                PZ_AE_GREEK_alpha, Camera.iAlphaDeg,
+                PZ_AE_GREEK_beta,  Camera.iBetaDeg);
+        }
+        else {
+            Salvia_Format(szBuf, "%d,%d", Camera.iAlphaDeg, Camera.iBetaDeg);
+        }
         putTextCanvas(2, iStartY + 2, (const unsigned char*)szBuf, COLOR_WHITE);
 
         /* Center: mode display */
         {
+            static const char* szWideCenterText[] = { "Camera", "Position", "Zoom", "Formula" };
+            static const char* szNarrowCenterText[] = { "[C]", "[P]", "[Z]", "[F]" };
             const char* szCenter;
-            switch (g_iMouseMode) {
-                case MOUSE_MODE_CAMERA:   szCenter = "Camera";   break;
-                case MOUSE_MODE_POSITION: szCenter = "Position"; break;
-                case MOUSE_MODE_ZOOM:     szCenter = "Zoom";     break;
-                case MOUSE_MODE_FORMULA:  szCenter = "Formula";  break;
-                default:                  szCenter = "?";        break;
+
+            if (bIsWideCanvas) {
+                switch (g_iMouseMode) {
+                    case MOUSE_MODE_CAMERA:
+                    case MOUSE_MODE_POSITION:
+                    case MOUSE_MODE_ZOOM:
+                    case MOUSE_MODE_FORMULA:
+                        szCenter = szWideCenterText[g_iMouseMode];
+                        break;
+                    default:
+                        szCenter = "?";
+                        break;
+                }
+            }
+            else {
+                switch (g_iMouseMode) {
+                    case MOUSE_MODE_CAMERA:
+                    case MOUSE_MODE_POSITION:
+                    case MOUSE_MODE_ZOOM:
+                    case MOUSE_MODE_FORMULA:
+                        szCenter = szNarrowCenterText[g_iMouseMode];
+                        break;
+                    default:
+                        szCenter = "?";
+                        break;
+                }
             }
             iLen = (int)strlen(szCenter) * CURRENT_FONT_WIDTH;
             putTextCanvas((g_iCanvasW - iLen) / 2, iStartY + 2,
@@ -587,9 +605,12 @@ static void redrawCanvas(HWND hWnd) {
 
         /* Right: zoom%, (viewportX, viewportY) */
         iZoomPct = (int)(PZ_FIXED_TO_FLOAT(arrZoomLevels[Camera.iZoomLevel]) * 100.0f);
-        wsprintf(szBufT, TEXT("%d%%(%d,%d)"), iZoomPct,
-            Camera.iViewportX, Camera.iViewportY);
-        tcharToChar(szBuf, szBufT, 64);
+        if (bIsWideCanvas) {
+            Salvia_Format(szBuf, "%d%%(%d,%d)", iZoomPct, Camera.iViewportX, Camera.iViewportY);
+        }
+        else {
+            Salvia_Format(szBuf, "%d%%", iZoomPct);
+        }
         iLen = (int)strlen(szBuf) * CURRENT_FONT_WIDTH;
         putTextCanvas(g_iCanvasW - iLen - 2, iStartY + 2,
             (const unsigned char*)szBuf, COLOR_WHITE);
@@ -890,7 +911,6 @@ int recalc(HWND hWnd) {
 
     /* Show progress on canvas */
     {
-        TCHAR szBufT[32];
         char szBuf[32];
         int x, y, iLen;
         fillRectCanvas(0, 0, g_iCanvasW, g_iCanvasH, COLOR_WHITE);
@@ -900,8 +920,7 @@ int recalc(HWND hWnd) {
         x = (g_iCanvasW - iLen) / 2;
         if (x < 2) x = 2;
         putTextCanvas(x, y, (const unsigned char*)"Recalc ...", COLOR_BLACK);
-        wsprintf(szBufT, TEXT("0%%"));
-        tcharToChar(szBuf, szBufT, 32);
+        Salvia_Format(szBuf, "0%%");
         iLen = (int)strlen(szBuf) * CURRENT_FONT_WIDTH;
         x = (g_iCanvasW - iLen) / 2;
         if (x < 2) x = 2;
@@ -925,14 +944,12 @@ int recalc(HWND hWnd) {
         }
         iPct = (ix + 1) * 100 / Camera.xGrid;
         if (iPct != iLastPct) {
-            TCHAR szBufT[32];
             char szBuf[32];
             int x, y, iLen;
             MSG msg;
             y = g_iCanvasH / 2 + 2;
             if (y < 0) y = 0;
-            wsprintf(szBufT, TEXT("%d%%"), iPct);
-            tcharToChar(szBuf, szBufT, 32);
+            Salvia_Format(szBuf, "%d%%", iPct);
             fillRectCanvas(0, y, g_iCanvasW, CURRENT_FONT_HEIGHT, COLOR_WHITE);
             iLen = (int)strlen(szBuf) * CURRENT_FONT_WIDTH;
             x = (g_iCanvasW - iLen) / 2;
@@ -955,86 +972,75 @@ int recalc(HWND hWnd) {
  * Win32 standard boilerplate
  *====================================================*/
 BOOL                SetTaskbarVisible   (BOOL bVisible);
-ATOM                MyRegisterClass     (HINSTANCE hInstance, LPTSTR szWindowClass);
-BOOL                InitInstance        (HINSTANCE, int);
-LRESULT CALLBACK    WndProc             (HWND, UINT, WPARAM, LPARAM);
-LRESULT CALLBACK    About               (HWND, UINT, WPARAM, LPARAM);
+ATOM                MyRegisterClass (HINSTANCE hInstance, LPTSTR szWindowClass);
+BOOL				InitInstance	(HINSTANCE, int);
+LRESULT CALLBACK	WndProc			(HWND, UINT, WPARAM, LPARAM);
+LRESULT CALLBACK	About			(HWND, UINT, WPARAM, LPARAM);
 
-int WINAPI WinMain( HINSTANCE hInstance,
-                    HINSTANCE hPrevInstance,
-                    LPTSTR    lpCmdLine,
-                    int       nCmdShow) {
-    MSG msg;
-    HACCEL hAccelTable;
+int WINAPI WinMain(	HINSTANCE hInstance,
+					HINSTANCE hPrevInstance,
+					LPTSTR    lpCmdLine,
+					int       nCmdShow) {
+	MSG msg;
+	HACCEL hAccelTable;
 
-    /* SetTaskbarVisible(FALSE); */
+	if (!InitInstance (hInstance, nCmdShow)) {
+		return FALSE;
+	}
 
-    if (!InitInstance(hInstance, nCmdShow)) return FALSE;
-    hAccelTable = LoadAccelerators(hInstance, (LPCTSTR)IDC_PLOTTERZNATIVE);
-    while (GetMessage(&msg, NULL, 0, 0)) {
-        if (!TranslateAccelerator(msg.hwnd, hAccelTable, &msg)) {
-            TranslateMessage(&msg);
-            DispatchMessage(&msg);
-        }
-    }
-    return msg.wParam;
+	hAccelTable = LoadAccelerators(hInstance, (LPCTSTR)IDC_PLOTTERZNATIVE);
+
+	while (GetMessage(&msg, NULL, 0, 0))  {
+		if (!TranslateAccelerator(msg.hwnd, hAccelTable, &msg)) {
+			TranslateMessage(&msg);
+			DispatchMessage(&msg);
+		}
+	}
+
+	return msg.wParam;
 }
 
 ATOM MyRegisterClass(HINSTANCE hInstance, LPTSTR szWindowClass) {
-    WNDCLASS wc;
-    wc.style            = CS_HREDRAW | CS_VREDRAW;
-    wc.lpfnWndProc      = (WNDPROC) WndProc;
-    wc.cbClsExtra       = 0;
-    wc.cbWndExtra       = 0;
-    wc.hInstance        = hInstance;
-    wc.hIcon            = LoadIcon(hInstance, MAKEINTRESOURCE(IDI_PLOTTERZNATIVE));
-    wc.hCursor          = 0;
-    wc.hbrBackground    = (HBRUSH) GetStockObject(BLACK_BRUSH);
-    wc.lpszMenuName     = 0;
-    wc.lpszClassName    = szWindowClass;
-    return RegisterClass(&wc);
+	WNDCLASS	wc;
+
+    wc.style			= CS_HREDRAW | CS_VREDRAW;
+    wc.lpfnWndProc		= (WNDPROC) WndProc;
+    wc.cbClsExtra		= 0;
+    wc.cbWndExtra		= 0;
+    wc.hInstance		= hInstance;
+    wc.hIcon			= LoadIcon(hInstance, MAKEINTRESOURCE(IDI_PLOTTERZNATIVE));
+    wc.hCursor			= 0;
+    wc.hbrBackground	= (HBRUSH) GetStockObject(WHITE_BRUSH);
+    wc.lpszMenuName		= 0;
+    wc.lpszClassName	= szWindowClass;
+
+	return RegisterClass(&wc);
 }
 
 BOOL InitInstance(HINSTANCE hInstance, int nCmdShow) {
-    HWND    hWnd;
-    TCHAR   szTitle[MAX_LOADSTRING];
-    TCHAR   szWindowClass[MAX_LOADSTRING];
-#if !(VER_PLATFORM_WIN32_CE)
-    int     iScrWidth, iScrHeight;
-    int     iWinWidth, iWinHeight;
-#endif
-    RECT    rcClient;
+	HWND	hWnd;
+	TCHAR	szTitle[MAX_LOADSTRING];
+	TCHAR	szWindowClass[MAX_LOADSTRING];
 
-    hInst = hInstance;
-    LoadString(hInstance, IDC_PLOTTERZNATIVE, szWindowClass, MAX_LOADSTRING);
-    MyRegisterClass(hInstance, szWindowClass);
-    LoadString(hInstance, IDS_APP_TITLE, szTitle, MAX_LOADSTRING);
+	hInst = hInstance;
 
-    rcClient.left   = 0;
-    rcClient.top    = 0;
-#if !(VER_PLATFORM_WIN32_CE)
-    rcClient.right  = 640;
-    rcClient.bottom = 480;
-    iWinWidth       = rcClient.right;
-    iWinHeight      = rcClient.bottom;
-    {
-        DWORD dWindowStyle = WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX;
-        AdjustWindowRect(&rcClient, dWindowStyle, FALSE);
-    }
-    hWnd = CreateWindow(szWindowClass, szTitle,
-        WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX,
-        CW_USEDEFAULT, CW_USEDEFAULT, rcClient.right - rcClient.left,
-        rcClient.bottom - rcClient.top, NULL, NULL, hInstance, NULL);
-#else
-    hWnd = CreateWindow(szWindowClass, szTitle, WS_VISIBLE,
-        0, 0, CW_USEDEFAULT, CW_USEDEFAULT, NULL, NULL, hInstance, NULL);
-#endif
-    if (!hWnd) return FALSE;
-    ShowWindow(hWnd, nCmdShow);
-    UpdateWindow(hWnd);
-    if (hwndCB)
-        CommandBar_Show(hwndCB, TRUE);
-    return TRUE;
+	LoadString(hInstance, IDC_PLOTTERZNATIVE, szWindowClass, MAX_LOADSTRING);
+	MyRegisterClass(hInstance, szWindowClass);
+
+	LoadString(hInstance, IDS_APP_TITLE, szTitle, MAX_LOADSTRING);
+	hWnd = CreateWindow(szWindowClass, szTitle, WS_VISIBLE,
+		0, 0, CW_USEDEFAULT, CW_USEDEFAULT, NULL, NULL, hInstance, NULL);
+
+	if (!hWnd) {	
+		return FALSE;
+	}
+
+	ShowWindow(hWnd, nCmdShow);
+	UpdateWindow(hWnd);
+	if (hwndCB)
+		CommandBar_Show(hwndCB, TRUE);
+
+	return TRUE;
 }
 
 LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) {
@@ -1151,9 +1157,9 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
                 RECT rcClient, rcBar;
                 int iCw, iCh;
 
-                hwndCB = CommandBar_Create(hInst, hWnd, 1);
-                CommandBar_InsertMenubar(hwndCB, hInst, IDM_MENU, 0);
-                CommandBar_AddAdornments(hwndCB, 0, 0);
+			    hwndCB = CommandBar_Create(hInst, hWnd, 1);			
+			    CommandBar_InsertMenubar(hwndCB, hInst, IDM_MENU, 0);
+			    CommandBar_AddAdornments(hwndCB, 0, 0);
 
                 GetClientRect(hWnd, &rcClient);
                 if (rcClient.right <= 0) rcClient.right = 320;
@@ -1183,15 +1189,37 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
                 g_RenderConfig.sInterfaces.putChar  = rzPutChar;
                 RenderConfig_GetDefaultStyle(&g_RenderConfig);
                 g_pVm = EzMachine_Create();
+                g_bError = 1;
 
-                fillRectCanvas(0, 0, g_iCanvasW, g_iCanvasH, COLOR_WHITE);
-
-                if (recalc(hWnd)) {
-                    redrawCanvas(hWnd);
-                    InvalidateRect(hWnd, NULL, FALSE);
-                } else {
-                    drawErrorScreen(hWnd);
+                /* Idle screen */
+                {
+                    static const char* szLines[] = {
+                        "Plotter-Z CE",
+                        "A 3D function graph plotting tool",
+                        "Edit > Expression to start"
+                    };
+                    static const int iColors[] = {
+                        COLOR_BLACK,
+                        COLOR_LIGHT_GRAY,
+                        COLOR_DARK_GRAY
+                    };
+                    int iLine, iLen, x, y;
+                    int iTotalH;
+                    iTotalH = 3 * CURRENT_FONT_HEIGHT + 2 * 2;
+                    y = (g_iCanvasH - iTotalH) / 2;
+                    if (y < 0) y = 0;
+                    fillRectCanvas(0, 0, g_iCanvasW, g_iCanvasH, COLOR_WHITE);
+                    for (iLine = 0; iLine < 3; ++iLine) {
+                        iLen = (int)strlen(szLines[iLine]) * CURRENT_FONT_WIDTH;
+                        x = (g_iCanvasW - iLen) / 2;
+                        if (x < 2) x = 2;
+                        putTextCanvas(x, y,
+                            (const unsigned char*)szLines[iLine], iColors[iLine]);
+                        y += CURRENT_FONT_HEIGHT + 2;
+                    }
                 }
+                InvalidateRect(hWnd, NULL, FALSE);
+                UpdateWindow(hWnd);
             }
             break;
         case WM_LBUTTONDOWN:
@@ -1202,6 +1230,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
             SetCapture(hWnd);
             break;
         case WM_LBUTTONUP:
+            if (g_bError) break;
             g_bMouseDown = 0;
             g_iZoomAccum = 0;
             ReleaseCapture();

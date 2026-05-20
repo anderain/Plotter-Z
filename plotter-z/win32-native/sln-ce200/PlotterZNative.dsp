@@ -2129,5 +2129,9 @@ DEP_CPP_VLIST=\
 SOURCE=..\..\..\common\vlist.h
 # End Source File
 # End Group
+# Begin Source File
+
+SOURCE=..\PlotterZNative.ico
+# End Source File
 # End Target
 # End Project
