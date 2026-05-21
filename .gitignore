@@ -12,3 +12,5 @@ plotter-z/sdl/sdl
 *.cmd
 
 deps/
+
+*draft*.md

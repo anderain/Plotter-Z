@@ -1,6 +1,6 @@
 # Plotter-Z
 A 3D function graph plotting tool designed for early handheld devices such as Windows CE 1.0 - 2.1, Palm OS 3, and CASIO fx-9860 series calculators.
-
+![CE Devices](./images/pz-ce-devices.webp)
 This project is still in progress. Feedback and issues are welcome.
 
 ## Installation
