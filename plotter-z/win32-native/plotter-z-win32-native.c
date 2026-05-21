@@ -978,12 +978,47 @@ static COLORREF parseHexColor(const char* szHex) {
         lVal = lVal * 16 + d;
         ++p;
     }
-    return (COLORREF)(lVal & 0xFFFFFF);
+    lVal &= 0xFFFFFF;
+    /* Convert RRGGBB (input) to COLORREF BBGGRR */
+    lVal = ((lVal & 0xFF) << 16) | (lVal & 0x00FF00) | ((lVal >> 16) & 0xFF);
+    return (COLORREF)lVal;
+}
+
+static void setColorEdit(HWND hDlg, int idCtrl, COLORREF color) {
+    TCHAR szBuf[16];
+    unsigned long ulVal;
+    ulVal = color & 0xFFFFFF;
+    /* COLORREF BBGGRR -> RRGGBB for display */
+    ulVal = ((ulVal & 0xFF) << 16) | (ulVal & 0x00FF00) | ((ulVal >> 16) & 0xFF);
+    wsprintf(szBuf, TEXT("%06lx"), ulVal);
+    SetDlgItemText(hDlg, idCtrl, szBuf);
 }
 
 /*====================================================
  * Preferences dialog procedure
  *====================================================*/
+typedef struct {
+    const char*   szName;
+    const TCHAR*  szColors[4];
+} Theme;
+
+static const Theme g_sThemes[] = {
+    { "Plain",      { TEXT("000000"), TEXT("666666"), TEXT("aaaaaa"), TEXT("ffffff") } },
+    { "The Matrix", { TEXT("33ff33"), TEXT("229922"), TEXT("00CD00"), TEXT("000000") } },
+    { "VT100",      { TEXT("eeeeee"), TEXT("CDCD00"), TEXT("115511"), TEXT("111111") } },
+    { "Gameboy",    { TEXT("0d1400"), TEXT("354f00"), TEXT("5c8b00"), TEXT("84c600") } },
+    { "GB Orange",  { TEXT("180b00"), TEXT("622c00"), TEXT("ab4c00"), TEXT("f46d00") } },
+    { "GB Yellow",  { TEXT("181400"), TEXT("615200"), TEXT("a98f00"), TEXT("f2cc00") } },
+    { "GB Dark",    { TEXT("000e00"), TEXT("003800"), TEXT("006220"), TEXT("008c20") } }
+};
+static const int g_iNumThemes = sizeof(g_sThemes) / sizeof(g_sThemes[0]);
+
+static void applyThemeToEdits(HWND hDlg, const Theme* pTheme) {
+    int i;
+    for (i = 0; i < 4; ++i)
+        SetDlgItemText(hDlg, IDC_PREF_COLOR0 + i, pTheme->szColors[i]);
+}
+
 static LRESULT CALLBACK PrefDlgProc(HWND hDlg, UINT message,
                                      WPARAM wParam, LPARAM lParam) {
     (void)lParam;
@@ -991,19 +1026,45 @@ static LRESULT CALLBACK PrefDlgProc(HWND hDlg, UINT message,
         case WM_INITDIALOG:
         {
             int i;
-            TCHAR szBuf[16];
-            for (i = 0; i < 4; ++i) {
-                wsprintf(szBuf, TEXT("%06x"),
-                    (DWORD)(g_rgbPalette[i] & 0xFFFFFF));
-                SetDlgItemText(hDlg, IDC_PREF_COLOR0 + i, szBuf);
-            }
+            for (i = 0; i < 4; ++i)
+                setColorEdit(hDlg, IDC_PREF_COLOR0 + i, g_rgbPalette[i]);
             if (iCanvasScaleFactor == 2)
                 SendMessage(GetDlgItem(hDlg, IDC_PREF_LOWRES), BM_SETCHECK, (WPARAM)BST_CHECKED, 0);
             CenterDialog(hDlg);
+            for (i = 0; i < g_iNumThemes; ++i) {
+                TCHAR szBuf[64];
+                int j;
+                const char* szSrc = g_sThemes[i].szName;
+                for (j = 0; szSrc[j] != '\0' && j < 63; ++j)
+                    szBuf[j] = (TCHAR)szSrc[j];
+                szBuf[j] = TEXT('\0');
+                SendDlgItemMessage(hDlg, IDC_THEMES_LIST, LB_ADDSTRING, 0, (LPARAM)szBuf);
+            }
             return TRUE;
         }
         case WM_COMMAND:
             switch (LOWORD(wParam)) {
+                case IDC_INVERT_BUTTON:
+                {
+                    TCHAR szBuf0[16], szBuf1[16], szBuf2[16], szBuf3[16];
+                    GetDlgItemText(hDlg, IDC_PREF_COLOR0, szBuf0, 16);
+                    GetDlgItemText(hDlg, IDC_PREF_COLOR1, szBuf1, 16);
+                    GetDlgItemText(hDlg, IDC_PREF_COLOR2, szBuf2, 16);
+                    GetDlgItemText(hDlg, IDC_PREF_COLOR3, szBuf3, 16);
+                    SetDlgItemText(hDlg, IDC_PREF_COLOR0, szBuf3);
+                    SetDlgItemText(hDlg, IDC_PREF_COLOR1, szBuf2);
+                    SetDlgItemText(hDlg, IDC_PREF_COLOR2, szBuf1);
+                    SetDlgItemText(hDlg, IDC_PREF_COLOR3, szBuf0);
+                    return TRUE;
+                }
+                case IDC_THEMES_LIST:
+                    if (HIWORD(wParam) == LBN_SELCHANGE) {
+                        LRESULT iSel;
+                        iSel = SendDlgItemMessage(hDlg, IDC_THEMES_LIST, LB_GETCURSEL, 0, 0);
+                        if (iSel >= 0 && iSel < g_iNumThemes)
+                            applyThemeToEdits(hDlg, &g_sThemes[iSel]);
+                    }
+                    return TRUE;
                 case IDOK:
                 {
                     int i, iPrevScale;
@@ -1024,6 +1085,13 @@ static LRESULT CALLBACK PrefDlgProc(HWND hDlg, UINT message,
                     if (iCanvasScaleFactor != iPrevScale) {
                         RECT rc;
                         int iCw, iCh;
+                        int iScaleOld, iScaleNew;
+                        iScaleOld = iPrevScale;
+                        iScaleNew = iCanvasScaleFactor;
+                        Camera.iViewportX = Camera.iViewportX * iScaleOld / iScaleNew;
+                        Camera.iViewportY = Camera.iViewportY * iScaleOld / iScaleNew;
+                        g_iExprPosX = g_iExprPosX * iScaleOld / iScaleNew;
+                        g_iExprPosY = g_iExprPosY * iScaleOld / iScaleNew;
                         destroyBackBuffer();
                         destroyCanvas();
                         GetClientRect(hWndParent, &rc);
@@ -1036,8 +1104,6 @@ static LRESULT CALLBACK PrefDlgProc(HWND hDlg, UINT message,
                         createCanvas(iCw, iCh);
                         createBackBuffer(hWndParent, rc.right, rc.bottom);
                         Camera.iViewportS = (g_iCanvasH < g_iCanvasW ? g_iCanvasH : g_iCanvasW) / 2;
-                        Camera.iViewportX = g_iCanvasW / 2;
-                        Camera.iViewportY = g_iCanvasH / 2;
                     }
                     if (g_iStage == STAGE_READY) {
                         redrawCanvas(hWndParent);
@@ -1238,13 +1304,19 @@ static void saveSession(HWND hWnd) {
         "ymin=%.4f\r\nymax=%.4f\r\n"
         "zmin=%.4f\r\nzmax=%.4f\r\n"
         "xgrid=%d\r\nygrid=%d\r\n"
-        "zoom=%d\r\n",
+        "zoom=%d\r\n"
+        "viewx=%d\r\nviewy=%d\r\n"
+        "exprx=%d\r\nexpry=%d\r\n",
         Camera.iAlphaDeg, Camera.iBetaDeg,
         Camera.xMin, Camera.xMax,
         Camera.yMin, Camera.yMax,
         Camera.zMin, Camera.zMax,
         Camera.xGrid, Camera.yGrid,
-        Camera.iZoomLevel);
+        Camera.iZoomLevel,
+        Camera.iViewportX * iCanvasScaleFactor,
+        Camera.iViewportY * iCanvasScaleFactor,
+        g_iExprPosX * iCanvasScaleFactor,
+        g_iExprPosY * iCanvasScaleFactor);
     iPos += Salvia_Format(szIni + iPos,
         "[palette]\r\n"
         "black=%d\r\n"
@@ -1328,6 +1400,16 @@ static void loadSession(HWND hWnd) {
         Camera.xGrid = PineIni_Section_GetInt(pSec, "xgrid", Camera.xGrid);
         Camera.yGrid = PineIni_Section_GetInt(pSec, "ygrid", Camera.yGrid);
         Camera.iZoomLevel = PineIni_Section_GetInt(pSec, "zoom", Camera.iZoomLevel);
+        Camera.iViewportX = PineIni_Section_GetInt(pSec, "viewx", Camera.iViewportX);
+        Camera.iViewportY = PineIni_Section_GetInt(pSec, "viewy", Camera.iViewportY);
+        g_iExprPosX = PineIni_Section_GetInt(pSec, "exprx", g_iExprPosX);
+        g_iExprPosY = PineIni_Section_GetInt(pSec, "expry", g_iExprPosY);
+        if (iCanvasScaleFactor > 1) {
+            Camera.iViewportX /= iCanvasScaleFactor;
+            Camera.iViewportY /= iCanvasScaleFactor;
+            g_iExprPosX      /= iCanvasScaleFactor;
+            g_iExprPosY      /= iCanvasScaleFactor;
+        }
     }
 
     /* Parse [palette] */

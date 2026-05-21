@@ -5,6 +5,7 @@
 #define IDS_APP_TITLE                   1
 #define IDS_HELLO                       2
 #define IDC_PLOTTERZNATIVE              3
+#define IDC_INVERT_BUTTON               3
 #define IDI_PLOTTERZNATIVE              101
 #define IDM_MENU                        102
 #define IDD_ABOUTBOX                    103
@@ -13,6 +14,7 @@
 #define IDD_SAMPLES                     107
 #define IDD_PREFERENCES                 108
 #define IDC_EXPR_EDIT                   1002
+#define IDC_THEMES_LIST                 1002
 #define IDC_WIN_XMIN                    1003
 #define IDC_WIN_XMAX                    1004
 #define IDC_WIN_YMIN                    1005
@@ -50,7 +52,7 @@
 #ifndef APSTUDIO_READONLY_SYMBOLS
 #define _APS_NEXT_RESOURCE_VALUE        104
 #define _APS_NEXT_COMMAND_VALUE         40008
-#define _APS_NEXT_CONTROL_VALUE         1001
+#define _APS_NEXT_CONTROL_VALUE         1003
 #define _APS_NEXT_SYMED_VALUE           101
 #endif
 #endif
