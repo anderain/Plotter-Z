@@ -13,7 +13,8 @@ DEPS_DIR="$SCRIPT_DIR/deps"
 # Format: each line "repo_url [custom_subdir]"
 # If no custom subdir given, use the repo name (without .git suffix)
 REPOS=(
-    "https://github.com/anderain/salvia89.git salvia89"
+    "git@github.com:anderain/salvia89.git salvia89"
+    "git@github.com:anderain/pine89.git pine89"
     # Add more dependencies as needed...
 )
 # ============================================================
