@@ -1445,10 +1445,17 @@ static void loadSession(HWND hWnd) {
  * Win32 standard boilerplate
  *====================================================*/
 BOOL                SetTaskbarVisible   (BOOL bVisible);
-ATOM                MyRegisterClass (HINSTANCE hInstance, LPTSTR szWindowClass);
-BOOL				InitInstance	(HINSTANCE, int);
-LRESULT CALLBACK	WndProc			(HWND, UINT, WPARAM, LPARAM);
-LRESULT CALLBACK	About			(HWND, UINT, WPARAM, LPARAM);
+void                ToggleFullscreen    (HWND hWnd);
+ATOM                MyRegisterClass     (HINSTANCE hInstance, LPTSTR szWindowClass);
+BOOL                InitInstance        (HINSTANCE, int);
+LRESULT CALLBACK    WndProc             (HWND, UINT, WPARAM, LPARAM);
+LRESULT CALLBACK    About               (HWND, UINT, WPARAM, LPARAM);
+
+struct {
+    BOOL bFullScreen;
+    int iX, iY, iW, iH;
+    int iBarHeight;
+} PrevWindowSize;
 
 int WINAPI WinMain(	HINSTANCE hInstance,
 					HINSTANCE hPrevInstance,
@@ -1739,6 +1746,9 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
                 UpdateWindow(hWnd);
             }
             break;
+        case WM_LBUTTONDBLCLK:
+            MessageBox(hWnd, TEXT("Hello"), TEXT("WORLD"),MB_OK);
+            break;
         case WM_LBUTTONDOWN:
             if (g_iStage != STAGE_READY) break;
             g_bMouseDown = 1;
@@ -1810,7 +1820,18 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
             }
             break;
         case WM_KEYDOWN:
+            /* Toggle Fullscreen */
+#if VER_PLATFORM_WIN32_CE
             {
+                if (wParam == VK_RETURN) {
+                    ToggleFullscreen(hWnd);
+                    return 0;
+                }
+            }
+#endif
+            if (g_iStage != STAGE_READY) break;
+            {
+                int bRedraw = 0;
                 /* Mode and toggle shortcuts (work in any stage) */
                 switch (wParam) {
                     case 'C':
@@ -1847,10 +1868,6 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
                         InvalidateRect(hWnd, NULL, FALSE);
                         return 0;
                 }
-            }
-            if (g_iStage != STAGE_READY) break;
-            {
-                int bRedraw = 0;
                 switch (g_iMouseMode) {
                     case MOUSE_MODE_CAMERA:
                         if (wParam == VK_LEFT)  { Camera.iBetaDeg -= 5; bRedraw = 1; }
@@ -1933,7 +1950,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
             destroyBackBuffer();
             destroyCanvas();
             PostQuitMessage(0);
-            /* SetTaskbarVisible(TRUE); */
+            SetTaskbarVisible(TRUE);
             break;
         default:
             return DefWindowProc(hWnd, message, wParam, lParam);
@@ -1985,5 +2002,42 @@ void CenterDialog(HWND hDlg) {
         if (NewPosY < 0) NewPosY = 0;
         SetWindowPos(hDlg, 0, NewPosX, NewPosY,
             0, 0, SWP_NOZORDER | SWP_NOSIZE);
+    }
+}
+
+void ToggleFullscreen(HWND hWnd) {
+    if (PrevWindowSize.bFullScreen) {
+        PrevWindowSize.bFullScreen = FALSE;
+        SetTaskbarVisible(TRUE);
+        g_iBarHeight = PrevWindowSize.iBarHeight;
+        CommandBar_Show(hwndCB, TRUE);
+        /* Back to normal */
+        SetWindowPos(
+            hWnd, HWND_TOPMOST,
+            PrevWindowSize.iX,
+            PrevWindowSize.iY,
+            PrevWindowSize.iW,
+            PrevWindowSize.iH,
+            SWP_SHOWWINDOW
+        );
+    }
+    else {
+        RECT rect;
+        int iScrWidth, iScrHeight;
+	    iScrWidth = GetSystemMetrics(SM_CXSCREEN);
+	    iScrHeight = GetSystemMetrics(SM_CYSCREEN);
+        /* To fullscreen */
+        if (GetWindowRect(hWnd, &rect)) {
+            SetTaskbarVisible(FALSE);
+            PrevWindowSize.bFullScreen = TRUE;
+            PrevWindowSize.iX = rect.left;
+            PrevWindowSize.iY = rect.top;
+            PrevWindowSize.iW = rect.right - rect.left;
+            PrevWindowSize.iH = rect.bottom - rect.top;
+            PrevWindowSize.iBarHeight = g_iBarHeight;
+            g_iBarHeight = 0;
+            CommandBar_Show(hwndCB, FALSE);
+            SetWindowPos(hWnd, HWND_TOPMOST, 0, 0, iScrWidth, iScrHeight, SWP_SHOWWINDOW);
+        }
     }
 }
