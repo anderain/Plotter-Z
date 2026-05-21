@@ -1704,22 +1704,27 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
             break;
         case WM_CREATE:
             {
-                RECT rcClient, rcBar;
+                RECT rcClient;
                 int iCw, iCh;
 
 #if VER_PLATFORM_WIN32_CE
-                hwndCB = CommandBar_Create(hInst, hWnd, 1);			
-                CommandBar_InsertMenubar(hwndCB, hInst, IDM_MENU, 0);
-                CommandBar_AddAdornments(hwndCB, 0, 0);
+                {
+                    RECT rcBar;
+                    hwndCB = CommandBar_Create(hInst, hWnd, 1);
+                    CommandBar_InsertMenubar(hwndCB, hInst, IDM_MENU, 0);
+                    CommandBar_AddAdornments(hwndCB, 0, 0);
+                    /* Get command bar height and subtract from client area */
+                    GetWindowRect(hwndCB, &rcBar);
+                    g_iBarHeight = rcBar.bottom - rcBar.top;
+                }
+#else
+                g_iBarHeight = 0;
 #endif
 
                 GetClientRect(hWnd, &rcClient);
                 if (rcClient.right <= 0) rcClient.right = 320;
                 if (rcClient.bottom <= 0) rcClient.bottom = 240;
 
-                /* Get command bar height and subtract from client area */
-                GetWindowRect(hwndCB, &rcBar);
-                g_iBarHeight = rcBar.bottom - rcBar.top;
                 rcClient.bottom -= g_iBarHeight;
                 if (rcClient.bottom < 1) rcClient.bottom = 1;
 
@@ -2005,6 +2010,7 @@ void CenterDialog(HWND hDlg) {
     }
 }
 
+#ifdef VER_PLATFORM_WIN32_CE
 void ToggleFullscreen(HWND hWnd) {
     HWND hWndTarget;
 #if (VER_PLATFORM_WIN32_CE >= 200)
@@ -2047,3 +2053,4 @@ void ToggleFullscreen(HWND hWnd) {
         }
     }
 }
+#endif
