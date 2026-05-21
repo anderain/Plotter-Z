@@ -2006,6 +2006,12 @@ void CenterDialog(HWND hDlg) {
 }
 
 void ToggleFullscreen(HWND hWnd) {
+    HWND hWndTarget;
+#if (VER_PLATFORM_WIN32_CE >= 200)
+    hWndTarget = HWND_TOPMOST;
+#else
+	hWndTarget = HWND_TOP;
+#endif
     if (PrevWindowSize.bFullScreen) {
         PrevWindowSize.bFullScreen = FALSE;
         SetTaskbarVisible(TRUE);
@@ -2013,7 +2019,7 @@ void ToggleFullscreen(HWND hWnd) {
         CommandBar_Show(hwndCB, TRUE);
         /* Back to normal */
         SetWindowPos(
-            hWnd, HWND_TOPMOST,
+            hWnd, hWndTarget,
             PrevWindowSize.iX,
             PrevWindowSize.iY,
             PrevWindowSize.iW,
@@ -2037,7 +2043,7 @@ void ToggleFullscreen(HWND hWnd) {
             PrevWindowSize.iBarHeight = g_iBarHeight;
             g_iBarHeight = 0;
             CommandBar_Show(hwndCB, FALSE);
-            SetWindowPos(hWnd, HWND_TOPMOST, 0, 0, iScrWidth, iScrHeight, SWP_SHOWWINDOW);
+            SetWindowPos(hWnd, hWndTarget, 0, 0, iScrWidth, iScrHeight, SWP_SHOWWINDOW);
         }
     }
 }
