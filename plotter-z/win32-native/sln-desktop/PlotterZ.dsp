@@ -197,6 +197,18 @@ SOURCE=..\..\..\deps\salvia89\salvia.c
 SOURCE=..\..\..\deps\salvia89\salvia.h
 # End Source File
 # End Group
+# Begin Group "Pine"
+
+# PROP Default_Filter ""
+# Begin Source File
+
+SOURCE="..\..\..\deps\pine89\pine-ini.c"
+# End Source File
+# Begin Source File
+
+SOURCE="..\..\..\deps\pine89\pine-ini.h"
+# End Source File
+# End Group
 # End Group
 # Begin Source File
 

@@ -1,5 +1,6 @@
 #include <windows.h>
 #include <commctrl.h>
+#include <commdlg.h>
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
@@ -13,6 +14,7 @@
 #include "../../renderer-z/rz.h"
 #include "../../renderer-z/ascii_extended_mapping.h"
 #include "../../deps/salvia89/salvia.h"
+#include "../../deps/pine89/pine-ini.h"
 
 #define ZOOM_DRAG_THRESHOLD     15
 #define MOUSE_REFRESH_MS        120
@@ -37,21 +39,12 @@ void        CenterDialog(HWND hDlg);
  *====================================================*/
 #define HIGH_CONTRAST_COLOR 1
 
-#ifdef HIGH_CONTRAST_COLOR
-const COLORREF g_rgbPalette[] = {
+COLORREF g_rgbPalette[] = {
     RGB(0x00, 0x00, 0x00),      /* COLOR_BLACK       */
     RGB(0x66, 0x66, 0x66),      /* COLOR_DARK_GRAY   */
     RGB(0xaa, 0xaa, 0xaa),      /* COLOR_LIGHT_GRAY  */
     RGB(0xff, 0xff, 0xff),      /* COLOR_WHITE       */
 };
-#else
-const COLORREF g_rgbPalette[] = {
-    RGB(0xaa, 0xcc, 0x00),      /* COLOR_BLACK       */
-    RGB(0x43, 0x7f, 0x00),      /* COLOR_DARK_GRAY   */
-    RGB(0x22, 0x66, 0x00),      /* COLOR_LIGHT_GRAY  */
-    RGB(0x11, 0x50, 0x00),      /* COLOR_WHITE       */
-};
-#endif
 
 #define COLOR_BLACK         0
 #define COLOR_DARK_GRAY     1
@@ -968,6 +961,105 @@ static LRESULT CALLBACK SampleDlgProc(HWND hDlg, UINT message,
 }
 
 /*====================================================
+ * Hex color helpers for Preferences dialog
+ *====================================================*/
+static COLORREF parseHexColor(const char* szHex) {
+    const char* p;
+    long lVal;
+    p = szHex;
+    if (p[0] == '0' && (p[1] == 'x' || p[1] == 'X')) p += 2;
+    lVal = 0;
+    while (*p != '\0') {
+        int d;
+        if      (*p >= '0' && *p <= '9') d = *p - '0';
+        else if (*p >= 'a' && *p <= 'f') d = *p - 'a' + 10;
+        else if (*p >= 'A' && *p <= 'F') d = *p - 'A' + 10;
+        else break;
+        lVal = lVal * 16 + d;
+        ++p;
+    }
+    return (COLORREF)(lVal & 0xFFFFFF);
+}
+
+/*====================================================
+ * Preferences dialog procedure
+ *====================================================*/
+static LRESULT CALLBACK PrefDlgProc(HWND hDlg, UINT message,
+                                     WPARAM wParam, LPARAM lParam) {
+    (void)lParam;
+    switch (message) {
+        case WM_INITDIALOG:
+        {
+            int i;
+            TCHAR szBuf[16];
+            for (i = 0; i < 4; ++i) {
+                wsprintf(szBuf, TEXT("%06x"),
+                    (DWORD)(g_rgbPalette[i] & 0xFFFFFF));
+                SetDlgItemText(hDlg, IDC_PREF_COLOR0 + i, szBuf);
+            }
+            if (iCanvasScaleFactor == 2)
+                SendMessage(GetDlgItem(hDlg, IDC_PREF_LOWRES), BM_SETCHECK, (WPARAM)BST_CHECKED, 0);
+            CenterDialog(hDlg);
+            return TRUE;
+        }
+        case WM_COMMAND:
+            switch (LOWORD(wParam)) {
+                case IDOK:
+                {
+                    int i, iPrevScale;
+                    TCHAR szBuf[16];
+                    HWND hWndParent;
+                    hWndParent = GetParent(hDlg);
+                    for (i = 0; i < 4; ++i) {
+                        char szHex[16];
+                        int j;
+                        GetDlgItemText(hDlg, IDC_PREF_COLOR0 + i, szBuf, 16);
+                        for (j = 0; szBuf[j] != TEXT('\0') && j < 15; ++j)
+                            szHex[j] = (char)szBuf[j];
+                        szHex[j] = '\0';
+                        g_rgbPalette[i] = parseHexColor(szHex);
+                    }
+                    iPrevScale = iCanvasScaleFactor;
+                    iCanvasScaleFactor = (SendMessage(GetDlgItem(hDlg, IDC_PREF_LOWRES), BM_GETCHECK, 0, 0)== BST_CHECKED) ? 2 : 1;
+                    if (iCanvasScaleFactor != iPrevScale) {
+                        RECT rc;
+                        int iCw, iCh;
+                        destroyBackBuffer();
+                        destroyCanvas();
+                        GetClientRect(hWndParent, &rc);
+                        rc.bottom -= g_iBarHeight;
+                        if (rc.bottom < 1) rc.bottom = 1;
+                        iCw = rc.right / iCanvasScaleFactor;
+                        iCh = rc.bottom / iCanvasScaleFactor;
+                        if (iCw < 1) iCw = 1;
+                        if (iCh < 1) iCh = 1;
+                        createCanvas(iCw, iCh);
+                        createBackBuffer(hWndParent, rc.right, rc.bottom);
+                        Camera.iViewportS = (g_iCanvasH < g_iCanvasW ? g_iCanvasH : g_iCanvasW) / 2;
+                        Camera.iViewportX = g_iCanvasW / 2;
+                        Camera.iViewportY = g_iCanvasH / 2;
+                    }
+                    if (g_iStage == STAGE_READY) {
+                        redrawCanvas(hWndParent);
+                    } else if (g_iStage == STAGE_ERROR) {
+                        drawErrorScreen(hWndParent);
+                    } else {
+                        drawIdleScreen(hWndParent);
+                    }
+                    InvalidateRect(hWndParent, NULL, FALSE);
+                    EndDialog(hDlg, IDOK);
+                    return TRUE;
+                }
+                case IDCANCEL:
+                    EndDialog(hDlg, IDCANCEL);
+                    return TRUE;
+            }
+            break;
+    }
+    return FALSE;
+}
+
+/*====================================================
  * Draw progress bar
  *   barY   - top Y coordinate of the bar
  *   iPct   - progress percentage (0-100)
@@ -1115,6 +1207,159 @@ int recalc(HWND hWnd) {
 }
 
 /*====================================================
+ * Save session to INI file
+ *====================================================*/
+static void saveSession(HWND hWnd) {
+    OPENFILENAME ofn;
+    TCHAR szFile[MAX_PATH];
+    char szIni[4096];
+    int iPos;
+    HANDLE hFile;
+    DWORD dwWritten;
+
+    memset(&ofn, 0, sizeof(ofn));
+    szFile[0] = TEXT('\0');
+    ofn.lStructSize = sizeof(ofn);
+    ofn.hwndOwner   = hWnd;
+    ofn.lpstrFilter = TEXT("INI Files (*.ini)\0*.ini\0All Files (*.*)\0*.*\0");
+    ofn.lpstrFile   = szFile;
+    ofn.nMaxFile    = MAX_PATH;
+    ofn.Flags       = OFN_OVERWRITEPROMPT;
+    ofn.lpstrDefExt = TEXT("ini");
+    if (!GetSaveFileName(&ofn)) return;
+
+    iPos = 0;
+    iPos += Salvia_Format(szIni + iPos,
+        "[expression]\r\nexpr=%s\r\n", szExpr);
+    iPos += Salvia_Format(szIni + iPos,
+        "[camera]\r\n"
+        "alpha=%d\r\nbeta=%d\r\n"
+        "xmin=%.4f\r\nxmax=%.4f\r\n"
+        "ymin=%.4f\r\nymax=%.4f\r\n"
+        "zmin=%.4f\r\nzmax=%.4f\r\n"
+        "xgrid=%d\r\nygrid=%d\r\n"
+        "zoom=%d\r\n",
+        Camera.iAlphaDeg, Camera.iBetaDeg,
+        Camera.xMin, Camera.xMax,
+        Camera.yMin, Camera.yMax,
+        Camera.zMin, Camera.zMax,
+        Camera.xGrid, Camera.yGrid,
+        Camera.iZoomLevel);
+    iPos += Salvia_Format(szIni + iPos,
+        "[palette]\r\n"
+        "black=%d\r\n"
+        "darkgray=%d\r\n"
+        "lightgray=%d\r\n"
+        "white=%d\r\n",
+        (unsigned long)(g_rgbPalette[COLOR_BLACK] & 0xFFFFFF),
+        (unsigned long)(g_rgbPalette[COLOR_DARK_GRAY] & 0xFFFFFF),
+        (unsigned long)(g_rgbPalette[COLOR_LIGHT_GRAY] & 0xFFFFFF),
+        (unsigned long)(g_rgbPalette[COLOR_WHITE] & 0xFFFFFF));
+
+    hFile = CreateFile(szFile, GENERIC_WRITE, 0, NULL,
+                       CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+    if (hFile == INVALID_HANDLE_VALUE) return;
+    WriteFile(hFile, szIni, (DWORD)strlen(szIni), &dwWritten, NULL);
+    CloseHandle(hFile);
+}
+
+/*====================================================
+ * Load session from INI file
+ *====================================================*/
+static void loadSession(HWND hWnd) {
+    OPENFILENAME ofn;
+    TCHAR szFile[MAX_PATH];
+    HANDLE hFile;
+    DWORD dwSize, dwRead;
+    char* pBuf;
+    PineIniFile* pIni;
+    PineIniError iniErr;
+    PineIniSection* pSec;
+
+    memset(&ofn, 0, sizeof(ofn));
+    szFile[0] = TEXT('\0');
+    ofn.lStructSize = sizeof(ofn);
+    ofn.hwndOwner   = hWnd;
+    ofn.lpstrFilter = TEXT("INI Files (*.ini)\0*.ini\0All Files (*.*)\0*.*\0");
+    ofn.lpstrFile   = szFile;
+    ofn.nMaxFile    = MAX_PATH;
+    ofn.Flags       = OFN_FILEMUSTEXIST;
+    ofn.lpstrDefExt = TEXT("ini");
+    if (!GetOpenFileName(&ofn)) return;
+
+    hFile = CreateFile(szFile, GENERIC_READ, FILE_SHARE_READ, NULL,
+                       OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+    if (hFile == INVALID_HANDLE_VALUE) return;
+
+    dwSize = GetFileSize(hFile, NULL);
+    if (dwSize == INVALID_FILE_SIZE || dwSize > 8191)
+        { CloseHandle(hFile); return; }
+
+    pBuf = (char*)malloc((size_t)(dwSize + 1));
+    if (pBuf == NULL) { CloseHandle(hFile); return; }
+
+    if (!ReadFile(hFile, pBuf, dwSize, &dwRead, NULL) || dwRead != dwSize) {
+        free(pBuf); CloseHandle(hFile); return;
+    }
+    CloseHandle(hFile);
+    pBuf[dwSize] = '\0';
+
+    pIni = PineIni_Parse(pBuf, &iniErr);
+    free(pBuf);
+    if (pIni == NULL) return;
+
+    /* Parse [expression] */
+    pSec = PineIni_Find(pIni, "expression");
+    if (pSec != NULL)
+        Utils_StringCopy(szExpr, EXPR_MAX,
+            PineIni_Section_GetString(pSec, "expr", szExpr));
+
+    /* Parse [camera] */
+    pSec = PineIni_Find(pIni, "camera");
+    if (pSec != NULL) {
+        Camera.iAlphaDeg  = PineIni_Section_GetInt(pSec, "alpha",  Camera.iAlphaDeg);
+        Camera.iBetaDeg   = PineIni_Section_GetInt(pSec, "beta",   Camera.iBetaDeg);
+        Camera.xMin = (PZ_FLOAT)Utils_Atof(PineIni_Section_GetString(pSec, "xmin", "-6"));
+        Camera.xMax = (PZ_FLOAT)Utils_Atof(PineIni_Section_GetString(pSec, "xmax", "6"));
+        Camera.yMin = (PZ_FLOAT)Utils_Atof(PineIni_Section_GetString(pSec, "ymin", "-6"));
+        Camera.yMax = (PZ_FLOAT)Utils_Atof(PineIni_Section_GetString(pSec, "ymax", "6"));
+        Camera.zMin = (PZ_FLOAT)Utils_Atof(PineIni_Section_GetString(pSec, "zmin", "-3"));
+        Camera.zMax = (PZ_FLOAT)Utils_Atof(PineIni_Section_GetString(pSec, "zmax", "3"));
+        Camera.xGrid = PineIni_Section_GetInt(pSec, "xgrid", Camera.xGrid);
+        Camera.yGrid = PineIni_Section_GetInt(pSec, "ygrid", Camera.yGrid);
+        Camera.iZoomLevel = PineIni_Section_GetInt(pSec, "zoom", Camera.iZoomLevel);
+    }
+
+    /* Parse [palette] */
+    pSec = PineIni_Find(pIni, "palette");
+    if (pSec != NULL) {
+        static const char* szKeys[] = { "black", "darkgray", "lightgray", "white" };
+        int i;
+        for (i = 0; i < 4; ++i) {
+            const char* szVal;
+            szVal = PineIni_Section_GetString(pSec, szKeys[i], NULL);
+            if (szVal != NULL)
+                g_rgbPalette[i] = (COLORREF)((int)Utils_Atoi(szVal) & 0xFFFFFF);
+        }
+    }
+
+    PineIni_Destroy(pIni);
+
+    /* Destroy old state and recalc */
+    if (g_pRenderNode != NULL) { RenderNode_Destroy(g_pRenderNode); g_pRenderNode = NULL; }
+    if (g_pAstExpr != NULL)   { FzAstNode_Destroy(g_pAstExpr); g_pAstExpr = NULL; }
+    if (g_pVm != NULL)        { EzMachine_Destroy(g_pVm); g_pVm = NULL; }
+    g_pVm = EzMachine_Create();
+
+    if (recalc(hWnd)) {
+        redrawCanvas(hWnd);
+        InvalidateRect(hWnd, NULL, FALSE);
+    } else {
+        drawErrorScreen(hWnd);
+    }
+}
+
+/*====================================================
  * Win32 standard boilerplate
  *====================================================*/
 BOOL                SetTaskbarVisible   (BOOL bVisible);
@@ -1245,6 +1490,12 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
                 case IDM_FILE_EXIT:
                     DestroyWindow(hWnd);
                     break;
+                case IDM_FILE_SAVESESSION:
+                    saveSession(hWnd);
+                    break;
+                case IDM_FILE_LOADSESSION:
+                    loadSession(hWnd);
+                    break;
                 case IDM_FILE_SAMPLES:
                 {
                     int iSel;
@@ -1284,28 +1535,9 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
                     }
                 }
                 break;
-                case IDM_FILE_LOWRES:
-                    {
-                        RECT rc;
-                        int iCw, iCh;
-                        iCanvasScaleFactor = (iCanvasScaleFactor == 1) ? 2 : 1;
-                        destroyBackBuffer();
-                        destroyCanvas();
-                        GetClientRect(hWnd, &rc);
-                        rc.bottom -= g_iBarHeight;
-                        if (rc.bottom < 1) rc.bottom = 1;
-                        iCw = rc.right / iCanvasScaleFactor;
-                        iCh = rc.bottom / iCanvasScaleFactor;
-                        if (iCw < 1) iCw = 1;
-                        if (iCh < 1) iCh = 1;
-                        createCanvas(iCw, iCh);
-                        createBackBuffer(hWnd, rc.right, rc.bottom);
-                        Camera.iViewportS = (g_iCanvasH < g_iCanvasW ? g_iCanvasH : g_iCanvasW) / 2;
-                        Camera.iViewportX = g_iCanvasW / 2;
-                        Camera.iViewportY = g_iCanvasH / 2;
-                        redrawCanvas(hWnd);
-                        InvalidateRect(hWnd, NULL, FALSE);
-                    }
+                case IDM_FILE_PREFERENCES:
+                    DialogBox(hInst, MAKEINTRESOURCE(IDD_PREFERENCES),
+                              hWnd, (DLGPROC)PrefDlgProc);
                     break;
                 case IDM_EDIT_EXPRESSION: {
                     int iRet;
@@ -1387,9 +1619,9 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
                 int iCw, iCh;
 
 #if VER_PLATFORM_WIN32_CE
-               hwndCB = CommandBar_Create(hInst, hWnd, 1);			
-               CommandBar_InsertMenubar(hwndCB, hInst, IDM_MENU, 0);
-               CommandBar_AddAdornments(hwndCB, 0, 0);
+                hwndCB = CommandBar_Create(hInst, hWnd, 1);			
+                CommandBar_InsertMenubar(hwndCB, hInst, IDM_MENU, 0);
+                CommandBar_AddAdornments(hwndCB, 0, 0);
 #endif
 
                 GetClientRect(hWnd, &rcClient);

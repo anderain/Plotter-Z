@@ -758,12 +758,14 @@ DEP_CPP_PLOTT=\
 	"..\..\..\common\constants.h"\
 	"..\..\..\common\utils.h"\
 	"..\..\..\common\vlist.h"\
+	"..\..\..\deps\pine89\pine-ini.h"\
 	"..\..\..\deps\salvia89\salvia.h"\
 	"..\..\..\evaluator-z\ez.h"\
 	"..\..\..\formula-z\fz.h"\
 	"..\..\..\renderer-z\ascii_extended_mapping.h"\
 	"..\..\..\renderer-z\rz.h"\
 	"..\..\utils\hybird_6x8.h"\
+	"..\..\utils\samples.h"\
 	
 
 !ELSEIF  "$(CFG)" == "PlotterZNative - Win32 (WCE PPC) Release"
@@ -2242,6 +2244,117 @@ DEP_CPP_SALVI=\
 # Begin Source File
 
 SOURCE=..\..\..\deps\salvia89\salvia.h
+# End Source File
+# End Group
+# Begin Group "Pine"
+
+# PROP Default_Filter ""
+# Begin Source File
+
+SOURCE="..\..\..\deps\pine89\pine-ini.c"
+
+!IF  "$(CFG)" == "PlotterZNative - Win32 (WCE MIPS) Release"
+
+DEP_CPP_PINE_=\
+	"..\..\..\deps\pine89\pine-ini.h"\
+	
+
+!ELSEIF  "$(CFG)" == "PlotterZNative - Win32 (WCE MIPS) Debug"
+
+DEP_CPP_PINE_=\
+	"..\..\..\deps\pine89\pine-ini.h"\
+	
+
+!ELSEIF  "$(CFG)" == "PlotterZNative - Win32 (WCE SH4) Release"
+
+DEP_CPP_PINE_=\
+	"..\..\..\deps\pine89\pine-ini.h"\
+	
+
+!ELSEIF  "$(CFG)" == "PlotterZNative - Win32 (WCE SH4) Debug"
+
+DEP_CPP_PINE_=\
+	"..\..\..\deps\pine89\pine-ini.h"\
+	
+
+!ELSEIF  "$(CFG)" == "PlotterZNative - Win32 (WCE SH3) Release"
+
+DEP_CPP_PINE_=\
+	"..\..\..\deps\pine89\pine-ini.h"\
+	
+
+!ELSEIF  "$(CFG)" == "PlotterZNative - Win32 (WCE SH3) Debug"
+
+DEP_CPP_PINE_=\
+	"..\..\..\deps\pine89\pine-ini.h"\
+	
+
+!ELSEIF  "$(CFG)" == "PlotterZNative - Win32 (WCE ARM) Release"
+
+DEP_CPP_PINE_=\
+	"..\..\..\deps\pine89\pine-ini.h"\
+	
+
+!ELSEIF  "$(CFG)" == "PlotterZNative - Win32 (WCE ARM) Debug"
+
+DEP_CPP_PINE_=\
+	"..\..\..\deps\pine89\pine-ini.h"\
+	
+
+!ELSEIF  "$(CFG)" == "PlotterZNative - Win32 (WCE MIPSFP) Release"
+
+DEP_CPP_PINE_=\
+	"..\..\..\deps\pine89\pine-ini.h"\
+	
+
+!ELSEIF  "$(CFG)" == "PlotterZNative - Win32 (WCE MIPSFP) Debug"
+
+DEP_CPP_PINE_=\
+	"..\..\..\deps\pine89\pine-ini.h"\
+	
+
+!ELSEIF  "$(CFG)" == "PlotterZNative - Win32 (WCE x86) Release"
+
+DEP_CPP_PINE_=\
+	"..\..\..\deps\pine89\pine-ini.h"\
+	
+
+!ELSEIF  "$(CFG)" == "PlotterZNative - Win32 (WCE x86) Debug"
+
+DEP_CPP_PINE_=\
+	"..\..\..\deps\pine89\pine-ini.h"\
+	
+
+!ELSEIF  "$(CFG)" == "PlotterZNative - Win32 (WCE x86em) Release"
+
+DEP_CPP_PINE_=\
+	"..\..\..\deps\pine89\pine-ini.h"\
+	
+
+!ELSEIF  "$(CFG)" == "PlotterZNative - Win32 (WCE x86em) Debug"
+
+DEP_CPP_PINE_=\
+	"..\..\..\deps\pine89\pine-ini.h"\
+	
+
+!ELSEIF  "$(CFG)" == "PlotterZNative - Win32 (WCE PPC) Release"
+
+DEP_CPP_PINE_=\
+	"..\..\..\deps\pine89\pine-ini.h"\
+	
+
+!ELSEIF  "$(CFG)" == "PlotterZNative - Win32 (WCE PPC) Debug"
+
+DEP_CPP_PINE_=\
+	"..\..\..\deps\pine89\pine-ini.h"\
+	
+
+!ENDIF 
+
+# End Source File
+# Begin Source File
+
+SOURCE="..\..\..\deps\pine89\pine-ini.h"
 # End Source File
 # End Group
 # End Group

@@ -5,3 +5,5 @@ x86emRel/
 *.ncb
 *.opt
 *.plg
+Debug/
+Release/

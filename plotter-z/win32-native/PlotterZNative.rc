@@ -65,8 +65,11 @@ IDM_MENU MENU DISCARDABLE
 BEGIN
     POPUP "&File"
     BEGIN
-        MENUITEM "&Samples",                    IDM_FILE_SAMPLES
-        MENUITEM "&Normal / Low-res Mode",      IDM_FILE_LOWRES
+        MENUITEM "&Save Session",               IDM_FILE_SAVESESSION
+        MENUITEM "&Load Session",               IDM_FILE_LOADSESSION
+        MENUITEM "Sa&mples",                    IDM_FILE_SAMPLES
+        MENUITEM SEPARATOR
+        MENUITEM "&Preferences",                IDM_FILE_PREFERENCES
         MENUITEM SEPARATOR
         MENUITEM "E&xit",                       IDM_FILE_EXIT
     END
@@ -157,6 +160,25 @@ BEGIN
     LISTBOX         IDC_SAMPLE_LIST,3,32,116,73,WS_VSCROLL
     PUSHBUTTON      "Cancel",IDCANCEL,4,103,36,14
     PUSHBUTTON      "Render",IDOK,82,103,36,14
+END
+
+IDD_PREFERENCES DIALOG DISCARDABLE  0, 0, 104, 105
+STYLE DS_MODALFRAME | WS_POPUP | WS_CAPTION
+CAPTION "Preferences"
+FONT 8, "Tahoma"
+BEGIN
+    LTEXT           "Black:",IDC_STATIC,5,7,24,12
+    EDITTEXT        IDC_PREF_COLOR0,50,5,50,14,ES_UPPERCASE
+    LTEXT           "Dark Gray:",IDC_STATIC,5,23,40,12
+    EDITTEXT        IDC_PREF_COLOR1,50,21,50,14,ES_UPPERCASE
+    LTEXT           "Light Gray:",IDC_STATIC,5,39,43,12
+    EDITTEXT        IDC_PREF_COLOR2,50,37,50,14,ES_UPPERCASE
+    LTEXT           "White:",IDC_STATIC,5,55,24,12
+    EDITTEXT        IDC_PREF_COLOR3,50,53,50,14,ES_UPPERCASE
+    CONTROL         "&Low-res Mode",IDC_PREF_LOWRES,"Button",BS_AUTOCHECKBOX | 
+                    WS_TABSTOP,5,68,80,14
+    PUSHBUTTON      "Cancel",IDCANCEL,5,86,40,14
+    PUSHBUTTON      "Apply",IDOK,60,86,40,14
 END
 
 
