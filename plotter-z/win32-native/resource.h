@@ -9,6 +9,7 @@
 #define IDI_PLOTTERZNATIVE              101
 #define IDM_MENU                        102
 #define IDD_ABOUTBOX                    103
+#define IDD_REFRESH_THRESHOLD           104
 #define IDD_EXPRESSION                  105
 #define IDD_WINDOWEDIT                  106
 #define IDD_SAMPLES                     107
@@ -16,7 +17,9 @@
 #define IDC_EXPR_EDIT                   1002
 #define IDC_THEMES_LIST                 1002
 #define IDC_WIN_XMIN                    1003
+#define IDC_THRESHOLD_EDIT              1003
 #define IDC_WIN_XMAX                    1004
+#define IDC_THRESHOLD_SLIDER            1004
 #define IDC_WIN_YMIN                    1005
 #define IDC_WIN_YMAX                    1006
 #define IDC_WIN_ZMIN                    1007
@@ -35,7 +38,7 @@
 #define IDM_FILE_EXIT                   40004
 #define IDM_FILE_PREFERENCES            40005
 #define IDM_HELP_ABOUT                  40006
-#define IDM_FILE_SMAPLES                40007
+#define IDM_FILE_REFRESH_THRESHOLD      40008
 #define IDM_VIEW_CAMERA                 40010
 #define IDM_VIEW_POSITION               40011
 #define IDM_VIEW_ZOOM                   40012
@@ -50,9 +53,9 @@
 // 
 #ifdef APSTUDIO_INVOKED
 #ifndef APSTUDIO_READONLY_SYMBOLS
-#define _APS_NEXT_RESOURCE_VALUE        104
-#define _APS_NEXT_COMMAND_VALUE         40008
-#define _APS_NEXT_CONTROL_VALUE         1003
+#define _APS_NEXT_RESOURCE_VALUE        105
+#define _APS_NEXT_COMMAND_VALUE         40009
+#define _APS_NEXT_CONTROL_VALUE         1005
 #define _APS_NEXT_SYMED_VALUE           101
 #endif
 #endif

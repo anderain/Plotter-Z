@@ -23,79 +23,34 @@ LANGUAGE LANG_ENGLISH, SUBLANG_ENGLISH_US
 
 /////////////////////////////////////////////////////////////////////////////
 //
-// Icon
+// Dialog
 //
 
-// Icon with lowest ID value placed first to ensure application icon
-// remains consistent on all systems.
-IDI_PLOTTERZNATIVE      ICON    DISCARDABLE     "PlotterZNative.ICO"
+IDD_REFRESH_THRESHOLD DIALOG DISCARDABLE  0, 0, 109, 83
+STYLE DS_MODALFRAME | WS_POPUP | WS_CAPTION
+CAPTION "Refresh threshold"
+FONT 8, "Tahoma"
+BEGIN
+    DEFPUSHBUTTON   "OK",IDOK,61,63,32,12
+    PUSHBUTTON      "Cancel",IDCANCEL,13,63,32,12
+    LTEXT           "Set threshold (50 ~ 300)",IDC_STATIC,7,7,98,8
+    EDITTEXT        IDC_THRESHOLD_EDIT,6,19,98,12,ES_AUTOHSCROLL
+    CONTROL         "Slider1",IDC_THRESHOLD_SLIDER,"msctls_trackbar32",
+                    TBS_BOTH | TBS_NOTICKS | WS_TABSTOP,7,36,96,15
+END
 
-#ifdef APSTUDIO_INVOKED
+#endif    // English (U.S.) resources
 /////////////////////////////////////////////////////////////////////////////
-//
-// TEXTINCLUDE
-//
-
-1 TEXTINCLUDE DISCARDABLE 
-BEGIN
-    "resource.h\0"
-END
-
-2 TEXTINCLUDE DISCARDABLE 
-BEGIN
-    "#include ""afxres.h""\r\n"
-    "\0"
-END
-
-3 TEXTINCLUDE DISCARDABLE 
-BEGIN
-    "\r\n"
-    "\0"
-END
-
-#endif    // APSTUDIO_INVOKED
 
 
 /////////////////////////////////////////////////////////////////////////////
-//
-// Menu
-//
+// English (U.S.) resources
 
-IDM_MENU MENU DISCARDABLE 
-BEGIN
-    POPUP "&File"
-    BEGIN
-        MENUITEM "&Save Session",               IDM_FILE_SAVESESSION
-        MENUITEM "&Load Session",               IDM_FILE_LOADSESSION
-        MENUITEM "Sa&mples",                    IDM_FILE_SAMPLES
-        MENUITEM SEPARATOR
-        MENUITEM "&Preferences",                IDM_FILE_PREFERENCES
-        MENUITEM SEPARATOR
-        MENUITEM "E&xit",                       IDM_FILE_EXIT
-    END
-    POPUP "&Edit"
-    BEGIN
-        MENUITEM "&Expression",                 IDM_EDIT_EXPRESSION
-        MENUITEM "&Window",                     IDM_EDIT_WINDOW
-    END
-    POPUP "&View"
-    BEGIN
-        MENUITEM "&Camera",                     IDM_VIEW_CAMERA
-        MENUITEM "&Position",                   IDM_VIEW_POSITION
-        MENUITEM "&Zoom",                       IDM_VIEW_ZOOM
-        MENUITEM "&Formula",                    IDM_VIEW_FORMULA
-        MENUITEM SEPARATOR
-        MENUITEM "&Reset",                      IDM_VIEW_RESET
-        MENUITEM SEPARATOR
-        MENUITEM "Toggle &Footer",              IDM_VIEW_TOGGLEFOOTER
-        MENUITEM "Toggle &Boundary Box",        IDM_VIEW_TOGGLEBOX
-    END
-    POPUP "&Help"
-    BEGIN
-        MENUITEM "&About",                      IDM_HELP_ABOUT
-    END
-END
-
+#if !defined(AFX_RESOURCE_DLL) || defined(AFX_TARG_ENU)
+#ifdef _WIN32
+LANGUAGE LANG_ENGLISH, SUBLANG_ENGLISH_US
+#pragma code_page(1252)
+#endif //_WIN32
 
 /////////////////////////////////////////////////////////////////////////////
 //
@@ -122,7 +77,7 @@ BEGIN
     EDITTEXT        IDC_EXPR_EDIT,37,6,92,14,ES_AUTOHSCROLL
     PUSHBUTTON      "Cancel",IDCANCEL,7,24,40,14
     PUSHBUTTON      "Confirm",IDOK,88,24,41,14
-    LTEXT           "f(x,y) =",IDC_STATIC,7,8,35,8
+    LTEXT           "f(x,y) =",IDC_STATIC,7,8,32,8
 END
 
 IDD_WINDOWEDIT DIALOG DISCARDABLE  0, 0, 133, 98
@@ -180,6 +135,83 @@ BEGIN
     LISTBOX         IDC_THEMES_LIST,62,16,63,65,LBS_NOINTEGRALHEIGHT | 
                     WS_VSCROLL | WS_TABSTOP
     LTEXT           "Themes",IDC_STATIC,63,5,49,8
+END
+
+
+/////////////////////////////////////////////////////////////////////////////
+//
+// Icon
+//
+
+// Icon with lowest ID value placed first to ensure application icon
+// remains consistent on all systems.
+IDI_PLOTTERZNATIVE      ICON    DISCARDABLE     "PlotterZNative.ICO"
+
+#ifdef APSTUDIO_INVOKED
+/////////////////////////////////////////////////////////////////////////////
+//
+// TEXTINCLUDE
+//
+
+1 TEXTINCLUDE DISCARDABLE 
+BEGIN
+    "resource.h\0"
+END
+
+2 TEXTINCLUDE DISCARDABLE 
+BEGIN
+    "#include ""afxres.h""\r\n"
+    "\0"
+END
+
+3 TEXTINCLUDE DISCARDABLE 
+BEGIN
+    "\r\n"
+    "\0"
+END
+
+#endif    // APSTUDIO_INVOKED
+
+
+/////////////////////////////////////////////////////////////////////////////
+//
+// Menu
+//
+
+IDM_MENU MENU DISCARDABLE 
+BEGIN
+    POPUP "&File"
+    BEGIN
+        MENUITEM "&Save Session",               IDM_FILE_SAVESESSION
+        MENUITEM "&Load Session",               IDM_FILE_LOADSESSION
+        MENUITEM "Sa&mples",                    IDM_FILE_SAMPLES
+        MENUITEM SEPARATOR
+        MENUITEM "&Preferences",                IDM_FILE_PREFERENCES
+        MENUITEM "&Refresh threshold",          IDM_FILE_REFRESH_THRESHOLD
+        MENUITEM SEPARATOR
+        MENUITEM "E&xit",                       IDM_FILE_EXIT
+    END
+    POPUP "&Edit"
+    BEGIN
+        MENUITEM "&Expression",                 IDM_EDIT_EXPRESSION
+        MENUITEM "&Window",                     IDM_EDIT_WINDOW
+    END
+    POPUP "&View"
+    BEGIN
+        MENUITEM "&Camera",                     IDM_VIEW_CAMERA
+        MENUITEM "&Position",                   IDM_VIEW_POSITION
+        MENUITEM "&Zoom",                       IDM_VIEW_ZOOM
+        MENUITEM "&Formula",                    IDM_VIEW_FORMULA
+        MENUITEM SEPARATOR
+        MENUITEM "&Reset",                      IDM_VIEW_RESET
+        MENUITEM SEPARATOR
+        MENUITEM "Toggle &Footer",              IDM_VIEW_TOGGLEFOOTER
+        MENUITEM "Toggle &Boundary Box",        IDM_VIEW_TOGGLEBOX
+    END
+    POPUP "&Help"
+    BEGIN
+        MENUITEM "&About",                      IDM_HELP_ABOUT
+    END
 END
 
 

@@ -17,11 +17,11 @@
 #include "../../deps/pine89/pine-ini.h"
 
 #define ZOOM_DRAG_THRESHOLD     15
-#define MOUSE_REFRESH_MS        120
 
+static int  g_iMouseRefreshMs = 120;
+DWORD       g_dwLastMouseRefresh;
 HINSTANCE   hInst;
 HWND        hwndCB;
-DWORD       g_dwLastMouseRefresh;
 
 int         recalc(HWND hWnd);
 void        CenterDialog(HWND hDlg);
@@ -1126,6 +1126,77 @@ static LRESULT CALLBACK PrefDlgProc(HWND hDlg, UINT message,
 }
 
 /*====================================================
+ * Refresh threshold dialog procedure
+ *====================================================*/
+static LRESULT CALLBACK RefreshDlgProc(HWND hDlg, UINT message,
+                                        WPARAM wParam, LPARAM lParam) {
+    (void)lParam;
+    switch (message) {
+        case WM_INITDIALOG:
+        {
+            TCHAR szBuf[16];
+            SendDlgItemMessage(hDlg, IDC_THRESHOLD_SLIDER, TBM_SETRANGE,
+                (WPARAM)TRUE, (LPARAM)MAKELONG(50, 300));
+            SendDlgItemMessage(hDlg, IDC_THRESHOLD_SLIDER, TBM_SETPOS,
+                (WPARAM)TRUE, (LPARAM)g_iMouseRefreshMs);
+            wsprintf(szBuf, TEXT("%d"), g_iMouseRefreshMs);
+            SetDlgItemText(hDlg, IDC_THRESHOLD_EDIT, szBuf);
+            return TRUE;
+        }
+        case WM_HSCROLL:
+        {
+            int iPos;
+            TCHAR szBuf[16];
+            iPos = (int)SendDlgItemMessage(hDlg, IDC_THRESHOLD_SLIDER,
+                TBM_GETPOS, 0, 0);
+            wsprintf(szBuf, TEXT("%d"), iPos);
+            SetDlgItemText(hDlg, IDC_THRESHOLD_EDIT, szBuf);
+            return TRUE;
+        }
+        case WM_COMMAND:
+            switch (LOWORD(wParam)) {
+                case IDC_THRESHOLD_EDIT:
+                    if (HIWORD(wParam) == EN_CHANGE) {
+                        TCHAR szBuf[16];
+                        char szAsc[16];
+                        int iVal, j;
+                        GetDlgItemText(hDlg, IDC_THRESHOLD_EDIT, szBuf, 16);
+                        for (j = 0; szBuf[j] != TEXT('\0') && j < 15; ++j)
+                            szAsc[j] = (char)szBuf[j];
+                        szAsc[j] = '\0';
+                        iVal = (int)Utils_Atoi(szAsc);
+                        if (iVal < 50) iVal = 50;
+                        if (iVal > 300) iVal = 300;
+                        SendDlgItemMessage(hDlg, IDC_THRESHOLD_SLIDER,
+                            TBM_SETPOS, (WPARAM)TRUE, (LPARAM)iVal);
+                    }
+                    return TRUE;
+                case IDOK:
+                {
+                    TCHAR szBuf[16];
+                    char szAsc[16];
+                    int iVal, j;
+                    GetDlgItemText(hDlg, IDC_THRESHOLD_EDIT, szBuf, 16);
+                    for (j = 0; szBuf[j] != TEXT('\0') && j < 15; ++j)
+                        szAsc[j] = (char)szBuf[j];
+                    szAsc[j] = '\0';
+                    iVal = (int)Utils_Atoi(szAsc);
+                    if (iVal < 50) iVal = 50;
+                    if (iVal > 300) iVal = 300;
+                    g_iMouseRefreshMs = iVal;
+                    EndDialog(hDlg, IDOK);
+                    return TRUE;
+                }
+                case IDCANCEL:
+                    EndDialog(hDlg, IDCANCEL);
+                    return TRUE;
+            }
+            break;
+    }
+    return FALSE;
+}
+
+/*====================================================
  * Draw progress bar
  *   barY   - top Y coordinate of the bar
  *   iPct   - progress percentage (0-100)
@@ -1628,6 +1699,10 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
                     DialogBox(hInst, MAKEINTRESOURCE(IDD_PREFERENCES),
                               hWnd, (DLGPROC)PrefDlgProc);
                     break;
+                case IDM_FILE_REFRESH_THRESHOLD:
+                    DialogBox(hInst, MAKEINTRESOURCE(IDD_REFRESH_THRESHOLD),
+                              hWnd, (DLGPROC)RefreshDlgProc);
+                    break;
                 case IDM_EDIT_EXPRESSION: {
                     int iRet;
                     iRet = DialogBox(hInst, MAKEINTRESOURCE(IDD_EXPRESSION), hWnd, (DLGPROC)ExprDlgProc);
@@ -1815,7 +1890,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
                 }
                 {
                     DWORD dwNow = GetTickCount();
-                    if (dwNow - g_dwLastMouseRefresh >= MOUSE_REFRESH_MS
+                    if (dwNow - g_dwLastMouseRefresh >= (DWORD)g_iMouseRefreshMs
                         || dwNow < g_dwLastMouseRefresh) {
                         redrawCanvas(hWnd);
                         InvalidateRect(hWnd, NULL, FALSE);
