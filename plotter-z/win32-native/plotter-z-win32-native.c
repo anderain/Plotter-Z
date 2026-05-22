@@ -46,12 +46,27 @@ COLORREF g_rgbPalette[] = {
     RGB(0xff, 0xff, 0xff),      /* COLOR_WHITE       */
 };
 
+/* Pre-computed palette for 16/32 bpp blit */
+#define RGB888_TO_WORD_RGB555(r,g,b)    ((WORD)(((r) >> 3 << 10) | ((g) >> 3 << 5) | ((b) >> 3)))
+
+static WORD   g_wPaletteRGB555[4];
+static DWORD  g_dwPaletteRGB888[4];
+
+static void recalcPaletteLUTs(void) {
+    int i;
+    for (i = 0; i < 4; ++i) {
+        BYTE r = GetRValue(g_rgbPalette[i]);
+        BYTE g = GetGValue(g_rgbPalette[i]);
+        BYTE b = GetBValue(g_rgbPalette[i]);
+        g_wPaletteRGB555[i] = RGB888_TO_WORD_RGB555(r, g, b);
+        g_dwPaletteRGB888[i] = (DWORD)((r << 16) | (g << 8) | b);
+    }
+}
+
 #define COLOR_BLACK         0
 #define COLOR_DARK_GRAY     1
 #define COLOR_LIGHT_GRAY    2
 #define COLOR_WHITE         3
-
-#define RGB888_TO_WORD_RGB555(r,g,b)    ((WORD)(((r) >> 3 << 10) | ((g) >> 3 << 5) | ((b) >> 3)))
 
 /*====================================================
  * Canvas zoom factor
@@ -408,18 +423,14 @@ static void paintCanvasToWindow(HWND hWnd) {
                             break;
                         case 16: {
                             WORD* pDst16 = (WORD*)pRow;
-                            COLORREF rgb = g_rgbPalette[iColor];
-                            WORD wColor = RGB888_TO_WORD_RGB555(GetRValue(rgb), GetGValue(rgb), GetBValue(rgb));
+                            WORD wColor = g_wPaletteRGB555[iColor];
                             for (iX2 = iX * iZoom; iX2 < (iX + 1) * iZoom && iX2 < g_iDibW; ++iX2)
                                 pDst16[iX2] = wColor;
                             break;
                         }
                         case 32: {
                             DWORD* pDst32 = (DWORD*)pRow;
-                            COLORREF rgb = g_rgbPalette[iColor];
-                            DWORD dwColor = (DWORD)((GetRValue(rgb) << 16)
-                                                  | (GetGValue(rgb) << 8)
-                                                  |  GetBValue(rgb));
+                            DWORD dwColor = g_dwPaletteRGB888[iColor];
                             for (iX2 = iX * iZoom; iX2 < (iX + 1) * iZoom && iX2 < g_iDibW; ++iX2)
                                 pDst32[iX2] = dwColor;
                             break;
@@ -1080,6 +1091,7 @@ static LRESULT CALLBACK PrefDlgProc(HWND hDlg, UINT message,
                         szHex[j] = '\0';
                         g_rgbPalette[i] = parseHexColor(szHex);
                     }
+                    recalcPaletteLUTs();
                     iPrevScale = iCanvasScaleFactor;
                     iCanvasScaleFactor = (SendMessage(GetDlgItem(hDlg, IDC_PREF_LOWRES), BM_GETCHECK, 0, 0)== BST_CHECKED) ? 2 : 1;
                     if (iCanvasScaleFactor != iPrevScale) {
@@ -1495,6 +1507,7 @@ static void loadSession(HWND hWnd) {
                 g_rgbPalette[i] = (COLORREF)((int)Utils_Atoi(szVal) & 0xFFFFFF);
         }
     }
+    recalcPaletteLUTs();
 
     PineIni_Destroy(pIni);
 
@@ -1815,6 +1828,8 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
                 Camera.iViewportS = (g_iCanvasH < g_iCanvasW ? g_iCanvasH : g_iCanvasW) / 2;
                 Camera.iViewportX = g_iCanvasW / 2;
                 Camera.iViewportY = g_iCanvasH / 2;
+
+                recalcPaletteLUTs();
 
                 g_RenderConfig.sInterfaces.setPixel = rzSetPixel;
                 g_RenderConfig.sInterfaces.plotLine = rzPlotLine;
