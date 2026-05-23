@@ -27,6 +27,8 @@ int         recalc                  (HWND hWnd);
 void        CharToTChar             (TCHAR* dst, const char* src, int maxLen);
 void        CenterDialog            (HWND hDlg);
 void        LoadApplicationConfig   (void);
+void        PerformanceTestRedraw   (HWND hWnd);
+void        PerformanceTestCheck    (HWND hWnd);
 
 /*====================================================
  * Constants
@@ -1257,7 +1259,7 @@ static LRESULT CALLBACK RefreshDlgProc(HWND hDlg, UINT message,
         {
             TCHAR szBuf[16];
             SendDlgItemMessage(hDlg, IDC_THRESHOLD_SLIDER, TBM_SETRANGE,
-                (WPARAM)TRUE, (LPARAM)MAKELONG(50, 300));
+                (WPARAM)TRUE, (LPARAM)MAKELONG(20, 300));
             SendDlgItemMessage(hDlg, IDC_THRESHOLD_SLIDER, TBM_SETPOS,
                 (WPARAM)TRUE, (LPARAM)g_iMouseRefreshMs);
             wsprintf(szBuf, TEXT("%d"), g_iMouseRefreshMs);
@@ -1286,7 +1288,7 @@ static LRESULT CALLBACK RefreshDlgProc(HWND hDlg, UINT message,
                             szAsc[j] = (char)szBuf[j];
                         szAsc[j] = '\0';
                         iVal = (int)Utils_Atoi(szAsc);
-                        if (iVal < 50) iVal = 50;
+                        if (iVal < 20) iVal = 20;
                         if (iVal > 300) iVal = 300;
                         SendDlgItemMessage(hDlg, IDC_THRESHOLD_SLIDER,
                             TBM_SETPOS, (WPARAM)TRUE, (LPARAM)iVal);
@@ -1302,7 +1304,7 @@ static LRESULT CALLBACK RefreshDlgProc(HWND hDlg, UINT message,
                         szAsc[j] = (char)szBuf[j];
                     szAsc[j] = '\0';
                     iVal = (int)Utils_Atoi(szAsc);
-                    if (iVal < 50) iVal = 50;
+                    if (iVal < 20) iVal = 20;
                     if (iVal > 300) iVal = 300;
                     g_iMouseRefreshMs = iVal;
                     EndDialog(hDlg, IDOK);
@@ -2239,42 +2241,13 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
         case WM_PAINT:
             /* Testing: redraw the function graph here and print the frame count */
             if (g_bPerformanceTest) {
-                char szBuf[50];
-                int iWidth;
-                int iLeft;
-                int iTop = (g_iCanvasH - CURRENT_FONT_HEIGHT) / 2;
-                static int iPadding = 4;
-                ++g_nPaintCount;
-                redrawCanvas(hWnd);
-                Salvia_Format(szBuf, "Frame = %d", g_nPaintCount);
-                iWidth = strlen(szBuf) * CURRENT_FONT_WIDTH;
-                iLeft = (g_iCanvasW - iWidth) / 2;
-                fillRectCanvas(0, iTop - iPadding, g_iCanvasW, CURRENT_FONT_HEIGHT + iPadding * 2, COLOR_BLACK);
-                putTextCanvas(iLeft, iTop, (const unsigned char*)szBuf, COLOR_WHITE);
+                PerformanceTestRedraw(hWnd);
             }
             /* Paint canvas to window */
             paintCanvasToWindow(hWnd);
             /* Determine whether to end the test */
             if (g_bPerformanceTest) {
-                DWORD dwNow = GetTickCount();
-                if (dwNow - g_dwPerfStartTime >= PERF_TEST_MS) {
-                    TCHAR szMsg[256];
-                    double fFps = (double)g_nPaintCount / PERF_TEST_SECONDS;
-                    g_bPerformanceTest = FALSE;
-                    wsprintf(
-                        szMsg,
-                        TEXT("Frames rendered in %d seconds: %d.\r\nFPS=%d.%d"),
-                        PERF_TEST_SECONDS,
-                        g_nPaintCount,
-                        (int)fFps,
-                        (int)((fFps - floor(fFps)) * 100)
-                    );
-                    MessageBox(hWnd, szMsg, TEXT("Performance Test Result"), MB_OK);
-                } else {
-                    Camera.iBetaDeg += 5;
-                    if (Camera.iBetaDeg >= 360) Camera.iBetaDeg = Camera.iBetaDeg % 360;
-                    InvalidateRect(hWnd, NULL, TRUE);
-                }
+                PerformanceTestCheck(hWnd);
             }
             break;
         case WM_SIZE:
@@ -2483,4 +2456,62 @@ void LoadApplicationConfig() {
     }
 
     PineIni_Destroy(pIni);
+}
+
+void PerformanceTestRedraw(HWND hWnd) {
+    char szBuf[50];
+    int iWidth;
+    int iLeft;
+    int iTop = (g_iCanvasH - CURRENT_FONT_HEIGHT) / 2;
+    static int iPadding = 4;
+    ++g_nPaintCount;
+    redrawCanvas(hWnd);
+    Salvia_Format(szBuf, "Frame = %d", g_nPaintCount);
+    iWidth = strlen(szBuf) * CURRENT_FONT_WIDTH;
+    iLeft = (g_iCanvasW - iWidth) / 2;
+    fillRectCanvas(0, iTop - iPadding, g_iCanvasW, CURRENT_FONT_HEIGHT + iPadding * 2, COLOR_BLACK);
+    putTextCanvas(iLeft, iTop, (const unsigned char*)szBuf, COLOR_WHITE);
+}
+
+void PerformanceTestCheck(HWND hWnd) {
+    DWORD dwNow = GetTickCount();
+    if (dwNow - g_dwPerfStartTime >= PERF_TEST_MS) {
+        TCHAR szMsg[256];
+        char szBuf[100];
+        double fFps = (double)g_nPaintCount / PERF_TEST_SECONDS;
+        int iThreshold = (PERF_TEST_MS / g_nPaintCount + 5) / 10 * 10;
+        if (iThreshold < 10) iThreshold = 10;
+        /* Stop Test */
+        g_bPerformanceTest = FALSE;
+        /* Print Result on canvas */
+        fillRectCanvas(0, 0, g_iCanvasW, g_iCanvasH, COLOR_WHITE);
+        fillRectCanvas(0, 0, g_iCanvasW, CURRENT_FONT_HEIGHT * 2, COLOR_BLACK);
+        putTextCanvas(CURRENT_FONT_WIDTH, CURRENT_FONT_HEIGHT / 2, (const unsigned char *)"Test Result", COLOR_WHITE);
+        Salvia_Format(szBuf, "Duration:     %ds", PERF_TEST_SECONDS);
+        putTextCanvas(0, CURRENT_FONT_HEIGHT * 2, (const unsigned char *)szBuf, COLOR_BLACK);
+        Salvia_Format(szBuf, "Frames drawn: %d", g_nPaintCount);
+        putTextCanvas(0, CURRENT_FONT_HEIGHT * 3, (const unsigned char *)szBuf, COLOR_BLACK);
+        Salvia_Format(szBuf, "Average FPS:  %.2f", fFps);
+        putTextCanvas(0, CURRENT_FONT_HEIGHT * 4, (const unsigned char *)szBuf, COLOR_BLACK);
+        Salvia_Format(szBuf, "Recommended Threshold: %d", iThreshold);
+        putTextCanvas(0, CURRENT_FONT_HEIGHT * 5, (const unsigned char *)szBuf, COLOR_BLACK);
+        /* Popup Message */
+        wsprintf(
+            szMsg,
+            TEXT("Duration: %ds\r\nFrames drawn: %d\r\nFPS=%d.%d\r\nRecommended Threshold: %d"),
+            PERF_TEST_SECONDS,
+            g_nPaintCount,
+            (int)fFps,
+            (int)((fFps - floor(fFps)) * 100),
+            iThreshold
+        );
+        InvalidateRect(hWnd, NULL, TRUE);
+        MessageBox(hWnd, szMsg, TEXT("Performance Test Result"), MB_OK);
+    } else {
+        Camera.iBetaDeg += 10;
+        if (Camera.iBetaDeg >= 360) Camera.iBetaDeg = Camera.iBetaDeg % 360;
+        Camera.iAlphaDeg += 5;
+        if (Camera.iAlphaDeg >= 360) Camera.iAlphaDeg = Camera.iAlphaDeg % 360;
+        InvalidateRect(hWnd, NULL, TRUE);
+    }
 }
