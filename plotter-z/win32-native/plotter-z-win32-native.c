@@ -299,12 +299,18 @@ static int createBackBuffer(HWND hWnd, int iWidth, int iHeight) {
     int iPaletteSize = 0, iBitCount, i, iBmiSize;
 
     hdc = GetDC(hWnd);
-    if (hdc == NULL) return 0;
+    if (hdc == NULL) {
+        MessageBox(hWnd, TEXT("Failed to get DC"), TEXT("ERROR"), MB_OK);
+        return 0;
+    }
     hBmpTest = CreateCompatibleBitmap(hdc, 8, 8);
-    if (hBmpTest == NULL) { ReleaseDC(hWnd, hdc); return 0; }
+    if (hBmpTest == NULL) {
+        MessageBox(hWnd, TEXT("Failed to create test bitmap"), TEXT("ERROR"), MB_OK);
+        ReleaseDC(hWnd, hdc);
+        return 0;
+    }
     GetObject(hBmpTest, sizeof(BITMAP), &bmTest);
     DeleteObject(hBmpTest);
-    ReleaseDC(hWnd, hdc);
 
     g_iScreenBpp = bmTest.bmBitsPixel;
 
@@ -313,20 +319,18 @@ static int createBackBuffer(HWND hWnd, int iWidth, int iHeight) {
         case 8:  iBitCount = 8;  iPaletteSize = 256; break;
         case 16: iBitCount = 16; iPaletteSize = 0;   break;
         case 32: iBitCount = 32; iPaletteSize = 0;   break;
-        default: return 0;
+        default:
+            MessageBox(hWnd, TEXT("Invalid bitmap bpp"), TEXT("ERROR"), MB_OK);
+            return 0;
     }
 
     iBmiSize = sizeof(BITMAPINFO) + iPaletteSize * sizeof(RGBQUAD);
     pbmi = (BITMAPINFO*)malloc((size_t)iBmiSize);
-    if (pbmi == NULL) return 0;
+    if (pbmi == NULL) {
+        MessageBox(hWnd, TEXT("Failed to allocate BITMAPINFO"), TEXT("ERROR"), MB_OK);
+        return 0;
+    }
     memset(pbmi, 0, (size_t)iBmiSize);
-    pbmi->bmiHeader.biSize        = sizeof(BITMAPINFOHEADER);
-    pbmi->bmiHeader.biWidth       = iWidth;
-    pbmi->bmiHeader.biHeight      = -iHeight;
-    pbmi->bmiHeader.biPlanes      = 1;
-    pbmi->bmiHeader.biBitCount    = iBitCount;
-    pbmi->bmiHeader.biCompression = BI_RGB;
-    pbmi->bmiHeader.biClrUsed     = (g_iScreenBpp == 2) ? 0 : iPaletteSize;
 
     if (g_iScreenBpp == 2) {
         static const BYTE byteGrayscale[] = { 0x00, 0x80, 0xc0, 0xff };
@@ -343,13 +347,48 @@ static int createBackBuffer(HWND hWnd, int iWidth, int iHeight) {
         }
     }
 
-    g_hdcBuffer = CreateCompatibleDC(NULL);
-    if (g_hdcBuffer == NULL) { free(pbmi); return 0; }
-    g_hBmpBuffer = CreateDIBSection(g_hdcBuffer, pbmi, DIB_RGB_COLORS,
-                                     (void**)&g_pDibPixels, NULL, 0);
+    pbmi->bmiHeader.biSize          = sizeof(BITMAPINFOHEADER);
+    pbmi->bmiHeader.biWidth         = iWidth;
+    pbmi->bmiHeader.biHeight        = -iHeight;
+    pbmi->bmiHeader.biPlanes        = 1;
+    pbmi->bmiHeader.biBitCount      = iBitCount;
+	pbmi->bmiHeader.biSizeImage		= 0;
+	pbmi->bmiHeader.biCompression	= 0;
+	pbmi->bmiHeader.biXPelsPerMeter	= 0;
+	pbmi->bmiHeader.biYPelsPerMeter	= 0;
+	pbmi->bmiHeader.biClrImportant	= 0;
+    /* Note: when creating 2bit DIBsection biClrUsed should be set to 0 */
+    pbmi->bmiHeader.biClrUsed       = (g_iScreenBpp == 2) ? 0 : iPaletteSize;
+
+    g_hdcBuffer = CreateCompatibleDC(hdc);
+    ReleaseDC(hWnd, hdc);
+
+    if (g_hdcBuffer == NULL) {
+        free(pbmi);
+        MessageBox(hWnd, TEXT("Failed to create hdc buffer"), TEXT("ERROR"), MB_OK);
+        return 0;
+    }
+
+    g_hBmpBuffer = CreateDIBSection(g_hdcBuffer, pbmi, DIB_RGB_COLORS, (void**)&g_pDibPixels, NULL, 0);
     free(pbmi);
+
     if (g_hBmpBuffer == NULL || g_pDibPixels == NULL) {
-        DeleteDC(g_hdcBuffer); g_hdcBuffer = NULL; return 0;
+        DeleteDC(g_hdcBuffer);
+        g_hdcBuffer = NULL;
+        {
+            DWORD dwErrorCode;
+            TCHAR szBuf[200];
+            TCHAR szTitle[] =   TEXT("FAILED: DIB SECTION");
+            TCHAR szFormat[] =  TEXT("Error Code = %d.\n")
+                                TEXT("Failed to create %dbpp dib section!\n")
+                                TEXT("Image Size: %dx%d\n")
+                                TEXT("BMP = 0x%x, Pixels = 0x%x");
+
+            dwErrorCode = GetLastError();
+            wsprintf(szBuf, szFormat, dwErrorCode, iBitCount, iWidth, iHeight, g_hBmpBuffer, g_pDibPixels);
+            MessageBox(hWnd, szBuf, szTitle, MB_OK);
+        }
+        return 0;
     }
     g_hBmpOld = SelectObject(g_hdcBuffer, g_hBmpBuffer);
     {
@@ -1285,8 +1324,16 @@ static LRESULT CALLBACK DebugDlgProc(HWND hDlg, UINT message,
             int i;
 
             /* Debug info */
-            Salvia_Format(szBuf, "Resolution: %dx%d\r\nScale: %d\r\nBarHeight: %d",g_iDibW, g_iDibH, g_iCanvasScaleFactor, g_iBarHeight);
-            CharToTChar(szBufT, szBuf, 256);
+            wsprintf(
+                szBufT,
+                TEXT("Resolution: %dx%d\r\nScale: %d\r\nBarHeight: %d\r\nCanvas: 0x%x\r\nBuffer: 0x%x"),
+                g_iDibW,
+                g_iDibH,
+                g_iCanvasScaleFactor,
+                g_iBarHeight,
+                g_pCanvas,
+                g_hdcBuffer
+            );
             SetDlgItemText(hDlg, IDC_DEBUG_INFO, szBufT);
 
             /* VM instruction list */
@@ -1978,8 +2025,14 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
                 if (iCw < 1) iCw = 1;
                 if (iCh < 1) iCh = 1;
 
-                if (!createCanvas(iCw, iCh)) return -1;
-                if (!createBackBuffer(hWnd, rcClient.right, rcClient.bottom)) {}
+                if (!createCanvas(iCw, iCh)) {
+                    MessageBox(hWnd, TEXT("Failed to create canvas"), TEXT("ERROR"), MB_OK);
+                    return -1;
+                }
+                if (!createBackBuffer(hWnd, rcClient.right, rcClient.bottom)) {
+                    MessageBox(hWnd, TEXT("Failed to create back buffer"), TEXT("ERROR"), MB_OK);
+                    return -1;
+                }
 
                 memcpy(&Camera, &DefaultCamera, sizeof(Camera));
 
