@@ -81,7 +81,8 @@ static int g_iBarHeight      = 0;
 /*====================================================
  * Expression & Camera
  *====================================================*/
-char szExpr[EXPR_MAX] = "sin(sqr(x^2+y^2))*cos(sqr(x^2+y^2))";
+#define DEFAULT_EXPR "sin(sqr(x^2+y^2))*cos(sqr(x^2+y^2))"
+char szExpr[EXPR_MAX] = DEFAULT_EXPR;
 
 const int arrZoomLevels[] = {
     PZ_FLOAT_TO_FIXED(0.20f),
@@ -116,7 +117,7 @@ struct CameraStruct {
     int iZoomLevel;
 };
 
-struct CameraStruct Camera = {
+struct CameraStruct DefaultCamera = {
     0, 0, 0,
     DEFAULT_VIEW_ALPHA, DEFAULT_VIEW_BETA,
     0, 0, 0, 0,
@@ -125,6 +126,8 @@ struct CameraStruct Camera = {
     -3.0f, 3.0f,
     ZOOM_LEVEL_DEFAULT
 };
+
+struct CameraStruct Camera;
 
 PZ_FIXED zBuf[GRID_MAX * GRID_MAX];
 PZ_FIXED xBuf[GRID_MAX];
@@ -141,6 +144,9 @@ char            g_szErrorBuf[EZ_ERROR_CONTENT_LENGTH];
 int             g_bShowBox      = 1;
 int             g_iExprPosX     = 0;
 int             g_iExprPosY     = 0;
+
+#define PERF_TEST_SECONDS   15
+#define PERF_TEST_MS        ((PERF_TEST_SECONDS) * 1000)
 
 /* Application stage */
 #define STAGE_IDLE      0
@@ -161,6 +167,9 @@ static int      g_iMousePrevX   = 0;
 static int      g_iMousePrevY   = 0;
 static int      g_iZoomAccum    = 0;
 static int      g_iEscTrigger   = 0;
+static int      g_bPerformanceTest = 0;
+static int      g_nPaintCount      = 0;
+static DWORD    g_dwPerfStartTime  = 0;
 #define ZOOM_DRAG_THRESHOLD     15
 
 /*====================================================
@@ -1313,12 +1322,43 @@ static LRESULT CALLBACK DebugDlgProc(HWND hDlg, UINT message,
                     EndDialog(hDlg, IDCANCEL);
                     return TRUE;
                 case IDC_DEBUG_PERFTEST:
-                    /* Placeholder - not implemented yet */
+                    EndDialog(hDlg, IDC_DEBUG_PERFTEST);
                     return TRUE;
             }
             break;
     }
     return FALSE;
+}
+
+static void StartDebugDialog(HWND hWnd) {
+    int iRet = DialogBox(hInst, MAKEINTRESOURCE(IDD_DEBUG), hWnd, (DLGPROC)DebugDlgProc);
+    if (iRet == IDC_DEBUG_PERFTEST) {
+        /* Reset to defaults */
+        memcpy(&Camera, &DefaultCamera, sizeof(Camera));
+        Camera.iViewportS = (g_iCanvasH < g_iCanvasW ? g_iCanvasH : g_iCanvasW) / 2;
+        Camera.iViewportX = g_iCanvasW / 2;
+        Camera.iViewportY = g_iCanvasH / 2;
+        Utils_StringCopy(szExpr, EXPR_MAX, DEFAULT_EXPR);
+        g_iExprPosX = 0;
+        g_iExprPosY = 0;
+
+        /* Destroy old state and recalc */
+        if (g_pRenderNode != NULL) { RenderNode_Destroy(g_pRenderNode); g_pRenderNode = NULL; }
+        if (g_pAstExpr != NULL) { FzAstNode_Destroy(g_pAstExpr); g_pAstExpr = NULL; }
+        if (g_pVm != NULL) { EzMachine_Destroy(g_pVm); g_pVm = NULL; }
+        g_pVm = EzMachine_Create();
+
+        if (recalc(hWnd)) {
+            /* Start performance test */
+            g_bPerformanceTest = TRUE;
+            g_nPaintCount = 0;
+            g_dwPerfStartTime = GetTickCount();
+            redrawCanvas(hWnd);
+        } else {
+            drawErrorScreen(hWnd);
+        }
+        InvalidateRect(hWnd, NULL, FALSE);
+    }
 }
 
 /*====================================================
@@ -1773,6 +1813,9 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
                 case IDM_HELP_ABOUT:
                     DialogBox(hInst, (LPCTSTR)IDD_ABOUTBOX, hWnd, (DLGPROC)About);
                     break;
+                case IDM_HELP_DEBUG:
+                    StartDebugDialog(hWnd);
+                    break;
                 case IDM_FILE_EXIT:
                     DestroyWindow(hWnd);
                     break;
@@ -1938,6 +1981,8 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
                 if (!createCanvas(iCw, iCh)) return -1;
                 if (!createBackBuffer(hWnd, rcClient.right, rcClient.bottom)) {}
 
+                memcpy(&Camera, &DefaultCamera, sizeof(Camera));
+
                 Camera.iViewportS = (g_iCanvasH < g_iCanvasW ? g_iCanvasH : g_iCanvasW) / 2;
                 Camera.iViewportX = g_iCanvasW / 2;
                 Camera.iViewportY = g_iCanvasH / 2;
@@ -2042,7 +2087,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
                 ++g_iEscTrigger;
                 if (g_iEscTrigger >= 3) {
                     g_iEscTrigger = 0;
-                    DialogBox(hInst, MAKEINTRESOURCE(IDD_DEBUG), hWnd, (DLGPROC)DebugDlgProc);
+                    StartDebugDialog(hWnd);
                 }
                 return 0;
             }
@@ -2126,8 +2171,49 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
                 }
             }
             break;
+        case WM_ERASEBKGND:
+            /* Do nothing here to prevent flickering. */
+            return TRUE;
         case WM_PAINT:
+            /* Testing: redraw the function graph here and print the frame count */
+            if (g_bPerformanceTest) {
+                char szBuf[50];
+                int iWidth;
+                int iLeft;
+                int iTop = (g_iCanvasH - CURRENT_FONT_HEIGHT) / 2;
+                static int iPadding = 4;
+                ++g_nPaintCount;
+                redrawCanvas(hWnd);
+                Salvia_Format(szBuf, "Frame = %d", g_nPaintCount);
+                iWidth = strlen(szBuf) * CURRENT_FONT_WIDTH;
+                iLeft = (g_iCanvasW - iWidth) / 2;
+                fillRectCanvas(0, iTop - iPadding, g_iCanvasW, CURRENT_FONT_HEIGHT + iPadding * 2, COLOR_BLACK);
+                putTextCanvas(iLeft, iTop, (const unsigned char*)szBuf, COLOR_WHITE);
+            }
+            /* Paint canvas to window */
             paintCanvasToWindow(hWnd);
+            /* Determine whether to end the test */
+            if (g_bPerformanceTest) {
+                DWORD dwNow = GetTickCount();
+                if (dwNow - g_dwPerfStartTime >= PERF_TEST_MS) {
+                    TCHAR szMsg[256];
+                    double fFps = (double)g_nPaintCount / PERF_TEST_SECONDS;
+                    g_bPerformanceTest = FALSE;
+                    wsprintf(
+                        szMsg,
+                        TEXT("Frames rendered in %d seconds: %d.\r\nFPS=%d.%d"),
+                        PERF_TEST_SECONDS,
+                        g_nPaintCount,
+                        (int)fFps,
+                        (int)((fFps - floor(fFps)) * 100)
+                    );
+                    MessageBox(hWnd, szMsg, TEXT("Performance Test Result"), MB_OK);
+                } else {
+                    Camera.iBetaDeg += 5;
+                    if (Camera.iBetaDeg >= 360) Camera.iBetaDeg = Camera.iBetaDeg % 360;
+                    InvalidateRect(hWnd, NULL, TRUE);
+                }
+            }
             break;
         case WM_SIZE:
             if (wParam != SIZE_MINIMIZED && g_iCanvasW > 0) {

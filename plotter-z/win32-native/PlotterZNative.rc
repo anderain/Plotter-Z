@@ -204,6 +204,8 @@ BEGIN
     END
     POPUP "&Help"
     BEGIN
+        MENUITEM "&Debug",                      IDM_HELP_DEBUG
+        MENUITEM SEPARATOR
         MENUITEM "&About",                      IDM_HELP_ABOUT
     END
 END

@@ -43,6 +43,7 @@
 #define IDM_FILE_EXIT                   40004
 #define IDM_FILE_PREFERENCES            40005
 #define IDM_HELP_ABOUT                  40006
+#define IDM_HELP_DEBUG                  40007
 #define IDM_FILE_REFRESH_THRESHOLD      40008
 #define IDM_VIEW_CAMERA                 40010
 #define IDM_VIEW_POSITION               40011
