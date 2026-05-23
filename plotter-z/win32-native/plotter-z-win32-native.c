@@ -24,10 +24,11 @@ HINSTANCE   hInst;
 HWND        hwndCB;
 
 int         recalc(HWND hWnd);
+void        CharToTChar(TCHAR* dst, const char* src, int maxLen);
 void        CenterDialog(HWND hDlg);
 
 /*====================================================
- * Macros
+ * Constants
  *====================================================*/
 #define MAX_LOADSTRING      100
 #define EXPR_MAX            300
@@ -74,7 +75,7 @@ static void recalcPaletteLUTs(void) {
  *   low-performance devices.  e.g. factor=2 means
  *   canvas is half the width/height of the DIB.
  *====================================================*/
-static int iCanvasScaleFactor = 1;
+static int g_iCanvasScaleFactor = 1;
 static int g_iBarHeight      = 0;
 
 /*====================================================
@@ -159,6 +160,7 @@ static int      g_bMouseDown    = 0;
 static int      g_iMousePrevX   = 0;
 static int      g_iMousePrevY   = 0;
 static int      g_iZoomAccum    = 0;
+static int      g_iEscTrigger   = 0;
 #define ZOOM_DRAG_THRESHOLD     15
 
 /*====================================================
@@ -365,12 +367,12 @@ static void destroyBackBuffer(void) {
 
 /*====================================================
  * Paint canvas to window
- *   Scales canvas pixels by iCanvasScaleFactor
+ *   Scales canvas pixels by g_iCanvasScaleFactor
  *   into the full-resolution DIB, then BitBlt.
  *====================================================*/
 static void paintCanvas2Bpp() {
     int iX, iY, iX2, iY2;
-    int iZoom = iCanvasScaleFactor;
+    int iZoom = g_iCanvasScaleFactor;
     BYTE* pRow;
     if (iZoom < 1) iZoom = 1;
     for (iY = 0; iY < g_iCanvasH; ++iY) {
@@ -398,7 +400,7 @@ static void paintCanvas2Bpp() {
 
 static void paintCanvas8Bpp() {
     int iX, iY, iX2, iY2;
-    int iZoom = iCanvasScaleFactor;
+    int iZoom = g_iCanvasScaleFactor;
     BYTE* pRow;
     if (iZoom < 1) iZoom = 1;
     for (iY = 0; iY < g_iCanvasH; ++iY) {
@@ -410,7 +412,7 @@ static void paintCanvas8Bpp() {
                 pRow = g_pDibPixels + iDstY * g_iDibPitch;
                 for (iX2 = iX * iZoom; iX2 < (iX + 1) * iZoom && iX2 < g_iDibW; ++iX2) {
                     pRow[iX2] = (BYTE)iColor;
-                }        
+                }
             }
         }
     }
@@ -418,7 +420,7 @@ static void paintCanvas8Bpp() {
 
 static void paintCanvas16Bpp() {
     int iX, iY, iX2, iY2;
-    int iZoom = iCanvasScaleFactor;
+    int iZoom = g_iCanvasScaleFactor;
     BYTE* pRow;
     if (iZoom < 1) iZoom = 1;
     for (iY = 0; iY < g_iCanvasH; ++iY) {
@@ -442,7 +444,7 @@ static void paintCanvas16Bpp() {
 
 static void paintCanvas32Bpp() {
     int iX, iY, iX2, iY2;
-    int iZoom = iCanvasScaleFactor;
+    int iZoom = g_iCanvasScaleFactor;
     BYTE* pRow;
     if (iZoom < 1) iZoom = 1;
     for (iY = 0; iY < g_iCanvasH; ++iY) {
@@ -493,7 +495,7 @@ static void paintCanvasToWindow(HWND hWnd) {
         }
         BitBlt(hdc, 0, g_iBarHeight, g_iDibW, g_iDibH, g_hdcBuffer, 0, 0, SRCCOPY);
     } else {
-        int iZoom = iCanvasScaleFactor;
+        int iZoom = g_iCanvasScaleFactor;
         if (iZoom < 1) iZoom = 1;
         for (iY = 0; iY < g_iDibH; ++iY)
             for (iX = 0; iX < g_iDibW; ++iX)
@@ -1091,7 +1093,7 @@ static LRESULT CALLBACK PrefDlgProc(HWND hDlg, UINT message,
             int i;
             for (i = 0; i < 4; ++i)
                 setColorEdit(hDlg, IDC_PREF_COLOR0 + i, g_rgbPalette[i]);
-            if (iCanvasScaleFactor == 2)
+            if (g_iCanvasScaleFactor == 2)
                 SendMessage(GetDlgItem(hDlg, IDC_PREF_LOWRES), BM_SETCHECK, (WPARAM)BST_CHECKED, 0);
             CenterDialog(hDlg);
             for (i = 0; i < g_iNumThemes; ++i) {
@@ -1144,14 +1146,14 @@ static LRESULT CALLBACK PrefDlgProc(HWND hDlg, UINT message,
                         g_rgbPalette[i] = parseHexColor(szHex);
                     }
                     recalcPaletteLUTs();
-                    iPrevScale = iCanvasScaleFactor;
-                    iCanvasScaleFactor = (SendMessage(GetDlgItem(hDlg, IDC_PREF_LOWRES), BM_GETCHECK, 0, 0)== BST_CHECKED) ? 2 : 1;
-                    if (iCanvasScaleFactor != iPrevScale) {
+                    iPrevScale = g_iCanvasScaleFactor;
+                    g_iCanvasScaleFactor = (SendMessage(GetDlgItem(hDlg, IDC_PREF_LOWRES), BM_GETCHECK, 0, 0)== BST_CHECKED) ? 2 : 1;
+                    if (g_iCanvasScaleFactor != iPrevScale) {
                         RECT rc;
                         int iCw, iCh;
                         int iScaleOld, iScaleNew;
                         iScaleOld = iPrevScale;
-                        iScaleNew = iCanvasScaleFactor;
+                        iScaleNew = g_iCanvasScaleFactor;
                         Camera.iViewportX = Camera.iViewportX * iScaleOld / iScaleNew;
                         Camera.iViewportY = Camera.iViewportY * iScaleOld / iScaleNew;
                         g_iExprPosX = g_iExprPosX * iScaleOld / iScaleNew;
@@ -1161,8 +1163,8 @@ static LRESULT CALLBACK PrefDlgProc(HWND hDlg, UINT message,
                         GetClientRect(hWndParent, &rc);
                         rc.bottom -= g_iBarHeight;
                         if (rc.bottom < 1) rc.bottom = 1;
-                        iCw = rc.right / iCanvasScaleFactor;
-                        iCh = rc.bottom / iCanvasScaleFactor;
+                        iCw = rc.right / g_iCanvasScaleFactor;
+                        iCh = rc.bottom / g_iCanvasScaleFactor;
                         if (iCw < 1) iCw = 1;
                         if (iCh < 1) iCh = 1;
                         createCanvas(iCw, iCh);
@@ -1253,6 +1255,65 @@ static LRESULT CALLBACK RefreshDlgProc(HWND hDlg, UINT message,
                 }
                 case IDCANCEL:
                     EndDialog(hDlg, IDCANCEL);
+                    return TRUE;
+            }
+            break;
+    }
+    return FALSE;
+}
+
+/*====================================================
+ * Debug Mode dialog procedure
+ *====================================================*/
+static LRESULT CALLBACK DebugDlgProc(HWND hDlg, UINT message,
+                                      WPARAM wParam, LPARAM lParam) {
+    (void)lParam;
+    switch (message) {
+        case WM_INITDIALOG:
+        {
+            char szBuf[256];
+            TCHAR szBufT[256];
+            int i;
+
+            /* Debug info */
+            Salvia_Format(szBuf, "Resolution: %dx%d\r\nScale: %d\r\nBarHeight: %d",g_iDibW, g_iDibH, g_iCanvasScaleFactor, g_iBarHeight);
+            CharToTChar(szBufT, szBuf, 256);
+            SetDlgItemText(hDlg, IDC_DEBUG_INFO, szBufT);
+
+            /* VM instruction list */
+            if (g_pVm != NULL) {
+                for (i = 0; i < g_pVm->iInstructionLength; ++i) {
+                    EzInstruction* pInst = g_pVm->pInstructions + i;
+                    switch (pInst->iOpCode) {
+                        case EZOP_PUSH_IMD:
+                            Salvia_Format(szBuf, "[%3d] %s %.3f", i, EzOpCode_GetName(pInst->iOpCode), (double)pInst->uData.fImmediate);
+                            break;
+                        case EZOP_PUSH_VAR:
+                            Salvia_Format(szBuf, "[%3d] %s %d", i, EzOpCode_GetName(pInst->iOpCode), pInst->uData.iVarIndex);
+                            break;
+                        case EZOP_FUNC: {
+                            const PzFuncMeta* pMeta;
+                            pMeta = Constant_GetFunctionMetadataByIndex((PzFuncIndex)pInst->uData.iFuncIndex);
+                            Salvia_Format(szBuf, "[%3d] %s %s", i, EzOpCode_GetName(pInst->iOpCode), pMeta ? pMeta->szName : "?");
+                            break;
+                        }
+                        default:
+                            Salvia_Format(szBuf, "[%3d] %s", i, EzOpCode_GetName(pInst->iOpCode));
+                            break;
+                    }
+                    CharToTChar(szBufT, szBuf, 256);
+                    SendDlgItemMessage(hDlg, IDC_DEBUG_VMLIST, LB_ADDSTRING, 0, (LPARAM)szBufT);
+                }
+            }
+            return TRUE;
+        }
+        case WM_COMMAND:
+            switch (LOWORD(wParam)) {
+                case IDCANCEL:
+                    EndDialog(hDlg, IDCANCEL);
+                    return TRUE;
+                case IDC_DEBUG_PERFTEST:
+                    /* Placeholder - not implemented yet */
                     return TRUE;
             }
             break;
@@ -1448,10 +1509,10 @@ static void saveSession(HWND hWnd) {
         Camera.zMin, Camera.zMax,
         Camera.xGrid, Camera.yGrid,
         Camera.iZoomLevel,
-        Camera.iViewportX * iCanvasScaleFactor,
-        Camera.iViewportY * iCanvasScaleFactor,
-        g_iExprPosX * iCanvasScaleFactor,
-        g_iExprPosY * iCanvasScaleFactor);
+        Camera.iViewportX * g_iCanvasScaleFactor,
+        Camera.iViewportY * g_iCanvasScaleFactor,
+        g_iExprPosX * g_iCanvasScaleFactor,
+        g_iExprPosY * g_iCanvasScaleFactor);
     iPos += Salvia_Format(szIni + iPos,
         "[palette]\r\n"
         "black=%d\r\n"
@@ -1539,11 +1600,11 @@ static void loadSession(HWND hWnd) {
         Camera.iViewportY = PineIni_Section_GetInt(pSec, "viewy", Camera.iViewportY);
         g_iExprPosX = PineIni_Section_GetInt(pSec, "exprx", g_iExprPosX);
         g_iExprPosY = PineIni_Section_GetInt(pSec, "expry", g_iExprPosY);
-        if (iCanvasScaleFactor > 1) {
-            Camera.iViewportX /= iCanvasScaleFactor;
-            Camera.iViewportY /= iCanvasScaleFactor;
-            g_iExprPosX      /= iCanvasScaleFactor;
-            g_iExprPosY      /= iCanvasScaleFactor;
+        if (g_iCanvasScaleFactor > 1) {
+            Camera.iViewportX /= g_iCanvasScaleFactor;
+            Camera.iViewportY /= g_iCanvasScaleFactor;
+            g_iExprPosX      /= g_iCanvasScaleFactor;
+            g_iExprPosY      /= g_iCanvasScaleFactor;
         }
     }
 
@@ -1868,9 +1929,9 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
                 rcClient.bottom -= g_iBarHeight;
                 if (rcClient.bottom < 1) rcClient.bottom = 1;
 
-                if (iCanvasScaleFactor < 1) iCanvasScaleFactor = 1;
-                iCw = rcClient.right / iCanvasScaleFactor;
-                iCh = rcClient.bottom / iCanvasScaleFactor;
+                if (g_iCanvasScaleFactor < 1) g_iCanvasScaleFactor = 1;
+                iCw = rcClient.right / g_iCanvasScaleFactor;
+                iCh = rcClient.bottom / g_iCanvasScaleFactor;
                 if (iCw < 1) iCw = 1;
                 if (iCh < 1) iCh = 1;
 
@@ -1976,6 +2037,16 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
                 }
             }
 #endif
+            /* Esc trigger for Debug Mode */
+            if (wParam == VK_ESCAPE) {
+                ++g_iEscTrigger;
+                if (g_iEscTrigger >= 3) {
+                    g_iEscTrigger = 0;
+                    DialogBox(hInst, MAKEINTRESOURCE(IDD_DEBUG), hWnd, (DLGPROC)DebugDlgProc);
+                }
+                return 0;
+            }
+            g_iEscTrigger = 0;
             if (g_iStage != STAGE_READY) break;
             {
                 int bRedraw = 0;
@@ -2066,8 +2137,8 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
                 iNewH -= g_iBarHeight;
                 if (iNewH < 1) iNewH = 1;
                 if (iNewW != g_iDibW || iNewH != g_iDibH) {
-                    iCw = iNewW / iCanvasScaleFactor;
-                    iCh = iNewH / iCanvasScaleFactor;
+                    iCw = iNewW / g_iCanvasScaleFactor;
+                    iCh = iNewH / g_iCanvasScaleFactor;
                     if (iCw < 1) iCw = 1;
                     if (iCh < 1) iCh = 1;
                     destroyBackBuffer();
@@ -2196,3 +2267,13 @@ void ToggleFullscreen(HWND hWnd) {
     }
 }
 #endif
+
+/*====================================================
+ * Utility: copy char string to TCHAR buffer
+ *====================================================*/
+void CharToTChar(TCHAR* dst, const char* src, int maxLen) {
+    int i;
+    for (i = 0; i < maxLen - 1 && src[i] != '\0'; ++i)
+        dst[i] = (TCHAR)(src[i] & 0xFF);
+    dst[i] = TEXT('\0');
+}

@@ -14,6 +14,8 @@
 #define IDD_WINDOWEDIT                  106
 #define IDD_SAMPLES                     107
 #define IDD_PREFERENCES                 108
+#define IDD_CANVAS_PREFERENCES          108
+#define IDD_DEBUG                       109
 #define IDC_EXPR_EDIT                   1002
 #define IDC_THEMES_LIST                 1002
 #define IDC_WIN_XMIN                    1003
@@ -32,6 +34,9 @@
 #define IDC_PREF_COLOR2                 1014
 #define IDC_PREF_COLOR3                 1015
 #define IDC_PREF_LOWRES                 1016
+#define IDC_DEBUG_INFO                  1017
+#define IDC_DEBUG_VMLIST                1018
+#define IDC_DEBUG_PERFTEST              1019
 #define IDM_FILE_SAVESESSION            40001
 #define IDM_FILE_LOADSESSION            40002
 #define IDM_FILE_SAMPLES                40003
