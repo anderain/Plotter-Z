@@ -23,9 +23,10 @@ DWORD       g_dwLastMouseRefresh;
 HINSTANCE   hInst;
 HWND        hwndCB;
 
-int         recalc(HWND hWnd);
-void        CharToTChar(TCHAR* dst, const char* src, int maxLen);
-void        CenterDialog(HWND hDlg);
+int         recalc                  (HWND hWnd);
+void        CharToTChar             (TCHAR* dst, const char* src, int maxLen);
+void        CenterDialog            (HWND hDlg);
+void        LoadApplicationConfig   (void);
 
 /*====================================================
  * Constants
@@ -282,6 +283,7 @@ static void destroyCanvas(void) {
 /*====================================================
  * Back buffer: memory HDC + DIB section
  *====================================================*/
+static int       g_iForceBpp     = -1;
 static HDC       g_hdcBuffer     = NULL;
 static HBITMAP   g_hBmpBuffer    = NULL;
 static HBITMAP   g_hBmpOld       = NULL;
@@ -293,8 +295,6 @@ static int       g_iDibH         = 0;
 
 static int createBackBuffer(HWND hWnd, int iWidth, int iHeight) {
     HDC hdc;
-    HBITMAP hBmpTest;
-    BITMAP bmTest;
     BITMAPINFO* pbmi;
     int iPaletteSize = 0, iBitCount, i, iBmiSize;
 
@@ -303,16 +303,23 @@ static int createBackBuffer(HWND hWnd, int iWidth, int iHeight) {
         MessageBox(hWnd, TEXT("Failed to get DC"), TEXT("ERROR"), MB_OK);
         return 0;
     }
-    hBmpTest = CreateCompatibleBitmap(hdc, 8, 8);
-    if (hBmpTest == NULL) {
-        MessageBox(hWnd, TEXT("Failed to create test bitmap"), TEXT("ERROR"), MB_OK);
-        ReleaseDC(hWnd, hdc);
-        return 0;
-    }
-    GetObject(hBmpTest, sizeof(BITMAP), &bmTest);
-    DeleteObject(hBmpTest);
 
-    g_iScreenBpp = bmTest.bmBitsPixel;
+    if (g_iForceBpp < 0) {
+        HBITMAP hBmpTest;
+        BITMAP bmTest;
+        hBmpTest = CreateCompatibleBitmap(hdc, 8, 8);
+        if (hBmpTest == NULL) {
+            MessageBox(hWnd, TEXT("Failed to create test bitmap"), TEXT("ERROR"), MB_OK);
+            ReleaseDC(hWnd, hdc);
+            return 0;
+        }
+        GetObject(hBmpTest, sizeof(BITMAP), &bmTest);
+        DeleteObject(hBmpTest);  
+        g_iScreenBpp = bmTest.bmBitsPixel; 
+    }
+    else {
+        g_iScreenBpp = g_iForceBpp;
+    }
 
     switch (g_iScreenBpp) {
         case 2:  iBitCount = 2;  iPaletteSize = 4;   break;
@@ -1741,114 +1748,116 @@ struct {
     int iBarHeight;
 } PrevWindowSize;
 
-int WINAPI WinMain(	HINSTANCE hInstance,
-					HINSTANCE hPrevInstance,
-					LPTSTR    lpCmdLine,
-					int       nCmdShow) {
-	MSG msg;
-	HACCEL hAccelTable;
+int WINAPI WinMain( HINSTANCE hInstance,
+                    HINSTANCE hPrevInstance,
+                    LPTSTR    lpCmdLine,
+                    int       nCmdShow) {
+    MSG msg;
+    HACCEL hAccelTable;
 
-	if (!InitInstance (hInstance, nCmdShow)) {
-		return FALSE;
-	}
+    LoadApplicationConfig();
 
-	hAccelTable = LoadAccelerators(hInstance, (LPCTSTR)IDC_PLOTTERZNATIVE);
+    if (!InitInstance (hInstance, nCmdShow)) {
+        return FALSE;
+    }
 
-	while (GetMessage(&msg, NULL, 0, 0))  {
-		if (!TranslateAccelerator(msg.hwnd, hAccelTable, &msg)) {
-			TranslateMessage(&msg);
-			DispatchMessage(&msg);
-		}
-	}
+    hAccelTable = LoadAccelerators(hInstance, (LPCTSTR)IDC_PLOTTERZNATIVE);
 
-	return msg.wParam;
+    while (GetMessage(&msg, NULL, 0, 0))  {
+        if (!TranslateAccelerator(msg.hwnd, hAccelTable, &msg)) {
+            TranslateMessage(&msg);
+            DispatchMessage(&msg);
+        }
+    }
+
+    return msg.wParam;
 }
 
 ATOM MyRegisterClass(HINSTANCE hInstance, LPTSTR szWindowClass) {
 #if VER_PLATFORM_WIN32_CE
-	WNDCLASS	wc;
+    WNDCLASS    wc;
 
-    wc.style			= CS_HREDRAW | CS_VREDRAW;
-    wc.lpfnWndProc		= (WNDPROC) WndProc;
-    wc.cbClsExtra		= 0;
-    wc.cbWndExtra		= 0;
-    wc.hInstance		= hInstance;
-    wc.hIcon			= LoadIcon(hInstance, MAKEINTRESOURCE(IDI_PLOTTERZNATIVE));
-    wc.hCursor			= 0;
-    wc.hbrBackground	= (HBRUSH) GetStockObject(WHITE_BRUSH);
-    wc.lpszMenuName		= 0;
-    wc.lpszClassName	= szWindowClass;
+    wc.style            = CS_HREDRAW | CS_VREDRAW;
+    wc.lpfnWndProc        = (WNDPROC) WndProc;
+    wc.cbClsExtra        = 0;
+    wc.cbWndExtra        = 0;
+    wc.hInstance        = hInstance;
+    wc.hIcon            = LoadIcon(hInstance, MAKEINTRESOURCE(IDI_PLOTTERZNATIVE));
+    wc.hCursor            = 0;
+    wc.hbrBackground    = (HBRUSH) GetStockObject(WHITE_BRUSH);
+    wc.lpszMenuName        = 0;
+    wc.lpszClassName    = szWindowClass;
 
-	return RegisterClass(&wc);
+    return RegisterClass(&wc);
 #else
-	WNDCLASSEX wcex;
+    WNDCLASSEX wcex;
 
-	wcex.cbSize = sizeof(WNDCLASSEX); 
+    wcex.cbSize = sizeof(WNDCLASSEX); 
 
-	wcex.style			= CS_HREDRAW | CS_VREDRAW;
-	wcex.lpfnWndProc	= (WNDPROC)WndProc;
-	wcex.cbClsExtra		= 0;
-	wcex.cbWndExtra		= 0;
-	wcex.hInstance		= hInstance;
-	wcex.hIcon			= LoadIcon(hInstance, (LPCTSTR)IDI_PLOTTERZNATIVE);
-	wcex.hCursor		= LoadCursor(NULL, IDC_ARROW);
-	wcex.hbrBackground	= (HBRUSH)(COLOR_WINDOW+1);
-	wcex.lpszMenuName	= (LPCSTR)IDM_MENU;
-	wcex.lpszClassName	= szWindowClass;
-	wcex.hIconSm		= NULL;
+    wcex.style            = CS_HREDRAW | CS_VREDRAW;
+    wcex.lpfnWndProc    = (WNDPROC)WndProc;
+    wcex.cbClsExtra        = 0;
+    wcex.cbWndExtra        = 0;
+    wcex.hInstance        = hInstance;
+    wcex.hIcon            = LoadIcon(hInstance, (LPCTSTR)IDI_PLOTTERZNATIVE);
+    wcex.hCursor        = LoadCursor(NULL, IDC_ARROW);
+    wcex.hbrBackground    = (HBRUSH)(COLOR_WINDOW+1);
+    wcex.lpszMenuName    = (LPCSTR)IDM_MENU;
+    wcex.lpszClassName    = szWindowClass;
+    wcex.hIconSm        = NULL;
 
     return RegisterClassEx(&wcex);
 #endif
 }
 
 BOOL InitInstance(HINSTANCE hInstance, int nCmdShow) {
-	HWND	hWnd;
-	TCHAR	szTitle[MAX_LOADSTRING];
-	TCHAR	szWindowClass[MAX_LOADSTRING];
+    HWND    hWnd;
+    TCHAR    szTitle[MAX_LOADSTRING];
+    TCHAR    szWindowClass[MAX_LOADSTRING];
 
-	hInst = hInstance;
+    hInst = hInstance;
 
-	LoadString(hInstance, IDC_PLOTTERZNATIVE, szWindowClass, MAX_LOADSTRING);
-	MyRegisterClass(hInstance, szWindowClass);
+    LoadString(hInstance, IDC_PLOTTERZNATIVE, szWindowClass, MAX_LOADSTRING);
+    MyRegisterClass(hInstance, szWindowClass);
 
-	LoadString(hInstance, IDS_APP_TITLE, szTitle, MAX_LOADSTRING);
+    LoadString(hInstance, IDS_APP_TITLE, szTitle, MAX_LOADSTRING);
 #if VER_PLATFORM_WIN32_CE
-	hWnd = CreateWindow(szWindowClass, szTitle, WS_VISIBLE,
-		0, 0, CW_USEDEFAULT, CW_USEDEFAULT, NULL, NULL, hInstance, NULL);
+    hWnd = CreateWindow(szWindowClass, szTitle, WS_VISIBLE,
+        0, 0, CW_USEDEFAULT, CW_USEDEFAULT, NULL, NULL, hInstance, NULL);
 #else
-	hWnd = CreateWindow(szWindowClass, szTitle, WS_OVERLAPPEDWINDOW,
-		0, 0, 640, 480, NULL, NULL, hInstance, NULL);
+    hWnd = CreateWindow(szWindowClass, szTitle, WS_OVERLAPPEDWINDOW,
+        0, 0, 640, 480, NULL, NULL, hInstance, NULL);
 #endif
 
-	if (!hWnd) {	
-		return FALSE;
-	}
+    if (!hWnd) {    
+        return FALSE;
+    }
 
-	ShowWindow(hWnd, nCmdShow);
-	UpdateWindow(hWnd);
+    ShowWindow(hWnd, nCmdShow);
+    UpdateWindow(hWnd);
 #if VER_PLATFORM_WIN32_CE
     if (hwndCB) {
-		CommandBar_Show(hwndCB, TRUE);
+        CommandBar_Show(hwndCB, TRUE);
     }
 #else
     {
         int iScrWidth, iScrHeight;
         RECT rectWin;
-	    iScrWidth = GetSystemMetrics(SM_CXSCREEN);
-	    iScrHeight = GetSystemMetrics(SM_CYSCREEN);
-	    GetWindowRect(hWnd, &rectWin);
-	    SetWindowPos(
-		    hWnd,
-		    HWND_TOP,
-		    (iScrWidth - (rectWin.right - rectWin.left)) / 2,
-		    (iScrHeight - (rectWin.bottom - rectWin.top)) / 2,
-		    0, 0,
-		    SWP_NOSIZE
-	    );
+        iScrWidth = GetSystemMetrics(SM_CXSCREEN);
+        iScrHeight = GetSystemMetrics(SM_CYSCREEN);
+        GetWindowRect(hWnd, &rectWin);
+        SetWindowPos(
+            hWnd,
+            HWND_TOP,
+            (iScrWidth - (rectWin.right - rectWin.left)) / 2,
+            (iScrHeight - (rectWin.bottom - rectWin.top)) / 2,
+            0, 0,
+            SWP_NOSIZE
+        );
     }
 #endif
 
-	return TRUE;
+    return TRUE;
 }
 
 LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) {
@@ -2415,4 +2424,63 @@ void CharToTChar(TCHAR* dst, const char* src, int maxLen) {
     for (i = 0; i < maxLen - 1 && src[i] != '\0'; ++i)
         dst[i] = (TCHAR)(src[i] & 0xFF);
     dst[i] = TEXT('\0');
+}
+
+void LoadApplicationConfig() {
+    TCHAR szFile[MAX_PATH] = TEXT("plotter-z.ini");
+    HANDLE hFile;
+    DWORD dwSize, dwRead;
+    char* pBuf;
+    PineIniFile* pIni;
+    PineIniError iniErr;
+    const PineIniSection* pSec;
+
+    hFile = CreateFile(szFile, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+    if (hFile == INVALID_HANDLE_VALUE) return;
+
+    dwSize = GetFileSize(hFile, NULL);
+    if (dwSize == INVALID_FILE_SIZE || dwSize > 8191) {
+        CloseHandle(hFile); return;
+    }
+
+    pBuf = (char*)malloc((size_t)(dwSize + 1));
+    if (pBuf == NULL) {
+        CloseHandle(hFile); return;
+    }
+
+    if (!ReadFile(hFile, pBuf, dwSize, &dwRead, NULL) || dwRead != dwSize) {
+        free(pBuf);
+        CloseHandle(hFile);
+        return;
+    }
+
+    CloseHandle(hFile);
+    pBuf[dwSize] = '\0';
+
+    pIni = PineIni_Parse(pBuf, &iniErr);
+    free(pBuf);
+    if (pIni == NULL) return;
+
+    /* Parse [expression] */
+    pSec = PineIni_Find(pIni, "expression");
+    if (pSec != NULL) {
+        Utils_StringCopy(szExpr, EXPR_MAX, PineIni_Section_GetString(pSec, "expr", szExpr));
+    }
+
+    /* Parse [graphics] */
+    pSec = PineIni_Find(pIni, "graphics");
+    if (pSec != NULL) {
+        g_iForceBpp = PineIni_Section_GetInt(pSec, "force_bpp", -1);
+        switch (g_iForceBpp) {
+            case 2:
+            case 8:
+            case 16:
+            case 32:
+                break;
+            default:
+                g_iForceBpp = -1;
+        }
+    }
+
+    PineIni_Destroy(pIni);
 }
