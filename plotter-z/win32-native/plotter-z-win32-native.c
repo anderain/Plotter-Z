@@ -403,19 +403,16 @@ static void paintCanvasToWindow(HWND hWnd) {
 
                     switch (g_iScreenBpp) {
                         case 2: {
-                            int iDstX = iX * iZoom;
-                            int iXEnd = iDstX + iZoom;
-                            int iSrcShift, iByteIdx, iMask;
-                            unsigned char ucByte;
-                            for (iX2 = iDstX; iX2 < iXEnd && iX2 < g_iDibW; ++iX2) {
-                                iByteIdx = iX2 >> 2;
-                                iSrcShift = 6 - ((iX2 & 3) << 1);
-                                iMask = ~(0x03 << iSrcShift);
-                                ucByte = (unsigned char)((pRow[iByteIdx] & iMask)
-                                       | ((iColor & 0x03) << iSrcShift));
-                                pRow[iByteIdx] = ucByte;
-                            }
-                            break;
+                            int iDstX = iX * iZoom;  
+                            int iXEnd = iDstX + iZoom;  
+                            unsigned char ucColor = (unsigned char)(iColor & 0x03);  
+                            for (iX2 = iDstX; iX2 < iXEnd && iX2 < g_iDibW; ++iX2) {  
+                                int iByteIdx = iX2 >> 2;  
+                                int iSrcShift = 6 - ((iX2 & 3) << 1);  
+                                unsigned char ucMask = ~(0x03 << iSrcShift);  
+                                pRow[iByteIdx] = (pRow[iByteIdx] & ucMask) | (ucColor << iSrcShift);  
+                            }  
+                            break;  
                         }
                         case 8:
                             for (iX2 = iX * iZoom; iX2 < (iX + 1) * iZoom && iX2 < g_iDibW; ++iX2)
