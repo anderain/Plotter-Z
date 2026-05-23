@@ -130,6 +130,8 @@ PZ_FIXED xBuf[GRID_MAX];
 PZ_FIXED yBuf[GRID_MAX];
 #define Z_BUF(x,y) (zBuf[(x) + (y) * Camera.xGrid])
 
+#define SAMPLE_DEFAULT_GRID 20
+
 FzAstNode*      g_pAstExpr      = NULL;
 EzMachine*      g_pVm           = NULL;
 RenderNode*     g_pRenderNode   = NULL;
@@ -1673,8 +1675,8 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
                         Camera.yMax  = p->yMax;
                         Camera.zMin  = p->zMin;
                         Camera.zMax  = p->zMax;
-                        Camera.xGrid = 30;
-                        Camera.yGrid = 30;
+                        Camera.xGrid = SAMPLE_DEFAULT_GRID;
+                        Camera.yGrid = SAMPLE_DEFAULT_GRID;
                         Utils_StringCopy(szExpr, EXPR_MAX, p->szExpr);
                         if (g_pRenderNode != NULL) {
                             RenderNode_Destroy(g_pRenderNode);
