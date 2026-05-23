@@ -368,6 +368,102 @@ static void destroyBackBuffer(void) {
  *   Scales canvas pixels by iCanvasScaleFactor
  *   into the full-resolution DIB, then BitBlt.
  *====================================================*/
+static void paintCanvas2Bpp() {
+    int iX, iY, iX2, iY2;
+    int iZoom = iCanvasScaleFactor;
+    BYTE* pRow;
+    if (iZoom < 1) iZoom = 1;
+    for (iY = 0; iY < g_iCanvasH; ++iY) {
+        for (iX = 0; iX < g_iCanvasW; ++iX) {
+            int iColor = getPixelCanvas(iX, iY);
+            for (iY2 = 0; iY2 < iZoom; ++iY2) {
+                int iDstY = iY * iZoom + iY2;
+                int iDstX, iXEnd;
+                unsigned char ucColor;
+                if (iDstY >= g_iDibH) break;
+                pRow = g_pDibPixels + iDstY * g_iDibPitch;
+                iDstX = iX * iZoom;  
+                iXEnd = iDstX + iZoom;  
+                ucColor = (unsigned char)(iColor & 0x03);  
+                for (iX2 = iDstX; iX2 < iXEnd && iX2 < g_iDibW; ++iX2) {  
+                    int iByteIdx = iX2 >> 2;  
+                    int iSrcShift = 6 - ((iX2 & 3) << 1);  
+                    unsigned char ucMask = ~(0x03 << iSrcShift);  
+                    pRow[iByteIdx] = (pRow[iByteIdx] & ucMask) | (ucColor << iSrcShift);  
+                }
+            }
+        }
+    }
+}
+
+static void paintCanvas8Bpp() {
+    int iX, iY, iX2, iY2;
+    int iZoom = iCanvasScaleFactor;
+    BYTE* pRow;
+    if (iZoom < 1) iZoom = 1;
+    for (iY = 0; iY < g_iCanvasH; ++iY) {
+        for (iX = 0; iX < g_iCanvasW; ++iX) {
+            int iColor = getPixelCanvas(iX, iY);
+            for (iY2 = 0; iY2 < iZoom; ++iY2) {
+                int iDstY = iY * iZoom + iY2;
+                if (iDstY >= g_iDibH) break;
+                pRow = g_pDibPixels + iDstY * g_iDibPitch;
+                for (iX2 = iX * iZoom; iX2 < (iX + 1) * iZoom && iX2 < g_iDibW; ++iX2) {
+                    pRow[iX2] = (BYTE)iColor;
+                }        
+            }
+        }
+    }
+}
+
+static void paintCanvas16Bpp() {
+    int iX, iY, iX2, iY2;
+    int iZoom = iCanvasScaleFactor;
+    BYTE* pRow;
+    if (iZoom < 1) iZoom = 1;
+    for (iY = 0; iY < g_iCanvasH; ++iY) {
+        for (iX = 0; iX < g_iCanvasW; ++iX) {
+            int iColor = getPixelCanvas(iX, iY);
+            for (iY2 = 0; iY2 < iZoom; ++iY2) {
+                int iDstY = iY * iZoom + iY2;
+                WORD* pDst16;
+                WORD wColor;
+                if (iDstY >= g_iDibH) break;
+                pRow = g_pDibPixels + iDstY * g_iDibPitch;
+                pDst16 = (WORD*)pRow;
+                wColor = g_wPaletteRGB555[iColor];
+                for (iX2 = iX * iZoom; iX2 < (iX + 1) * iZoom && iX2 < g_iDibW; ++iX2) {
+                    pDst16[iX2] = wColor;
+                }
+            }
+        }
+    }
+}
+
+static void paintCanvas32Bpp() {
+    int iX, iY, iX2, iY2;
+    int iZoom = iCanvasScaleFactor;
+    BYTE* pRow;
+    if (iZoom < 1) iZoom = 1;
+    for (iY = 0; iY < g_iCanvasH; ++iY) {
+        for (iX = 0; iX < g_iCanvasW; ++iX) {
+            int iColor = getPixelCanvas(iX, iY);
+            for (iY2 = 0; iY2 < iZoom; ++iY2) {
+                int iDstY = iY * iZoom + iY2;
+                DWORD* pDst32;
+                DWORD dwColor;
+                if (iDstY >= g_iDibH) break;
+                pRow = g_pDibPixels + iDstY * g_iDibPitch;
+                pDst32 = (DWORD*)pRow;
+                dwColor = g_dwPaletteRGB888[iColor];
+                for (iX2 = iX * iZoom; iX2 < (iX + 1) * iZoom && iX2 < g_iDibW; ++iX2) {
+                    pDst32[iX2] = dwColor;
+                }
+            }
+        }
+    }
+}
+
 static void paintCanvasToWindow(HWND hWnd) {
     HDC hdc;
     PAINTSTRUCT ps;
@@ -377,58 +473,22 @@ static void paintCanvasToWindow(HWND hWnd) {
         EndPaint(hWnd, &ps); return;
     }
     if (g_pDibPixels != NULL && g_iScreenBpp != 0) {
-        int iZoom = iCanvasScaleFactor;
-        int iY2, iX2;
-        BYTE* pRow;
-
-        if (iZoom < 1) iZoom = 1;
-
         /* Fill DIB rows with scaled canvas pixels */
-        for (iY = 0; iY < g_iCanvasH; ++iY) {
-            int iColor;
-
-            for (iX = 0; iX < g_iCanvasW; ++iX) {
-                iColor = getPixelCanvas(iX, iY);
-
-                for (iY2 = 0; iY2 < iZoom; ++iY2) {
-                    int iDstY = iY * iZoom + iY2;
-                    if (iDstY >= g_iDibH) break;
-
-                    pRow = g_pDibPixels + iDstY * g_iDibPitch;
-
-                    switch (g_iScreenBpp) {
-                        case 2: {
-                            int iDstX = iX * iZoom;  
-                            int iXEnd = iDstX + iZoom;  
-                            unsigned char ucColor = (unsigned char)(iColor & 0x03);  
-                            for (iX2 = iDstX; iX2 < iXEnd && iX2 < g_iDibW; ++iX2) {  
-                                int iByteIdx = iX2 >> 2;  
-                                int iSrcShift = 6 - ((iX2 & 3) << 1);  
-                                unsigned char ucMask = ~(0x03 << iSrcShift);  
-                                pRow[iByteIdx] = (pRow[iByteIdx] & ucMask) | (ucColor << iSrcShift);  
-                            }  
-                            break;  
-                        }
-                        case 8:
-                            for (iX2 = iX * iZoom; iX2 < (iX + 1) * iZoom && iX2 < g_iDibW; ++iX2)
-                                pRow[iX2] = (BYTE)iColor;
-                            break;
-                        case 16: {
-                            WORD* pDst16 = (WORD*)pRow;
-                            WORD wColor = g_wPaletteRGB555[iColor];
-                            for (iX2 = iX * iZoom; iX2 < (iX + 1) * iZoom && iX2 < g_iDibW; ++iX2)
-                                pDst16[iX2] = wColor;
-                            break;
-                        }
-                        case 32: {
-                            DWORD* pDst32 = (DWORD*)pRow;
-                            DWORD dwColor = g_dwPaletteRGB888[iColor];
-                            for (iX2 = iX * iZoom; iX2 < (iX + 1) * iZoom && iX2 < g_iDibW; ++iX2)
-                                pDst32[iX2] = dwColor;
-                            break;
-                        }
-                    }
-                }
+        switch (g_iScreenBpp) {
+            case 2: {
+                paintCanvas2Bpp();
+                break;
+            }
+            case 8:
+                paintCanvas8Bpp();
+                break;
+            case 16: {
+                paintCanvas16Bpp();
+                break;
+            }
+            case 32: {
+                paintCanvas32Bpp();
+                break;
             }
         }
         BitBlt(hdc, 0, g_iBarHeight, g_iDibW, g_iDibH, g_hdcBuffer, 0, 0, SRCCOPY);
