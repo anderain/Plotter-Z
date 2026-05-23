@@ -167,15 +167,9 @@ static int              g_iCanvasW      = 0;
 static int              g_iCanvasH      = 0;
 static int              g_iCanvasPitch  = 0;
 
-static int canvasByteIndex(int x, int y) {
-    return y * g_iCanvasPitch + (x >> 2);
-}
-
-static int canvasShift(int x) {
-    return 6 - ((x & 3) << 1);
-}
-
-#define CANVAS_MASK(x)  (~(0x03 << canvasShift(x)))
+#define canvasByteIndex(x, y)   ((y) * g_iCanvasPitch + ((x) >> 2))
+#define canvasShift(x)          (6 - (((x) & 3) << 1))
+#define canvasMask(x)           (~(0x03 << canvasShift(x)))
 
 /*====================================================
  * Drawing primitives (2bpp canvas)
@@ -187,15 +181,14 @@ static void setPixelCanvas(int x, int y, int iColor) {
     int iByte;
     if (x < 0 || x >= g_iCanvasW || y < 0 || y >= g_iCanvasH) return;
     iByte = canvasByteIndex(x, y);
-    ucMask = CANVAS_MASK(x);
+    ucMask = canvasMask(x);
     g_pCanvas[iByte] = (unsigned char)((g_pCanvas[iByte] & ucMask)
                      | ((iColor & 0x03) << canvasShift(x)));
 }
 
-static int getPixelCanvas(int x, int y) {
-    if (x < 0 || x >= g_iCanvasW || y < 0 || y >= g_iCanvasH) return 0;
-    return (g_pCanvas[canvasByteIndex(x, y)] >> canvasShift(x)) & 0x03;
-}
+#define getPixelCanvas(x, y) \
+    ( ((x) < 0 || (x) >= g_iCanvasW || (y) < 0 || (y) >= g_iCanvasH) ? 0 : \
+      (g_pCanvas[canvasByteIndex((x), (y))] >> canvasShift((x))) & 0x03 )
 
 static void fillRectCanvas(int dx, int dy, int w, int h, int iColor) {
     int x, y;
