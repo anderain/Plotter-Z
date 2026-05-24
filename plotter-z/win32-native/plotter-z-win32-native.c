@@ -23,12 +23,13 @@ DWORD       g_dwLastMouseRefresh;
 HINSTANCE   hInst;
 HWND        hwndCB;
 
-int         recalc                  (HWND hWnd);
-void        CharToTChar             (TCHAR* dst, const char* src, int maxLen);
-void        CenterDialog            (HWND hDlg);
-void        LoadApplicationConfig   (void);
-void        PerformanceTestRedraw   (HWND hWnd);
-void        PerformanceTestCheck    (HWND hWnd);
+int         recalc                      (HWND hWnd);
+void        CharToTChar                 (TCHAR* dst, const char* src, int maxLen);
+void        CenterDialog                (HWND hDlg);
+void        LoadApplicationConfig       (void);
+void        PerformanceTestRedraw       (HWND hWnd);
+void        PerformanceTestCheck        (HWND hWnd);
+void        RecreateCanvasAndBackBuffer (HWND hWnd, int iPrevScale);
 
 /*====================================================
  * Constants
@@ -1205,28 +1206,12 @@ static LRESULT CALLBACK PrefDlgProc(HWND hDlg, UINT message,
                     recalcPaletteLUTs();
                     iPrevScale = g_iCanvasScaleFactor;
                     g_iCanvasScaleFactor = (SendMessage(GetDlgItem(hDlg, IDC_PREF_LOWRES), BM_GETCHECK, 0, 0)== BST_CHECKED) ? 2 : 1;
-                    if (g_iCanvasScaleFactor != iPrevScale) {
-                        RECT rc;
-                        int iCw, iCh;
-                        int iScaleOld, iScaleNew;
-                        iScaleOld = iPrevScale;
-                        iScaleNew = g_iCanvasScaleFactor;
-                        Camera.iViewportX = Camera.iViewportX * iScaleOld / iScaleNew;
-                        Camera.iViewportY = Camera.iViewportY * iScaleOld / iScaleNew;
-                        g_iExprPosX = g_iExprPosX * iScaleOld / iScaleNew;
-                        g_iExprPosY = g_iExprPosY * iScaleOld / iScaleNew;
-                        destroyBackBuffer();
-                        destroyCanvas();
-                        GetClientRect(hWndParent, &rc);
-                        rc.bottom -= g_iBarHeight;
-                        if (rc.bottom < 1) rc.bottom = 1;
-                        iCw = rc.right / g_iCanvasScaleFactor;
-                        iCh = rc.bottom / g_iCanvasScaleFactor;
-                        if (iCw < 1) iCw = 1;
-                        if (iCh < 1) iCh = 1;
-                        createCanvas(iCw, iCh);
-                        createBackBuffer(hWndParent, rc.right, rc.bottom);
-                        Camera.iViewportS = (g_iCanvasH < g_iCanvasW ? g_iCanvasH : g_iCanvasW) / 2;
+                    if (
+                        g_iCanvasScaleFactor != iPrevScale ||
+                        /* Workaround: force canvas recreation when bpp equals 8 */
+                        g_iScreenBpp == 8
+                    ) {
+                        RecreateCanvasAndBackBuffer(hWndParent, iPrevScale);
                     }
                     if (g_iStage == STAGE_READY) {
                         redrawCanvas(hWndParent);
@@ -1335,10 +1320,11 @@ static LRESULT CALLBACK DebugDlgProc(HWND hDlg, UINT message,
             /* Debug info */
             wsprintf(
                 szBufT,
-                TEXT("Resolution: %dx%d\r\nScale: %d\r\nBarHeight: %d\r\nCanvas: 0x%x\r\nBuffer: 0x%x"),
+                TEXT("Resolution: %dx%d\r\nScale: %d\r\nBPP: %d\r\nBarHeight: %d\r\nCanvas: 0x%x\r\nBuffer: 0x%x"),
                 g_iDibW,
                 g_iDibH,
                 g_iCanvasScaleFactor,
+                g_iScreenBpp,
                 g_iBarHeight,
                 g_pCanvas,
                 g_hdcBuffer
@@ -1717,7 +1703,11 @@ static void loadSession(HWND hWnd) {
         }
     }
     recalcPaletteLUTs();
-
+    /* Workaround: force canvas recreation when bpp equals 8 */
+    if (g_iScreenBpp == 8) {
+        RecreateCanvasAndBackBuffer(hWnd, g_iCanvasScaleFactor);
+    };
+    
     PineIni_Destroy(pIni);
 
     /* Destroy old state and recalc */
@@ -2009,6 +1999,8 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
                 RECT rcClient;
                 int iCw, iCh;
 
+                recalcPaletteLUTs();
+    
 #if VER_PLATFORM_WIN32_CE
                 {
                     RECT rcBar;
@@ -2050,8 +2042,6 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
                 Camera.iViewportS = (g_iCanvasH < g_iCanvasW ? g_iCanvasH : g_iCanvasW) / 2;
                 Camera.iViewportX = g_iCanvasW / 2;
                 Camera.iViewportY = g_iCanvasH / 2;
-
-                recalcPaletteLUTs();
 
                 g_RenderConfig.sInterfaces.setPixel = rzSetPixel;
                 g_RenderConfig.sInterfaces.plotLine = rzPlotLine;
@@ -2514,4 +2504,28 @@ void PerformanceTestCheck(HWND hWnd) {
         if (Camera.iAlphaDeg >= 360) Camera.iAlphaDeg = Camera.iAlphaDeg % 360;
         InvalidateRect(hWnd, NULL, TRUE);
     }
+}
+
+void RecreateCanvasAndBackBuffer(HWND hWnd, int iPrevScale) {
+    RECT rc;
+    int iCw, iCh;
+    int iScaleOld, iScaleNew;
+    iScaleOld = iPrevScale;
+    iScaleNew = g_iCanvasScaleFactor;
+    Camera.iViewportX = Camera.iViewportX * iScaleOld / iScaleNew;
+    Camera.iViewportY = Camera.iViewportY * iScaleOld / iScaleNew;
+    g_iExprPosX = g_iExprPosX * iScaleOld / iScaleNew;
+    g_iExprPosY = g_iExprPosY * iScaleOld / iScaleNew;
+    destroyBackBuffer();
+    destroyCanvas();
+    GetClientRect(hWnd, &rc);
+    rc.bottom -= g_iBarHeight;
+    if (rc.bottom < 1) rc.bottom = 1;
+    iCw = rc.right / g_iCanvasScaleFactor;
+    iCh = rc.bottom / g_iCanvasScaleFactor;
+    if (iCw < 1) iCw = 1;
+    if (iCh < 1) iCh = 1;
+    createCanvas(iCw, iCh);
+    createBackBuffer(hWnd, rc.right, rc.bottom);
+    Camera.iViewportS = (g_iCanvasH < g_iCanvasW ? g_iCanvasH : g_iCanvasW) / 2;
 }
