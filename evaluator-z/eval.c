@@ -4,6 +4,23 @@
 #include "ez.h"
 #include "../common/constants.h"
 
+/* If building with CodeWarrior for Palm OS */
+#if defined(__MWERKS__) && (defined(__MC68K__) || defined(__PALMOS_TRAPS__))
+/* Manually declare necessary math functions. They are called in MathLib.c */
+double acos(double x);
+double asin(double x);
+double atan(double x);
+double atan2(double y, double x);
+double cos(double x);
+double sin(double x);
+double tan(double x);
+double pow(double x, double y);
+double sqrt(double x);
+double log(double x);
+double exp(double x);
+double fabs(double x);
+#endif
+
 static const char* EzOpCodeName[] = {
     "NOP",
     "NEG",
