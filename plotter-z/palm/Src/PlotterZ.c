@@ -55,9 +55,7 @@ static const int arrZoomLevels[] = {
     PZ_FLOAT_TO_FIXED(0.75f),
     (int)PZ_FIXED_ONE,
     PZ_FLOAT_TO_FIXED(1.50f),
-    (int)PZ_FIXED_ONE * 2,
-    (int)PZ_FIXED_ONE * 4,
-    (int)PZ_FIXED_ONE * 8,
+    (int)PZ_FIXED_ONE * 2
 };
 static const int iNumZoomLevel = sizeof(arrZoomLevels) / sizeof(arrZoomLevels[0]);
 
@@ -77,13 +75,17 @@ static PZ_FIXED yBuf[GRID_MAX];
 
 /* DrawForm interaction */
 static Int16 g_iDrawMode = 0; /* 0=Camera, 1=Position, 2=Zoom */
+static Boolean g_bDrawBox = true;
 static Boolean g_bDrawPenDown = false;
 static Int16 g_iDrawPrevX, g_iDrawPrevY;
 static Int16 g_iDrawZoomAccum = 0;
 #define DRAW_ZOOM_THRESHOLD 15
 
-#define CURRENT_FONT_WIDTH 6
+#define CURRENT_FONT_WIDTH  6
 #define CURRENT_FONT_HEIGHT 8
+#define CORNER_SIZE         10
+#define CORNER_TEXT_X        2
+#define CORNER_TEXT_Y        1
 
 /*********************************************************************
  * Internal Constants
@@ -127,7 +129,7 @@ static void parseAndRender(void) {
     iH = g_pBmpBufFormula->iH;
 
     /* Clear formula bitmap */
-    BmpBuffer_AllClear;
+    BmpBuffer_AllClear(g_pBmpBufFormula);
 
     /* Destroy previous state (keep VM singleton) */
     if (g_pRenderNode != NULL) {
@@ -343,6 +345,35 @@ static void redrawCanvas(BmpBuffer* pBuf) {
             x0 = x1; y0 = y1; z0 = z1;
         }
     }
+
+    /* Bounding box edges */
+    if (g_bDrawBox) {
+        static const PZ_FIXED bvX[8] = {
+             PZ_FIXED_ONE, PZ_FIXED_NEG_ONE, PZ_FIXED_NEG_ONE,  PZ_FIXED_ONE,
+             PZ_FIXED_ONE, PZ_FIXED_NEG_ONE, PZ_FIXED_NEG_ONE,  PZ_FIXED_ONE
+        };
+        static const PZ_FIXED bvY[8] = {
+             PZ_FIXED_ONE,  PZ_FIXED_ONE, PZ_FIXED_NEG_ONE, PZ_FIXED_NEG_ONE,
+             PZ_FIXED_ONE,  PZ_FIXED_ONE, PZ_FIXED_NEG_ONE, PZ_FIXED_NEG_ONE
+        };
+        static const PZ_FIXED bvZ[8] = {
+             PZ_FIXED_ONE,  PZ_FIXED_ONE,  PZ_FIXED_ONE,  PZ_FIXED_ONE,
+            PZ_FIXED_NEG_ONE,PZ_FIXED_NEG_ONE,PZ_FIXED_NEG_ONE,PZ_FIXED_NEG_ONE
+        };
+        static const UInt8 edges[12][2] = {
+            {0,1},{1,2},{2,3},{3,0},
+            {4,5},{5,6},{6,7},{7,4},
+            {0,4},{1,5},{2,6},{3,7}
+        };
+        Int16 ei;
+        for (ei = 0; ei < 12; ++ei) {
+            Int16 v0, v1;
+            v0 = edges[ei][0]; v1 = edges[ei][1];
+            xyz2xy(bvX[v0], bvY[v0], bvZ[v0], &x0, &y0);
+            xyz2xy(bvX[v1], bvY[v1], bvZ[v1], &x1, &y1);
+            BmpBuffer_PlotLine(pBuf, x0, y0, x1, y1, 1);
+        }
+    }
 }
 
 static void MainFormInit(FormType *frmP) {
@@ -382,9 +413,6 @@ static void MainFormInit(FormType *frmP) {
 				(iW - iLen) / 2, y, (UInt8*)szLines[i], 1);
 			y += CURRENT_FONT_HEIGHT;
 		}
-
-		/* Trigger redraw */
-		FrmUpdateForm(MainForm, frmRedrawUpdateCode);
 	}
 
 	/* Draw button starts disabled */
@@ -419,6 +447,46 @@ static Boolean MainFormDoCommand(UInt16 command) {
 	return handled;
 }
 
+/*====================================================
+ * Draw UI indicators on canvas
+ *====================================================*/
+static void drawDrawUI(BmpBuffer* pBuf) {
+    Int16 iW, iH;
+    UInt8 chMode, chBox;
+
+    iW = pBuf->iW;
+    iH = pBuf->iH;
+
+    /* Top-left: back icon */
+    BmpBuffer_FillRect(pBuf, 0, 0, CORNER_SIZE, CORNER_SIZE, 1);
+    BmpBuffer_PutChar(pBuf, CORNER_TEXT_X, CORNER_TEXT_Y, '\x17', 0);
+
+    /* Top-right: mode letter */
+    BmpBuffer_FillRect(pBuf, (Int16)(iW - CORNER_SIZE), 0,
+        CORNER_SIZE, CORNER_SIZE, 1);
+    switch (g_iDrawMode) {
+        case 0: chMode = 'C'; break;
+        case 1: chMode = 'P'; break;
+        case 2: chMode = 'Z'; break;
+        default: chMode = '?'; break;
+    }
+    BmpBuffer_PutChar(pBuf, (Int16)(iW - CORNER_SIZE + CORNER_TEXT_X),
+        CORNER_TEXT_Y, chMode, 0);
+
+    /* Bottom-left: bounding box toggle */
+    chBox = g_bDrawBox ? 'B' : 'b';
+    BmpBuffer_FillRect(pBuf, 0, (Int16)(iH - CORNER_SIZE),
+        CORNER_SIZE, CORNER_SIZE, 1);
+    BmpBuffer_PutChar(pBuf, CORNER_TEXT_X,
+        (Int16)(iH - CORNER_SIZE + CORNER_TEXT_Y), chBox, 0);
+
+    /* Bottom-right: reset */
+    BmpBuffer_FillRect(pBuf, (Int16)(iW - CORNER_SIZE),
+        (Int16)(iH - CORNER_SIZE), CORNER_SIZE, CORNER_SIZE, 1);
+    BmpBuffer_PutChar(pBuf, (Int16)(iW - CORNER_SIZE + CORNER_TEXT_X),
+        (Int16)(iH - CORNER_SIZE + CORNER_TEXT_Y), 'R', 0);
+}
+
 static Boolean DrawFormHandleEvent(EventType * eventP) {
 	Boolean handled = false;
 	FormType * frmP;
@@ -432,20 +500,77 @@ static Boolean DrawFormHandleEvent(EventType * eventP) {
 			Camera.iViewportX = 80;
 			Camera.iViewportY = 80;
 
-			if (recalcSurface())
+			if (recalcSurface()) {
 				redrawCanvas(g_pBmpCanvas);
+				drawDrawUI(g_pBmpCanvas);
+			}
 			WinDrawBitmap(g_pBmpCanvas->pBmp, 0, 0);
 			handled = true;
 			break;
 		}
 
 		case penDownEvent:
+		{
+			Int16 iTapX = eventP->screenX;
+			Int16 iTapY = eventP->screenY;
+
+			/* Top-left corner (back icon) */
+			if (iTapX >= 0 && iTapX < CORNER_SIZE
+			    && iTapY >= 0 && iTapY < CORNER_SIZE) {
+				FrmGotoForm(MainForm);
+				handled = true;
+				break;
+			}
+
+			/* Top-right corner (mode switch) */
+			if (iTapX >= g_pBmpCanvas->iW - CORNER_SIZE
+			    && iTapX < g_pBmpCanvas->iW
+			    && iTapY >= 0 && iTapY < CORNER_SIZE) {
+				g_iDrawMode = (Int16)((g_iDrawMode + 1) % 3);
+				redrawCanvas(g_pBmpCanvas);
+				drawDrawUI(g_pBmpCanvas);
+				WinDrawBitmap(g_pBmpCanvas->pBmp, 0, 0);
+				handled = true;
+				break;
+			}
+
+			/* Bottom-left corner (bounding box toggle) */
+			if (iTapX >= 0 && iTapX < CORNER_SIZE
+			    && iTapY >= g_pBmpCanvas->iH - CORNER_SIZE
+			    && iTapY < g_pBmpCanvas->iH) {
+				g_bDrawBox = !g_bDrawBox;
+				redrawCanvas(g_pBmpCanvas);
+				drawDrawUI(g_pBmpCanvas);
+				WinDrawBitmap(g_pBmpCanvas->pBmp, 0, 0);
+				handled = true;
+				break;
+			}
+
+			/* Bottom-right corner (reset view) */
+			if (iTapX >= g_pBmpCanvas->iW - CORNER_SIZE
+			    && iTapX < g_pBmpCanvas->iW
+			    && iTapY >= g_pBmpCanvas->iH - CORNER_SIZE
+			    && iTapY < g_pBmpCanvas->iH) {
+				Camera.iAlphaDeg  = DEFAULT_VIEW_ALPHA;
+				Camera.iBetaDeg   = DEFAULT_VIEW_BETA;
+				Camera.iViewportX = (Int16)(g_pBmpCanvas->iW / 2);
+				Camera.iViewportY = (Int16)(g_pBmpCanvas->iH / 2);
+				Camera.iViewportS = (Int16)(g_pBmpCanvas->iH / 2);
+				Camera.iZoomLevel = ZOOM_LEVEL_DEFAULT;
+				redrawCanvas(g_pBmpCanvas);
+				drawDrawUI(g_pBmpCanvas);
+				WinDrawBitmap(g_pBmpCanvas->pBmp, 0, 0);
+				handled = true;
+				break;
+			}
+
 			g_bDrawPenDown = true;
-			g_iDrawPrevX = eventP->screenX;
-			g_iDrawPrevY = eventP->screenY;
+			g_iDrawPrevX = iTapX;
+			g_iDrawPrevY = iTapY;
 			g_iDrawZoomAccum = 0;
 			handled = true;
 			break;
+		}
 
 		case penMoveEvent:
 			if (g_bDrawPenDown) {
@@ -493,6 +618,7 @@ static Boolean DrawFormHandleEvent(EventType * eventP) {
 
 				if (bChanged) {
 					redrawCanvas(g_pBmpCanvas);
+					drawDrawUI(g_pBmpCanvas);
 					WinDrawBitmap(g_pBmpCanvas->pBmp, 0, 0);
 				}
 			}
@@ -505,16 +631,6 @@ static Boolean DrawFormHandleEvent(EventType * eventP) {
 			handled = true;
 			break;
 
-		case keyDownEvent:
-			/* Mode switching on key press */
-			if (eventP->data.keyDown.chr == 'c' || eventP->data.keyDown.chr == 'C')
-				g_iDrawMode = 0;
-			else if (eventP->data.keyDown.chr == 'p' || eventP->data.keyDown.chr == 'P')
-				g_iDrawMode = 1;
-			else if (eventP->data.keyDown.chr == 'z' || eventP->data.keyDown.chr == 'Z')
-				g_iDrawMode = 2;
-			handled = true;
-			break;
 	}
 
 	return handled;
@@ -530,16 +646,18 @@ static Boolean MainFormHandleEvent(EventType * eventP) {
 
 		case frmOpenEvent:
 			frmP = FrmGetActiveForm();
-			FrmDrawForm(frmP);
-			{
-				/* Restore field text */
+			if (g_bParseOk) {
+				/* Restore field text and re-render */
 				FieldType *fieldInput;
 				UInt16 fieldIndex;
 				fieldIndex = FrmGetObjectIndex(frmP, MainFormulaField);
 				fieldInput = (FieldType *)FrmGetObjectPtr(frmP, fieldIndex);
 				FldDelete(fieldInput, 0, 0xFFFF);
 				FldInsert(fieldInput, g_szExpr, StrLen(g_szExpr));
+			} else {
+				MainFormInit(frmP);
 			}
+			FrmDrawForm(frmP);
 			FrmUpdateForm(MainForm, frmRedrawUpdateCode);
 			handled = true;
 			break;
