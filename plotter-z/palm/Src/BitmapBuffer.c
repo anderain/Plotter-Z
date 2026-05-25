@@ -56,6 +56,16 @@ void BmpBuffer_Destroy(BmpBuffer* pBuffer) {
 }
 
 /*====================================================
+ * BmpBuffer_AllClear
+ *   Zeros all pixels in the buffer.
+ *====================================================*/
+void BmpBuffer_AllClear(BmpBuffer* pBuffer) {
+    if (pBuffer == NULL || pBuffer->pRaw == NULL) return;
+    MemSet(pBuffer->pRaw,
+        (UInt32)(pBuffer->iPitch * pBuffer->iH), 0);
+}
+
+/*====================================================
  * BmpBuffer_SetPixelF
  *   Sets a single pixel using sPoint1 coordinates.
  *   iColor: 0 = clear bit, non-zero = set bit.

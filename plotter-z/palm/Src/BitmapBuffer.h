@@ -35,6 +35,7 @@ typedef struct tagBmpBuffer {
 /* Lifecycle */
 BmpBuffer*  BmpBuffer_Create    (Int16 iW, Int16 iH);
 void        BmpBuffer_Destroy   (BmpBuffer* pBuffer);
+void        BmpBuffer_AllClear  (BmpBuffer* pBuffer);
 
 /* Fast drawing functions (use coordinates from struct) */
 void        BmpBuffer_SetPixelF (BmpBuffer* pBuffer);
