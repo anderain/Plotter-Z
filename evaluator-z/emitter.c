@@ -211,8 +211,14 @@ EzError EzMachine_Compile (EzMachine* pVm, const FzAstNode* pAstExpr, char* szEr
     ctx.iInstructionLength = 0;
     ctx.iStackMax = 0;
     ctx.iStackSize = 0;
-    if (pVm->pStack) free(pVm->pStack);
-    if (pVm->pInstructions) free(pVm->pInstructions);
+    if (pVm->pStack) {
+        free(pVm->pStack);
+        pVm->pStack = NULL;
+    }
+    if (pVm->pInstructions) {
+        free(pVm->pInstructions);
+        pVm->pInstructions = NULL;
+    }
 
     /* Estimate in advance the space of stack and instructions */
     /* required to perform the operations. */
