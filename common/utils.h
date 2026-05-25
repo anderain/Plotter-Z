@@ -29,16 +29,24 @@
 #define PZ_FIXED short
 #endif
 
+#ifndef PZ_FIXED_LONG
+#   if defined(__MWERKS__) && (defined(__MC68K__) || defined(__PALMOS_TRAPS__))
+#       define PZ_FIXED_LONG long
+#   else
+#       define PZ_FIXED_LONG int
+#   endif
+#endif
+
 #define PZ_FIXED_SHIFT     14
-#define PZ_FIXED_ONE       ((int)(1 << PZ_FIXED_SHIFT))
-#define PZ_FIXED_HALF      ((int)(1 << (PZ_FIXED_SHIFT - 1)))
+#define PZ_FIXED_ONE       ((PZ_FIXED_LONG)(1 << PZ_FIXED_SHIFT))
+#define PZ_FIXED_HALF      ((PZ_FIXED_LONG)(1 << (PZ_FIXED_SHIFT - 1)))
 #define PZ_FIXED_NEG_ONE   (-PZ_FIXED_ONE)
 
-#define PZ_FLOAT_TO_FIXED(f)   ((PZ_FIXED)((0.5) + (float)(f) * PZ_FIXED_ONE))
-#define PZ_FIXED_TO_FLOAT(x)   ((float)(int)(x) / PZ_FIXED_ONE)
-#define PZ_INT_TO_FIXED(n)     ((PZ_FIXED)((int)(n) << PZ_FIXED_SHIFT))
-#define PZ_FIXED_MUL(a, b)     ((int)(((int)(a) * (int)(b) + PZ_FIXED_HALF) >> PZ_FIXED_SHIFT))
-#define PZ_FIXED_DIV(a, b)     ((int)((((int)(a)) << PZ_FIXED_SHIFT) / (int)(b)))
+#define PZ_FLOAT_TO_FIXED(f)            ((PZ_FIXED)((0.5) + (float)(f) * PZ_FIXED_ONE))
+#define PZ_FIXED_TO_FLOAT(x)            ((float)(PZ_FIXED_LONG)(x) / PZ_FIXED_ONE)
+#define PZ_PZ_FIXED_LONG_TO_FIXED(n)    ((PZ_FIXED)((PZ_FIXED_LONG)(n) << PZ_FIXED_SHIFT))
+#define PZ_FIXED_MUL(a, b)              ((PZ_FIXED_LONG)(((PZ_FIXED_LONG)(a) * (PZ_FIXED_LONG)(b) + PZ_FIXED_HALF) >> PZ_FIXED_SHIFT))
+#define PZ_FIXED_DIV(a, b)              ((PZ_FIXED_LONG)((((PZ_FIXED_LONG)(a)) << PZ_FIXED_SHIFT) / (PZ_FIXED_LONG)(b)))
 
 #define isDigit(c)      ((c) >= '0' && (c) <= '9')
 #define isUppercase(c)  ((c) >= 'A' && (c) <= 'Z')
