@@ -23,10 +23,13 @@ BmpBuffer*             g_pBmpBufFormula;
 BmpBuffer*             g_pBmpCanvas;
 
 FzAstNode*  g_pAstExpr      = NULL;
+EzMachine*  g_pVm           = NULL;
 RenderNode* g_pRenderNode   = NULL;
 RenderConfig g_RenderConfig;
 
 static char g_szExpr[256] = "sin(sqr(x^2+y^2))";
+static char g_szErrorBuf[EZ_ERROR_CONTENT_LENGTH];
+static Boolean g_bParseOk = false;
 
 #define CURRENT_FONT_WIDTH 6
 #define CURRENT_FONT_HEIGHT 8
@@ -70,13 +73,13 @@ static void parseAndRender(void) {
     Int16 iW, iH;
 
     iW = g_pBmpBufFormula->iW;
-	iH = g_pBmpBufFormula->iH;
+    iH = g_pBmpBufFormula->iH;
 
     /* Clear formula bitmap */
     MemSet(g_pBmpBufFormula->pRaw,
         (UInt32)(g_pBmpBufFormula->iPitch * g_pBmpBufFormula->iH), 0);
 
-    /* Destroy previous AST and render node */
+    /* Destroy previous state (keep VM singleton) */
     if (g_pRenderNode != NULL) {
         RenderNode_Destroy(g_pRenderNode);
         g_pRenderNode = NULL;
@@ -85,6 +88,8 @@ static void parseAndRender(void) {
         FzAstNode_Destroy(g_pAstExpr);
         g_pAstExpr = NULL;
     }
+
+    g_bParseOk = false;
 
     /* Parse expression */
     g_pAstExpr = FzParser_ParseExpression(g_szExpr);
@@ -95,6 +100,48 @@ static void parseAndRender(void) {
         y = (iH - CURRENT_FONT_HEIGHT) / 2;
         BmpBuffer_PutText(g_pBmpBufFormula, x, y, (UInt8*)szMsg, 1);
         return;
+    }
+
+    /* Create VM singleton and compile */
+    if (g_pVm == NULL) {
+        g_pVm = EzMachine_Create();
+        if (g_pVm != NULL) {
+            EzMachine_DeclareVariable(g_pVm, "x");
+            EzMachine_DeclareVariable(g_pVm, "y");
+            EzMachine_DeclareVariable(g_pVm, "pi");
+            EzMachine_AllocateVariables(g_pVm);
+            EzMachine_SetVariableByIndex(g_pVm, 2, PZ_PI);
+        }
+    }
+    if (g_pVm != NULL) {
+        EzError iCompileErr;
+        iCompileErr = EzMachine_Compile(g_pVm, g_pAstExpr, g_szErrorBuf);
+        if (iCompileErr != EZERR_NONE) {
+            /* Line 1: error type */
+            const char* szErrType;
+            Int16 iLen;
+            switch (iCompileErr) {
+                case EZERR_VARIABLE_UNDEFINED:
+                    szErrType = "Undefined Variable:"; break;
+                case EZERR_FUNCTION_UNDEFINED:
+                    szErrType = "Undefined Function:"; break;
+                case EZERR_FUNCTION_PARAM_MISMATCH:
+                    szErrType = "Parameter Mismatch:"; break;
+                default:
+                    szErrType = "Compile Error:"; break;
+            }
+            iLen = (Int16)(StrLen(szErrType) * CURRENT_FONT_WIDTH);
+            x = (iW - iLen) / 2;
+            y = (iH - CURRENT_FONT_HEIGHT * 2) / 2;
+            BmpBuffer_PutText(g_pBmpBufFormula, x, y, (UInt8*)szErrType, 1);
+
+            /* Line 2: detail */
+            iLen = (Int16)(StrLen(g_szErrorBuf) * CURRENT_FONT_WIDTH);
+            x = (iW - iLen) / 2;
+            y += CURRENT_FONT_HEIGHT;
+            BmpBuffer_PutText(g_pBmpBufFormula, x, y, (UInt8*)g_szErrorBuf, 1);
+            return;
+        }
     }
 
     /* Build render tree */
@@ -134,6 +181,8 @@ static void parseAndRender(void) {
             iW, CURRENT_FONT_HEIGHT, 1);
         BmpBuffer_PutText(g_pBmpBufFormula, x, y, (UInt8*)szReady, 0);
     }
+
+    g_bParseOk = true;
 }
 
 static void MainFormInit(FormType *frmP) {
@@ -149,9 +198,45 @@ static void MainFormInit(FormType *frmP) {
 		FldInsert(fieldInput, g_szExpr, StrLen(g_szExpr));
 	}
 
-	/* Parse and render initial expression */
-	parseAndRender();
-	FrmUpdateForm(MainForm, frmRedrawUpdateCode);
+	/* Idle screen on formula bitmap */
+	{
+		Int16 iW = g_pBmpBufFormula->iW;
+		Int16 iH = g_pBmpBufFormula->iH;
+		Int16 y, iLen;
+		static const char* szLines[] = {
+			"\x17 Plotter-Z \x18",
+			"3D Graphing Tool",
+			"Input and Parse to start"
+		};
+		const int iCount = sizeof(szLines) / sizeof(szLines[0]);
+		int i;
+
+		MemSet(g_pBmpBufFormula->pRaw,
+			(UInt32)(g_pBmpBufFormula->iPitch * g_pBmpBufFormula->iH), 0);
+
+		BmpBuffer_FillRect(g_pBmpBufFormula, 0, 0, iW, iH, 0);
+
+		y = (iH - iCount * CURRENT_FONT_HEIGHT) / 2;
+		for (i = 0; i < iCount; ++i) {
+			iLen = (Int16)(StrLen(szLines[i]) * CURRENT_FONT_WIDTH);
+			BmpBuffer_PutText(g_pBmpBufFormula,
+				(iW - iLen) / 2, y, (UInt8*)szLines[i], 1);
+			y += CURRENT_FONT_HEIGHT;
+		}
+
+		/* Trigger redraw */
+		FrmUpdateForm(MainForm, frmRedrawUpdateCode);
+	}
+
+	/* Draw button starts disabled */
+	{
+		ControlType *ctlDraw;
+		ctlDraw = (ControlType*)FrmGetObjectPtr(frmP,
+			FrmGetObjectIndex(frmP, MainDrawButton));
+		if (ctlDraw != NULL) {
+			CtlHideControl(ctlDraw);
+		}
+	}
 }
 
 static Boolean MainFormDoCommand(UInt16 command) {
@@ -206,7 +291,16 @@ static Boolean MainFormHandleEvent(EventType * eventP) {
 		case frmOpenEvent:
 			frmP = FrmGetActiveForm();
 			FrmDrawForm(frmP);
-			MainFormInit(frmP);
+			{
+				/* Restore field text */
+				FieldType *fieldInput;
+				UInt16 fieldIndex;
+				fieldIndex = FrmGetObjectIndex(frmP, MainFormulaField);
+				fieldInput = (FieldType *)FrmGetObjectPtr(frmP, fieldIndex);
+				FldDelete(fieldInput, 0, 0xFFFF);
+				FldInsert(fieldInput, g_szExpr, StrLen(g_szExpr));
+			}
+			FrmUpdateForm(MainForm, frmRedrawUpdateCode);
 			handled = true;
 			break;
 
@@ -221,6 +315,7 @@ static Boolean MainFormHandleEvent(EventType * eventP) {
 				MemHandle handle;
 				MemPtr text;
 				UInt32 len, count;
+				ControlType *ctlDraw;
 
 				/* Read text from formula field */
 				field = (FieldType*)GetObjectPtr(MainFormulaField);
@@ -240,6 +335,15 @@ static Boolean MainFormHandleEvent(EventType * eventP) {
 				}
 
 				parseAndRender();
+
+				/* Enable or disable Draw button */
+				ctlDraw = (ControlType*)GetObjectPtr(MainDrawButton);
+				if (ctlDraw != NULL) {
+					if (g_bParseOk)
+						CtlShowControl(ctlDraw);
+					else
+						CtlHideControl(ctlDraw);
+				}
 
 				/* Trigger redraw */
 				FrmUpdateForm(MainForm, frmRedrawUpdateCode);
@@ -353,6 +457,7 @@ static void AppStop(void) {
 	/* Destroy renderer-Z objects */
 	if (g_pRenderNode != NULL) RenderNode_Destroy(g_pRenderNode);
 	if (g_pAstExpr != NULL) FzAstNode_Destroy(g_pAstExpr);
+	if (g_pVm != NULL) EzMachine_Destroy(g_pVm);
 
 	/* Destroy bitmap buffers */
 	BmpBuffer_Destroy(g_pBmpCanvas);
