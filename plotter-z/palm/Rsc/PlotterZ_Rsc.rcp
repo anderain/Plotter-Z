@@ -23,7 +23,8 @@ BEGIN
 
 	PULLDOWN "Options"
 	BEGIN
-		MENUITEM "Preferences..." ID OptionsPreferences "R"
+		MENUITEM "Window Editor" ID OptionsWinEditor "W"
+		MENUITEM "Samples" ID OptionsSamples "S"
 		MENUITEM "About PlotterZ" ID OptionsAboutPlotterZ
 	END
 
@@ -75,35 +76,55 @@ BEGIN
 	TITLE "About PlotterZ"
 	LABEL "PlotterZ"
 	    AUTOID AT (CENTER 23)
-	    FONT 2
+	    FONT 7
 	LABEL 
-		"Use this application as a\r" \
-	    "starting point for your own\r" \
-	    "exciting Palm applications!"
-		AUTOID AT (23 54)
+		"v 0.2"
+		AUTOID AT (67 39)
 	FIELD ID AboutVersionField AT (50 100 60 12)
 	    NONEDITABLE
 	    MAXCHARS 80 
 	    FONT 1 
 	BUTTON "OK" ID AboutOKButton AT (58 133 40 12)
+	LABEL 
+		"By Kuki Himekawa"
+		AUTOID AT (40 61)
 END
 
-FORM ID PrefsForm AT (2 78 156 80)
+FORM ID WinEditorForm AT (2 58 156 100)
     SAVEBEHIND MODAL
-    MENUID 10000
-    DEFAULTBTNID PrefsCancelButton
+    DEFAULTBTNID WinEditorCancelButton
 BEGIN
-    TITLE "Preferences"
-    GRAFFITISTATEINDICATOR AT (142 67)
-	CHECKBOX "Setting 1" ID PrefsSetting1Checkbox
-	    AT (10 21 60 12)
-	    LEFTANCHOR CHECKED
-    LABEL "Setting 2:" AUTOID AT (10 41)
-    FIELD ID PrefsSetting2Field AT (51 41 80 12)
-        UNDERLINED
-        MAXCHARS 80
-    BUTTON "OK" ID PrefsOKButton AT (5 63 40 12)
-    BUTTON "Cancel" ID PrefsCancelButton AT (51 63 40 12)
+    TITLE "Window Editor"
+    GRAFFITISTATEINDICATOR AT (149 148)
+    LABEL "X:" AUTOID AT (7 20)
+    FIELD ID WinEditorFieldXmin AT (20 19 35 12) UNDERLINED MAXCHARS 8
+    FIELD ID WinEditorFieldXmax AT (60 19 35 12) UNDERLINED MAXCHARS 8
+    LABEL "G:" AUTOID AT (102 20)
+    FIELD ID WinEditorFieldXgrid AT (115 19 30 12) UNDERLINED MAXCHARS 4
+
+    LABEL "Y:" AUTOID AT (7 40)
+    FIELD ID WinEditorFieldYmin AT (20 39 35 12) UNDERLINED MAXCHARS 8
+    FIELD ID WinEditorFieldYmax AT (60 39 35 12) UNDERLINED MAXCHARS 8
+    LABEL "G:" AUTOID AT (102 40)
+    FIELD ID WinEditorFieldYgrid AT (115 39 30 12) UNDERLINED MAXCHARS 4
+
+    LABEL "Z:" AUTOID AT (7 60)
+    FIELD ID WinEditorFieldZmin AT (20 59 35 12) UNDERLINED MAXCHARS 8
+    FIELD ID WinEditorFieldZmax AT (60 59 35 12) UNDERLINED MAXCHARS 8
+
+    BUTTON "OK" ID WinEditorOKButton AT (5 82 40 12)
+    BUTTON "Cancel" ID WinEditorCancelButton AT (51 82 40 12)
+END
+
+FORM ID SamplesForm AT (2 7 156 150)
+    SAVEBEHIND MODAL
+    DEFAULTBTNID SamplesCancelButton
+BEGIN
+    TITLE "Samples"
+    LIST ID SamplesListID AT (5 18 146 112)
+        VISIBLEITEMS 10
+    BUTTON "OK" ID SamplesOKButton AT (5 134 40 12)
+    BUTTON "Cancel" ID SamplesCancelButton AT (51 134 40 12)
 END
 
 FORM ID DrawForm AT (0 0 160 160)

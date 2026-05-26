@@ -14,6 +14,7 @@
 #include "PlotterZ.h"
 #include "PlotterZ_Rsc.h"
 #include "BitmapBuffer.h"
+#include "../../plotter-z/utils/samples.h"
 
 /*********************************************************************
  * Global variables
@@ -63,8 +64,8 @@ static struct CameraStruct Camera = {
     0, 0, 0,
     DEFAULT_VIEW_ALPHA, DEFAULT_VIEW_BETA,
     0, 0, 0, 0,
-    -6.0f, 6.0f, 20,
-    -6.0f, 6.0f, 20,
+    -6.0f, 6.0f, 15,
+    -6.0f, 6.0f, 15,
     -3.0f, 3.0f,
     ZOOM_LEVEL_DEFAULT
 };
@@ -291,20 +292,56 @@ static Boolean recalcSurface(void) {
         iPct = (Int16)((ix + 1) * 100 / Camera.xGrid);
         if (iPct != iLastPct) {
             char szBuf[32];
-            Int16 iLen;
+            Int16 iLen, iBarW, iBarH, iBarX, iBarY, iFillW;
+            Int16 iTextX, iTextY, iLabelY;
+            Int16 iCW, iCH;
+
+            iCW = g_pBmpCanvas->iW;
+            iCH = g_pBmpCanvas->iH;
+            iBarW = iCW * 2 / 3;
+            iBarH = CURRENT_FONT_HEIGHT * 2;
+            iBarX = (iCW - iBarW) / 2;
+            iBarY = (iCH - iBarH) / 2;
 
             BmpBuffer_AllClear(g_pBmpCanvas);
-            BmpBuffer_FillRect(g_pBmpCanvas, 0, 0,
-                g_pBmpCanvas->iW, g_pBmpCanvas->iH, 0);
 
-            StrPrintF(szBuf, "Recalc %d%%", iPct);
+            /* "Recalc ..." label above bar */
+            iLen = (Int16)(StrLen("Recalc ...") * CURRENT_FONT_WIDTH);
+            iLabelY = iBarY - CURRENT_FONT_HEIGHT - 2;
+            if (iLabelY < 0) iLabelY = 0;
+            BmpBuffer_PutText(g_pBmpCanvas, (iCW - iLen) / 2,
+                iLabelY, (UInt8*)"Recalc ...", 1);
+
+            /* Progress bar fill */
+            BmpBuffer_FillRect(g_pBmpCanvas, iBarX, iBarY, iBarW, iBarH, 0);
+
+            /* Progress bar border */
+            BmpBuffer_PlotLine(g_pBmpCanvas,
+                iBarX, iBarY, (Int16)(iBarX + iBarW - 1), iBarY, 1);
+            BmpBuffer_PlotLine(g_pBmpCanvas,
+                iBarX, (Int16)(iBarY + iBarH - 1),
+                (Int16)(iBarX + iBarW - 1), (Int16)(iBarY + iBarH - 1), 1);
+            BmpBuffer_PlotLine(g_pBmpCanvas,
+                iBarX, iBarY, iBarX, (Int16)(iBarY + iBarH - 1), 1);
+            BmpBuffer_PlotLine(g_pBmpCanvas,
+                (Int16)(iBarX + iBarW - 1), iBarY,
+                (Int16)(iBarX + iBarW - 1), (Int16)(iBarY + iBarH - 1), 1);
+
+            /* Percentage text */
+            StrPrintF(szBuf, "%d%%", iPct);
             iLen = (Int16)(StrLen(szBuf) * CURRENT_FONT_WIDTH);
-            BmpBuffer_PutText(g_pBmpCanvas,
-                (g_pBmpCanvas->iW - iLen) / 2,
-                (g_pBmpCanvas->iH - CURRENT_FONT_HEIGHT) / 2,
-                (UInt8*)szBuf, 0);
+            iTextX = iBarX + (iBarW - iLen) / 2;
+            iTextY = iBarY + (iBarH - CURRENT_FONT_HEIGHT) / 2;
+            BmpBuffer_PutText(g_pBmpCanvas, iTextX, iTextY, (UInt8*)szBuf, 1);
 
-            WinDrawBitmap(g_pBmpCanvas->pBmp, 0, 1);
+            /* Filled portion invert */
+            iFillW = iBarW * iPct / 100;
+            if (iFillW > iBarW) iFillW = iBarW;
+            if (iFillW > 0)
+                BmpBuffer_InvertRect(g_pBmpCanvas, iBarX + 1, iBarY + 1,
+                    (Int16)(iFillW - 2), (Int16)(iBarH - 2));
+
+            WinDrawBitmap(g_pBmpCanvas->pBmp, 0, 0);
             iLastPct = iPct;
         }
     }
@@ -441,6 +478,159 @@ static Boolean MainFormDoCommand(UInt16 command) {
 			frmP = FrmInitForm (AboutForm);
 			FrmDoDialog (frmP);
 			FrmDeleteForm (frmP);
+
+			handled = true;
+			break;
+		}
+		case OptionsWinEditor: {
+			FormType * frmP;
+			UInt16 controlID;
+			Int16 iGrid;
+
+			MenuEraseStatus(0);
+
+			frmP = FrmInitForm(WinEditorForm);
+
+			/* Populate fields from Camera */
+			{
+				char szBuf[16];
+#define WE_FIELD(id) ((FieldType*)FrmGetObjectPtr(frmP, FrmGetObjectIndex(frmP, id)))
+				Utils_Ftoa((double)Camera.xMin, szBuf, 2);
+				FldInsert(WE_FIELD(WinEditorFieldXmin), szBuf, StrLen(szBuf));
+				Utils_Ftoa((double)Camera.xMax, szBuf, 2);
+				FldInsert(WE_FIELD(WinEditorFieldXmax), szBuf, StrLen(szBuf));
+				StrIToA(szBuf, Camera.xGrid);
+				FldInsert(WE_FIELD(WinEditorFieldXgrid), szBuf, StrLen(szBuf));
+
+				Utils_Ftoa((double)Camera.yMin, szBuf, 2);
+				FldInsert(WE_FIELD(WinEditorFieldYmin), szBuf, StrLen(szBuf));
+				Utils_Ftoa((double)Camera.yMax, szBuf, 2);
+				FldInsert(WE_FIELD(WinEditorFieldYmax), szBuf, StrLen(szBuf));
+				StrIToA(szBuf, Camera.yGrid);
+				FldInsert(WE_FIELD(WinEditorFieldYgrid), szBuf, StrLen(szBuf));
+
+				Utils_Ftoa((double)Camera.zMin, szBuf, 2);
+				FldInsert(WE_FIELD(WinEditorFieldZmin), szBuf, StrLen(szBuf));
+				Utils_Ftoa((double)Camera.zMax, szBuf, 2);
+				FldInsert(WE_FIELD(WinEditorFieldZmax), szBuf, StrLen(szBuf));
+			}
+
+			controlID = FrmDoDialog(frmP);
+
+			if (controlID == WinEditorOKButton) {
+				char szBuf[16];
+				MemHandle handle;
+				MemPtr text;
+
+				/* Read X values */
+				handle = FldGetTextHandle(WE_FIELD(WinEditorFieldXmin));
+				if (handle) { text = MemHandleLock(handle); StrCopy(szBuf, (const char*)text); MemHandleUnlock(handle);
+					Camera.xMin = (PZ_FLOAT)Utils_Atof(szBuf); }
+				handle = FldGetTextHandle(WE_FIELD(WinEditorFieldXmax));
+				if (handle) { text = MemHandleLock(handle); StrCopy(szBuf, (const char*)text); MemHandleUnlock(handle);
+					Camera.xMax = (PZ_FLOAT)Utils_Atof(szBuf); }
+				handle = FldGetTextHandle(WE_FIELD(WinEditorFieldXgrid));
+				if (handle) { text = MemHandleLock(handle); StrCopy(szBuf, (const char*)text); MemHandleUnlock(handle);
+					iGrid = (Int16)Utils_Atoi(szBuf);
+					if (iGrid < 5) iGrid = 5;
+					if (iGrid > GRID_MAX) iGrid = GRID_MAX;
+					Camera.xGrid = iGrid; }
+
+				handle = FldGetTextHandle(WE_FIELD(WinEditorFieldYmin));
+				if (handle) { text = MemHandleLock(handle); StrCopy(szBuf, (const char*)text); MemHandleUnlock(handle);
+					Camera.yMin = (PZ_FLOAT)Utils_Atof(szBuf); }
+				handle = FldGetTextHandle(WE_FIELD(WinEditorFieldYmax));
+				if (handle) { text = MemHandleLock(handle); StrCopy(szBuf, (const char*)text); MemHandleUnlock(handle);
+					Camera.yMax = (PZ_FLOAT)Utils_Atof(szBuf); }
+				handle = FldGetTextHandle(WE_FIELD(WinEditorFieldYgrid));
+				if (handle) { text = MemHandleLock(handle); StrCopy(szBuf, (const char*)text); MemHandleUnlock(handle);
+					iGrid = (Int16)Utils_Atoi(szBuf);
+					if (iGrid < 5) iGrid = 5;
+					if (iGrid > GRID_MAX) iGrid = GRID_MAX;
+					Camera.yGrid = iGrid; }
+
+				handle = FldGetTextHandle(WE_FIELD(WinEditorFieldZmin));
+				if (handle) { text = MemHandleLock(handle); StrCopy(szBuf, (const char*)text); MemHandleUnlock(handle);
+					Camera.zMin = (PZ_FLOAT)Utils_Atof(szBuf); }
+				handle = FldGetTextHandle(WE_FIELD(WinEditorFieldZmax));
+				if (handle) { text = MemHandleLock(handle); StrCopy(szBuf, (const char*)text); MemHandleUnlock(handle);
+					Camera.zMax = (PZ_FLOAT)Utils_Atof(szBuf); }
+			}
+
+			FrmDeleteForm(frmP);
+
+			handled = true;
+			break;
+		}
+#undef WE_FIELD
+		case OptionsSamples: {
+			FormType * frmP;
+			UInt16 controlID;
+			ListType * lstP;
+			Int16 iSel;
+			const int iCount = sizeof(PlotterZSamples) / sizeof(PlotterZSamples[0]);
+			Char** ppItems;
+			Int16 i;
+
+			MenuEraseStatus(0);
+
+			frmP = FrmInitForm(SamplesForm);
+			lstP = (ListType*)FrmGetObjectPtr(frmP,
+				FrmGetObjectIndex(frmP, SamplesListID));
+
+			/* Allocate string pointer array */
+			ppItems = (Char**)MemPtrNew(iCount * sizeof(Char*));
+			for (i = 0; i < iCount; ++i)
+				ppItems[i] = PlotterZSamples[i].szExpr;
+
+			LstSetListChoices(lstP, ppItems, (UInt16)iCount);
+			LstDrawList(lstP);
+
+			controlID = FrmDoDialog(frmP);
+
+			if (controlID == SamplesOKButton) {
+				iSel = (Int16)LstGetSelection(lstP);
+				if (iSel >= 0 && iSel < iCount) {
+					const PzSample* p = &PlotterZSamples[iSel];
+					Camera.xMin = p->xMin;
+					Camera.xMax = p->xMax;
+					Camera.yMin = p->yMin;
+					Camera.yMax = p->yMax;
+					Camera.zMin = p->zMin;
+					Camera.zMax = p->zMax;
+					Camera.xGrid = 15;
+					Camera.yGrid = 15;
+
+					/* Update MainForm field */
+					{
+						FormType * frmMain;
+						FieldType * field;
+						frmMain = FrmGetFormPtr(MainForm);
+						if (frmMain != NULL) {
+							field = (FieldType*)FrmGetObjectPtr(frmMain,
+								FrmGetObjectIndex(frmMain, MainFormulaField));
+							if (field != NULL) {
+								FldDelete(field, 0, 0xFFFF);
+								FldInsert(field, p->szExpr, StrLen(p->szExpr));
+								FldDrawField(field);
+							}
+						}
+					}
+				}
+			}
+		
+			FrmDeleteForm(frmP);
+			MemPtrFree(ppItems);
+
+			/* Force MainForm redraw */
+			{
+				FormType * frmMain = FrmGetFormPtr(MainForm);
+				if (frmMain != NULL) {
+					FrmEraseForm(frmMain);
+					FrmDrawForm(frmMain);
+				}
+				FrmUpdateForm(MainForm, frmRedrawUpdateCode);
+			}
 
 			handled = true;
 			break;
