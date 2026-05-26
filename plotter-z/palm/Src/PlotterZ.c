@@ -27,7 +27,7 @@ EzMachine*  g_pVm           = NULL;
 RenderNode* g_pRenderNode   = NULL;
 RenderConfig g_RenderConfig;
 
-static char g_szExpr[256] = "sin(sqr(x^2+y^2))";
+static char g_szExpr[256] = "sin(sqr(x^2+y^2))*cos(sqr(x^2+y^2))";
 static char g_szErrorBuf[EZ_ERROR_CONTENT_LENGTH];
 static Boolean g_bParseOk = false;
 
@@ -75,10 +75,13 @@ static PZ_FIXED yBuf[GRID_MAX];
 
 /* DrawForm interaction */
 static Int16 g_iDrawMode = 0; /* 0=Camera, 1=Position, 2=Zoom */
-static Boolean g_bDrawBox = true;
+static Boolean g_bDrawBox = false;
 static Boolean g_bDrawPenDown = false;
 static Int16 g_iDrawPrevX, g_iDrawPrevY;
 static Int16 g_iDrawZoomAccum = 0;
+static Int16 g_iDragThreshold = 12;   /* ticks (120 ms at 100 ticks/s) */
+static UInt32 g_dwLastDrawUpdate = 0;
+
 #define DRAW_ZOOM_THRESHOLD 15
 
 #define CURRENT_FONT_WIDTH  6
@@ -225,7 +228,7 @@ static void parseAndRender(void) {
 
     /* Line 3: Ready> on filled background */
     {
-        const char* szReady = "Ready>";
+        const char* szReady = "Ready \x18";
         Int16 iLen = (Int16)(StrLen(szReady) * CURRENT_FONT_WIDTH);
         x = iW - iLen - 2;
         y = iH - CURRENT_FONT_HEIGHT;
@@ -617,17 +620,29 @@ static Boolean DrawFormHandleEvent(EventType * eventP) {
 				}
 
 				if (bChanged) {
-					redrawCanvas(g_pBmpCanvas);
-					drawDrawUI(g_pBmpCanvas);
-					WinDrawBitmap(g_pBmpCanvas->pBmp, 0, 0);
+					UInt32 dwNow;
+					dwNow = TimGetTicks();
+					if (dwNow - g_dwLastDrawUpdate
+					    >= (UInt32)g_iDragThreshold) {
+						redrawCanvas(g_pBmpCanvas);
+						drawDrawUI(g_pBmpCanvas);
+						WinDrawBitmap(g_pBmpCanvas->pBmp, 0, 0);
+						g_dwLastDrawUpdate = dwNow;
+					}
 				}
 			}
 			handled = true;
 			break;
 
 		case penUpEvent:
+			if (g_bDrawPenDown) {
+				redrawCanvas(g_pBmpCanvas);
+				drawDrawUI(g_pBmpCanvas);
+				WinDrawBitmap(g_pBmpCanvas->pBmp, 0, 0);
+			}
 			g_bDrawPenDown = false;
 			g_iDrawZoomAccum = 0;
+			g_dwLastDrawUpdate = 0;
 			handled = true;
 			break;
 
