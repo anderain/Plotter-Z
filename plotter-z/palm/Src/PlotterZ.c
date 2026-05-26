@@ -30,6 +30,7 @@ RenderConfig g_RenderConfig;
 
 static char g_szExpr[256] = "sin(sqr(x^2+y^2))*cos(sqr(x^2+y^2))";
 static char g_szErrorBuf[EZ_ERROR_CONTENT_LENGTH];
+EzError g_iCompileErr;
 static Boolean g_bParseOk = false;
 static Int16 g_iFormulaX = 0;
 static Int16 g_iFormulaY = 0;
@@ -159,9 +160,8 @@ static void parseFormula(void) {
         }
     }
     if (g_pVm != NULL) {
-        EzError iCompileErr;
-        iCompileErr = EzMachine_Compile(g_pVm, g_pAstExpr, g_szErrorBuf);
-        if (iCompileErr != EZERR_NONE) return;
+        g_iCompileErr = EzMachine_Compile(g_pVm, g_pAstExpr, g_szErrorBuf);
+        if (g_iCompileErr != EZERR_NONE) return;
     }
 
     /* Build render tree */
@@ -203,6 +203,19 @@ static void renderFormula(void) {
     if (g_szErrorBuf[0] != '\0' && g_pRenderNode == NULL) {
         const char* szErrType = "Compile Error:";
         Int16 iLen;
+
+		switch (g_iCompileErr) {
+			case EZERR_VARIABLE_UNDEFINED:
+				szErrType = "Undefined Variable:";
+				break;
+			case EZERR_FUNCTION_UNDEFINED:
+				szErrType = "Undefined Function:";
+				break;
+			case EZERR_FUNCTION_PARAM_MISMATCH:
+				szErrType = "Parameters mismatch:";
+				break;
+		}
+
         iLen = (Int16)(StrLen(szErrType) * CURRENT_FONT_WIDTH);
         x = (iW - iLen) / 2;
         y = (iH - CURRENT_FONT_HEIGHT * 2) / 2;
