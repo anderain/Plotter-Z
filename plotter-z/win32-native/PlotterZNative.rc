@@ -193,7 +193,7 @@ BEGIN
     POPUP "&View"
     BEGIN
         MENUITEM "&Camera",                     IDM_VIEW_CAMERA
-        MENUITEM "&Position",                   IDM_VIEW_POSITION
+        MENUITEM "&Pan Move",                   IDM_VIEW_PAN_MOVE
         MENUITEM "&Zoom",                       IDM_VIEW_ZOOM
         MENUITEM "&Formula",                    IDM_VIEW_FORMULA
         MENUITEM SEPARATOR

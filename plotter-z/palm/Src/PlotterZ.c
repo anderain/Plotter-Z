@@ -37,7 +37,7 @@ static Int16 g_iFormulaY = 0;
 /*====================================================
  * Camera and surface data
  *====================================================*/
-#define GRID_MAX            20
+#define GRID_MAX            25
 #define ZOOM_LEVEL_DEFAULT  3
 #define DEFAULT_VIEW_ALPHA  30
 #define DEFAULT_VIEW_BETA   30
@@ -77,7 +77,7 @@ static PZ_FIXED yBuf[GRID_MAX];
 #define Z_BUF(x,y) (zBuf[(x) + (y) * Camera.xGrid])
 
 /* DrawForm interaction */
-static Int16 g_iDrawMode = 0; /* 0=Camera, 1=Position, 2=Zoom */
+static Int16 g_iDrawMode = 0; /* 0=Camera, 1=Pan Move, 2=Zoom */
 static Boolean g_bDrawBox = false;
 static Boolean g_bDrawPenDown = false;
 static Int16 g_iDrawPrevX, g_iDrawPrevY;
@@ -814,7 +814,7 @@ static Boolean DrawFormHandleEvent(EventType * eventP) {
 						if (Camera.iAlphaDeg < 0) Camera.iAlphaDeg = (Int16)(Camera.iAlphaDeg + 360);
 						bChanged = true;
 						break;
-					case 1: /* Position */
+					case 1: /* Pan Move */
 						Camera.iViewportX = (Int16)(Camera.iViewportX + iDeltaX);
 						Camera.iViewportY = (Int16)(Camera.iViewportY + iDeltaY);
 						bChanged = true;

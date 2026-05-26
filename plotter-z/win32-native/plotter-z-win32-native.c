@@ -160,7 +160,7 @@ static int      g_iStage        = STAGE_IDLE;
 
 /* Mouse interaction modes */
 #define MOUSE_MODE_CAMERA      0
-#define MOUSE_MODE_POSITION    1
+#define MOUSE_MODE_PAN_MOVE    1
 #define MOUSE_MODE_ZOOM        2
 #define MOUSE_MODE_FORMULA     3
 
@@ -702,14 +702,14 @@ static void redrawCanvas(HWND hWnd) {
 
         /* Center: mode display */
         {
-            static const char* szWideCenterText[] = { "Camera", "Position", "Zoom", "Formula" };
+            static const char* szWideCenterText[] = { "Camera", "Pan Move", "Zoom", "Formula" };
             static const char* szNarrowCenterText[] = { "[C]", "[P]", "[Z]", "[F]" };
             const char* szCenter;
 
             if (bIsWideCanvas) {
                 switch (g_iMouseMode) {
                     case MOUSE_MODE_CAMERA:
-                    case MOUSE_MODE_POSITION:
+                    case MOUSE_MODE_PAN_MOVE:
                     case MOUSE_MODE_ZOOM:
                     case MOUSE_MODE_FORMULA:
                         szCenter = szWideCenterText[g_iMouseMode];
@@ -722,7 +722,7 @@ static void redrawCanvas(HWND hWnd) {
             else {
                 switch (g_iMouseMode) {
                     case MOUSE_MODE_CAMERA:
-                    case MOUSE_MODE_POSITION:
+                    case MOUSE_MODE_PAN_MOVE:
                     case MOUSE_MODE_ZOOM:
                     case MOUSE_MODE_FORMULA:
                         szCenter = szNarrowCenterText[g_iMouseMode];
@@ -1964,8 +1964,8 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
                     g_iMouseMode = MOUSE_MODE_CAMERA;
                     if (g_bShowFooter) { redrawCanvas(hWnd); InvalidateRect(hWnd, NULL, FALSE); }
                     break;
-                case IDM_VIEW_POSITION:
-                    g_iMouseMode = MOUSE_MODE_POSITION;
+                case IDM_VIEW_PAN_MOVE:
+                    g_iMouseMode = MOUSE_MODE_PAN_MOVE;
                     if (g_bShowFooter) { redrawCanvas(hWnd); InvalidateRect(hWnd, NULL, FALSE); }
                     break;
                 case IDM_VIEW_ZOOM:
@@ -2093,7 +2093,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
                         Camera.iAlphaDeg = Camera.iAlphaDeg % 360;
                         if (Camera.iAlphaDeg < 0) Camera.iAlphaDeg += 360;
                         break;
-                    case MOUSE_MODE_POSITION:
+                    case MOUSE_MODE_PAN_MOVE:
                         Camera.iViewportX += iDeltaX;
                         Camera.iViewportY += iDeltaY;
                         break;
@@ -2157,7 +2157,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
                         InvalidateRect(hWnd, NULL, FALSE);
                         break;
                     case 'P':
-                        g_iMouseMode = MOUSE_MODE_POSITION;
+                        g_iMouseMode = MOUSE_MODE_PAN_MOVE;
                         redrawCanvas(hWnd);
                         InvalidateRect(hWnd, NULL, FALSE);
                         break;
@@ -2198,7 +2198,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
                             if (Camera.iAlphaDeg < 0) Camera.iAlphaDeg += 360;
                         }
                         break;
-                    case MOUSE_MODE_POSITION:
+                    case MOUSE_MODE_PAN_MOVE:
                         if (wParam == VK_LEFT)  { Camera.iViewportX -= 10; bRedraw = 1; }
                         if (wParam == VK_RIGHT) { Camera.iViewportX += 10; bRedraw = 1; }
                         if (wParam == VK_UP)    { Camera.iViewportY -= 10; bRedraw = 1; }

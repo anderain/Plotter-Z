@@ -46,7 +46,7 @@
 #define IDM_HELP_DEBUG                  40007
 #define IDM_FILE_REFRESH_THRESHOLD      40008
 #define IDM_VIEW_CAMERA                 40010
-#define IDM_VIEW_POSITION               40011
+#define IDM_VIEW_PAN_MOVE               40011
 #define IDM_VIEW_ZOOM                   40012
 #define IDM_VIEW_FORMULA                40013
 #define IDM_VIEW_RESET                  40014
