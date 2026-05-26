@@ -7,8 +7,46 @@ This project is still in progress. Feedback and issues are welcome.
 ### On Windows CE
 Copy the `.exe` matching your CPU architecture to the device via Active Sync or external storage (CF, SD card) and run it.
 
+> **Note:** For newer ARM-based devices (Windows CE 5.0, Windows Mobile), use `PlotterZ_hpc211_armdbg.exe`.
+
 ### On Palm OS
 Install the `.prc` file via HotSync and run it.
+
+## Usage
+### Windows CE
+1. `File` > `Samples` to pick a preset sample expression.
+2. `Edit` > `Expression` to enter your own expression.
+3. `Edit` > `Window` to adjust the plot range (X/Y/Z bounds and grid resolution).
+4. `View` to switch between interaction modes: camera rotation, pan move, zoom, and formula positioning.
+5. `View` > `Reset` to restore the default camera angles and viewport.
+6. `File` > `Save Session` / `Load Session` to persist or restore your current expression and window settings.
+
+You can also toggle a footer status bar (`View` > `Toggle Footer`) showing the current camera angles, mode, and zoom level, and toggle the bounding box (`View` > `Toggle Boundary Box`).
+
+### Palm OS
+- **Main screen:**
+  1. Enter an expression and tap `Parse`. If there are no errors the app renders the mathematical formula.
+  2. `Options` > `Window Editor` to set the X/Y/Z plot ranges and grid resolution.
+  3. `Options` > `Samples` to choose from preset sample expressions.
+  4. Tap `Draw` to enter the 3D drawing view.
+
+- **Drawing view:**
+  1. The four corners of the screen are interactive buttons:
+     - **Top-left** — return to the main screen.
+     - **Top-right** — cycle through interaction modes (`C` = Camera rotate, `P` = Pan move, `Z` = Zoom).
+     - **Bottom-left** — toggle the bounding box (`b`/`B`).
+     - **Bottom-right** — reset camera angles, viewport, and zoom level.
+  2. Drag on the canvas to interact (rotate / pan / zoom depending on the current mode).
+
+### Troubleshooting on Windows CE
+If the program fails with `FAILED: DIB SECTION`, some devices (tested on CASIO E-100 and iPAQ H3600) have trouble creating a 16-bit DIB section.
+
+Create a file named `plotter-z.ini` in the root directory of your CE device with the following content to force 8 bpp mode:
+
+```ini
+[graphics]
+force_bpp=8
+```
 
 ## How It Works
 The project is divided into several modules:
