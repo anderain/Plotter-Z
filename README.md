@@ -12,6 +12,22 @@ Copy the `.exe` matching your CPU architecture to the device via Active Sync or 
 ### On Palm OS
 Install the `.prc` file via HotSync and run it.
 
+## Supported Functions
+The following mathematical functions can be used in expressions:
+
+| Function | Description | Parameters |
+|----------|-------------|------------|
+| `sin(x)` | Sine | 1 |
+| `cos(x)` | Cosine | 1 |
+| `tan(x)` | Tangent | 1 |
+| `asin(x)` | Arcsine | 1 |
+| `acos(x)` | Arccosine | 1 |
+| `atan(x)` | Arctangent | 1 |
+| `sqr(x)` | Square root | 1 |
+| `exp(x)` | Exponential (e^x) | 1 |
+| `abs(x)` | Absolute value | 1 |
+| `ln(x)` | Natural logarithm | 1 |
+
 ## Usage
 ### Windows CE
 1. `File` > `Samples` to pick a preset sample expression.
