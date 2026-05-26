@@ -31,6 +31,8 @@ RenderConfig g_RenderConfig;
 static char g_szExpr[256] = "sin(sqr(x^2+y^2))*cos(sqr(x^2+y^2))";
 static char g_szErrorBuf[EZ_ERROR_CONTENT_LENGTH];
 static Boolean g_bParseOk = false;
+static Int16 g_iFormulaX = 0;
+static Int16 g_iFormulaY = 0;
 
 /*====================================================
  * Camera and surface data
@@ -80,7 +82,8 @@ static Boolean g_bDrawBox = false;
 static Boolean g_bDrawPenDown = false;
 static Int16 g_iDrawPrevX, g_iDrawPrevY;
 static Int16 g_iDrawZoomAccum = 0;
-static Int16 g_iDragThreshold = 12;   /* ticks (120 ms at 100 ticks/s) */
+static Int16 g_iSurfaceDragThreshold = 12;   /* ticks (120 ms at 100 ticks/s) */
+static Int16 g_iFormulaDragThreshold = 6;   /* ticks (60 ms at 100 ticks/s) */
 static UInt32 g_dwLastDrawUpdate = 0;
 
 #define DRAW_ZOOM_THRESHOLD 15
@@ -123,18 +126,9 @@ static void rzPutChar(int x, int y, UInt8 ch) {
 }
 
 /*====================================================
- * Parse expression and render to formula bitmap
+ * Parse expression (AST, compile, build RenderNode)
  *====================================================*/
-static void parseAndRender(void) {
-    Int16 x, y;
-    Int16 iW, iH;
-
-    iW = g_pBmpBufFormula->iW;
-    iH = g_pBmpBufFormula->iH;
-
-    /* Clear formula bitmap */
-    BmpBuffer_AllClear(g_pBmpBufFormula);
-
+static void parseFormula(void) {
     /* Destroy previous state (keep VM singleton) */
     if (g_pRenderNode != NULL) {
         RenderNode_Destroy(g_pRenderNode);
@@ -146,17 +140,12 @@ static void parseAndRender(void) {
     }
 
     g_bParseOk = false;
+    g_iFormulaX = 0;
+    g_iFormulaY = 0;
 
     /* Parse expression */
     g_pAstExpr = FzParser_ParseExpression(g_szExpr);
-    if (g_pAstExpr == NULL) {
-        const char* szMsg = "Syntax Error";
-        Int16 iLen = (Int16)(StrLen(szMsg) * CURRENT_FONT_WIDTH);
-        x = (iW - iLen) / 2;
-        y = (iH - CURRENT_FONT_HEIGHT) / 2;
-        BmpBuffer_PutText(g_pBmpBufFormula, x, y, (UInt8*)szMsg, 1);
-        return;
-    }
+    if (g_pAstExpr == NULL) return;
 
     /* Create VM singleton and compile */
     if (g_pVm == NULL) {
@@ -172,36 +161,60 @@ static void parseAndRender(void) {
     if (g_pVm != NULL) {
         EzError iCompileErr;
         iCompileErr = EzMachine_Compile(g_pVm, g_pAstExpr, g_szErrorBuf);
-        if (iCompileErr != EZERR_NONE) {
-            /* Line 1: error type */
-            const char* szErrType;
-            Int16 iLen;
-            switch (iCompileErr) {
-                case EZERR_VARIABLE_UNDEFINED:
-                    szErrType = "Undefined Variable:"; break;
-                case EZERR_FUNCTION_UNDEFINED:
-                    szErrType = "Undefined Function:"; break;
-                case EZERR_FUNCTION_PARAM_MISMATCH:
-                    szErrType = "Parameter Mismatch:"; break;
-                default:
-                    szErrType = "Compile Error:"; break;
-            }
-            iLen = (Int16)(StrLen(szErrType) * CURRENT_FONT_WIDTH);
-            x = (iW - iLen) / 2;
-            y = (iH - CURRENT_FONT_HEIGHT * 2) / 2;
-            BmpBuffer_PutText(g_pBmpBufFormula, x, y, (UInt8*)szErrType, 1);
-
-            /* Line 2: detail */
-            iLen = (Int16)(StrLen(g_szErrorBuf) * CURRENT_FONT_WIDTH);
-            x = (iW - iLen) / 2;
-            y += CURRENT_FONT_HEIGHT;
-            BmpBuffer_PutText(g_pBmpBufFormula, x, y, (UInt8*)g_szErrorBuf, 1);
-            return;
-        }
+        if (iCompileErr != EZERR_NONE) return;
     }
 
     /* Build render tree */
     g_pRenderNode = Render_Transform(g_pAstExpr);
+    if (g_pRenderNode != NULL) {
+        RenderNode_EstimateSize(g_pRenderNode, &g_RenderConfig);
+        /* Center formula horizontally */
+        g_iFormulaX = (Int16)((g_pBmpBufFormula->iW
+            - g_pRenderNode->sLayout.iWidth) / 2);
+        if (g_iFormulaX < 0) g_iFormulaX = 0;
+		g_iFormulaY = (Int16)((g_pBmpBufFormula->iH - g_pRenderNode->sLayout.iAscent - g_pRenderNode->sLayout.iDescent) / 2 - g_pRenderNode->sLayout.iAscent);
+		if (g_iFormulaY < 0) g_iFormulaY = 0;
+    }
+}
+
+/*====================================================
+ * Render formula to bitmap
+ *====================================================*/
+static void renderFormula(void) {
+    Int16 x, y;
+    Int16 iW, iH;
+
+    iW = g_pBmpBufFormula->iW;
+    iH = g_pBmpBufFormula->iH;
+
+    BmpBuffer_AllClear(g_pBmpBufFormula);
+
+    /* Parse error */
+    if (g_pAstExpr == NULL) {
+        const char* szMsg = "Syntax Error";
+        Int16 iLen = (Int16)(StrLen(szMsg) * CURRENT_FONT_WIDTH);
+        x = (iW - iLen) / 2;
+        y = (iH - CURRENT_FONT_HEIGHT) / 2;
+        BmpBuffer_PutText(g_pBmpBufFormula, x, y, (UInt8*)szMsg, 1);
+        return;
+    }
+
+    /* Compile error (check g_szErrorBuf non-empty) */
+    if (g_szErrorBuf[0] != '\0' && g_pRenderNode == NULL) {
+        const char* szErrType = "Compile Error:";
+        Int16 iLen;
+        iLen = (Int16)(StrLen(szErrType) * CURRENT_FONT_WIDTH);
+        x = (iW - iLen) / 2;
+        y = (iH - CURRENT_FONT_HEIGHT * 2) / 2;
+        BmpBuffer_PutText(g_pBmpBufFormula, x, y, (UInt8*)szErrType, 1);
+        iLen = (Int16)(StrLen(g_szErrorBuf) * CURRENT_FONT_WIDTH);
+        x = (iW - iLen) / 2;
+        y += CURRENT_FONT_HEIGHT;
+        BmpBuffer_PutText(g_pBmpBufFormula, x, y, (UInt8*)g_szErrorBuf, 1);
+        return;
+    }
+
+    /* Render error */
     if (g_pRenderNode == NULL) {
         const char* szMsg = "Render error";
         Int16 iLen = (Int16)(StrLen(szMsg) * CURRENT_FONT_WIDTH);
@@ -211,8 +224,12 @@ static void parseAndRender(void) {
         return;
     }
 
-    /* Estimate size and draw */
-    RenderNode_EstimateSize(g_pRenderNode, &g_RenderConfig);
+    g_bParseOk = true;
+
+    /* Line 2: formula rendering */
+    y = CURRENT_FONT_HEIGHT + 2 + g_iFormulaY;
+    RenderNode_Draw(g_pRenderNode, &g_RenderConfig,
+        g_iFormulaX, y + g_pRenderNode->sLayout.iAscent);
 
     /* Line 1: f(x,y)= on filled background */
     {
@@ -222,14 +239,9 @@ static void parseAndRender(void) {
         BmpBuffer_PutText(g_pBmpBufFormula, 0, 0, (UInt8*)szLabel, 0);
     }
 
-    /* Line 2: formula rendering */
-    y = CURRENT_FONT_HEIGHT + 2;
-    RenderNode_Draw(g_pRenderNode, &g_RenderConfig,
-        0, y + g_pRenderNode->sLayout.iAscent);
-
     /* Line 3: Ready> on filled background */
     {
-        const char* szReady = "Ready \x18";
+        const char* szReady = "Ready\x18";
         Int16 iLen = (Int16)(StrLen(szReady) * CURRENT_FONT_WIDTH);
         x = iW - iLen - 2;
         y = iH - CURRENT_FONT_HEIGHT;
@@ -237,8 +249,6 @@ static void parseAndRender(void) {
             iW, CURRENT_FONT_HEIGHT, 1);
         BmpBuffer_PutText(g_pBmpBufFormula, x, y, (UInt8*)szReady, 0);
     }
-
-    g_bParseOk = true;
 }
 
 /*====================================================
@@ -584,7 +594,7 @@ static Boolean MainFormDoCommand(UInt16 command) {
 				ppItems[i] = PlotterZSamples[i].szExpr;
 
 			LstSetListChoices(lstP, ppItems, (UInt16)iCount);
-			LstDrawList(lstP);
+			/* LstDrawList(lstP); */
 
 			controlID = FrmDoDialog(frmP);
 
@@ -600,7 +610,7 @@ static Boolean MainFormDoCommand(UInt16 command) {
 					Camera.zMax = p->zMax;
 					Camera.xGrid = 15;
 					Camera.yGrid = 15;
-
+					Utils_StringCopy(g_szExpr, sizeof(g_szExpr), p->szExpr);
 					/* Update MainForm field */
 					{
 						FormType * frmMain;
@@ -615,6 +625,20 @@ static Boolean MainFormDoCommand(UInt16 command) {
 								FldDrawField(field);
 							}
 						}
+					}
+				}
+				parseFormula();
+				renderFormula();
+				/* Draw button starts disabled */
+				{
+					ControlType *ctlDraw;
+					/* Enable or disable Draw button */
+					ctlDraw = (ControlType*)GetObjectPtr(MainDrawButton);
+					if (ctlDraw != NULL) {
+						if (g_bParseOk)
+							CtlShowControl(ctlDraw);
+						else
+							CtlHideControl(ctlDraw);
 					}
 				}
 			}
@@ -813,7 +837,7 @@ static Boolean DrawFormHandleEvent(EventType * eventP) {
 					UInt32 dwNow;
 					dwNow = TimGetTicks();
 					if (dwNow - g_dwLastDrawUpdate
-					    >= (UInt32)g_iDragThreshold) {
+					    >= (UInt32)g_iSurfaceDragThreshold) {
 						redrawCanvas(g_pBmpCanvas);
 						drawDrawUI(g_pBmpCanvas);
 						WinDrawBitmap(g_pBmpCanvas->pBmp, 0, 0);
@@ -859,6 +883,7 @@ static Boolean MainFormHandleEvent(EventType * eventP) {
 				fieldInput = (FieldType *)FrmGetObjectPtr(frmP, fieldIndex);
 				FldDelete(fieldInput, 0, 0xFFFF);
 				FldInsert(fieldInput, g_szExpr, StrLen(g_szExpr));
+				renderFormula();
 			} else {
 				MainFormInit(frmP);
 			}
@@ -869,6 +894,58 @@ static Boolean MainFormHandleEvent(EventType * eventP) {
 
 		case frmUpdateEvent:
 			WinDrawBitmap(g_pBmpBufFormula->pBmp, 0, 15);
+			handled = true;
+			break;
+
+		case penDownEvent:
+			/* Only start drag if parsed OK and on canvas area */
+			if (g_bParseOk && eventP->screenY > 16 && eventP->screenY < 116) {
+				g_bDrawPenDown = true;
+				g_iDrawPrevX = eventP->screenX;
+				g_iDrawPrevY = eventP->screenY;
+				g_dwLastDrawUpdate = 0;
+				handled = true;
+			}
+			break;
+
+		case penMoveEvent:
+			if (g_bDrawPenDown) {
+				Int16 iDeltaX, iDeltaY;
+				Int16 iCurX, iCurY;
+
+				iCurX = eventP->screenX;
+				iCurY = eventP->screenY;
+				iDeltaX = iCurX - g_iDrawPrevX;
+				iDeltaY = iCurY - g_iDrawPrevY;
+				g_iDrawPrevX = iCurX;
+				g_iDrawPrevY = iCurY;
+
+				if (iDeltaX != 0 || iDeltaY != 0) {
+					UInt32 dwNow;
+					g_iFormulaX = (Int16)(g_iFormulaX + iDeltaX);
+					g_iFormulaY = (Int16)(g_iFormulaY + iDeltaY);
+
+					dwNow = TimGetTicks();
+					if (dwNow - g_dwLastDrawUpdate
+					    >= (UInt32)g_iFormulaDragThreshold) {
+						renderFormula();
+						WinDrawBitmap(g_pBmpBufFormula->pBmp, 0, 15);
+						g_dwLastDrawUpdate = dwNow;
+					}
+				}
+				handled = true;
+			}
+			break;
+
+		case penUpEvent:
+			if (g_bDrawPenDown) {
+				renderFormula();
+				WinDrawBitmap(g_pBmpBufFormula->pBmp, 0, 15);
+				handled = true;
+			}
+			g_bDrawPenDown = false;
+			g_dwLastDrawUpdate = 0;
+			break;
 			handled = true;
 			break;
 
@@ -897,7 +974,8 @@ static Boolean MainFormHandleEvent(EventType * eventP) {
 					}
 				}
 
-				parseAndRender();
+				parseFormula();
+				renderFormula();
 
 				/* Enable or disable Draw button */
 				ctlDraw = (ControlType*)GetObjectPtr(MainDrawButton);
