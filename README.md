@@ -12,6 +12,8 @@ Copy the `.exe` matching your CPU architecture to the device via Active Sync or 
 ### On Palm OS
 Install the `.prc` file via HotSync and run it.
 
+> **Note:** MathLib is required. Download and install it from [palmdb.net/app/mathlib](https://palmdb.net/app/mathlib) before running Plotter-Z.
+
 ## Supported Functions
 The following mathematical functions can be used in expressions:
 
