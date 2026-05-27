@@ -140,4 +140,23 @@ static const unsigned char MENU_ABOUT[] = {
 
 /* #BITMAP_END */
 
+/* #BITMAP_START */
+
+/*
+ {
+   "variable_name": "MENU_EDIT",
+   "width": 19,
+   "height": 8
+ }
+*/
+
+static const unsigned char MENU_EDIT[] = {
+	/* width */ 19, /* height */ 8,
+	/* bitmap (0, 0) */ 255, 137, 186, 138, 186, 186, 137, 255,
+	/* bitmap (1, 0) */ 255, 136, 221, 221, 221, 221, 141, 255,
+	/* bitmap (2, 0) */ 224, 224, 224, 224, 224, 192, 128, 0
+};
+
+/* #BITMAP_END */
+
 #endif /* _BITMAPS_ */

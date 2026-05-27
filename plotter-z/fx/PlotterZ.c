@@ -45,6 +45,34 @@ EzMachine*      g_pVm           = NULL;
 RenderNode*     g_pRenderNode   = NULL;
 RenderConfig    g_RenderConfig;
 
+/*====================================================
+ * Camera and surface data
+ *====================================================*/
+#define GRID_MAX            20
+#define ZOOM_LEVEL_DEFAULT  3
+#define DEFAULT_VIEW_ALPHA  30
+#define DEFAULT_VIEW_BETA   30
+
+struct CameraStruct {
+    int         iViewportX, iViewportY, iViewportS;
+    int         iAlphaDeg, iBetaDeg;
+    PZ_FIXED    cosA, sinA, cosB, sinB;
+    PZ_FLOAT    xMin, xMax; int xGrid;
+    PZ_FLOAT    yMin, yMax; int yGrid;
+    PZ_FLOAT    zMin, zMax;
+    int         iZoomLevel;
+};
+
+static struct CameraStruct Camera = {
+    0, 0, 0,
+    DEFAULT_VIEW_ALPHA, DEFAULT_VIEW_BETA,
+    0, 0, 0, 0,
+    -6.0f, 6.0f, 15,
+    -6.0f, 6.0f, 15,
+    -3.0f, 3.0f,
+    ZOOM_LEVEL_DEFAULT
+};
+
 int g_iFormulaX = 0;
 int g_iFormulaY = 0;
 int g_iFormulaOrigX = 0;
@@ -227,12 +255,12 @@ void DrawExprStage(const char* szBuf) {
     {
         static const uchar* pMenuBitmap[B_MENU_ITEM_NUM] = { MENU_BACK, 0, 0, 0, 0, MENU_OK };
         int bMenuItemVisible[B_MENU_ITEM_NUM];
-        int i2;
+        int i;
         Bdisp_AreaClr_VRAM(&BoxMenuArea);
         memset(bMenuItemVisible, 1, sizeof(bMenuItemVisible));
-        for (i2 = 0; i2 < B_MENU_ITEM_NUM; ++i2) {
-            if (pMenuBitmap[i2] && bMenuItemVisible[i2]) {
-                DrawBitmap(B_MENU_LEFT + B_MENU_ITEM_WIDTH * i2, B_MENU_TOP, pMenuBitmap[i2]);
+        for (i = 0; i < B_MENU_ITEM_NUM; ++i) {
+            if (pMenuBitmap[i] && bMenuItemVisible[i]) {
+                DrawBitmap(B_MENU_LEFT + B_MENU_ITEM_WIDTH * i, B_MENU_TOP, pMenuBitmap[i]);
             }
         }
     }
@@ -240,10 +268,9 @@ void DrawExprStage(const char* szBuf) {
     {
         static const char szTopText[] = "Edit Expression";
         static const int iLeft = (VRAM_WIDTH - (sizeof(szTopText) - 1) * CURRENT_FONT_WIDTH) / 2;
-        PutText(iLeft, 0, szTopText);
+        PutText(iLeft, 0, (const uchar *)szTopText);
         Bdisp_AreaReverseVRAM(0, 0, VRAM_WIDTH - 1, 7);
     }
-    Bdisp_PutDisp_DD();
 }
 
 /* Get row where cursor currently is */
@@ -406,14 +433,14 @@ int ExprStage(void) {
 /*====================================================
  * Renderer-Z VRAM callbacks
  *====================================================*/
-static void rzSetPixel(int x, int y) {
+static void RzSetPixel(int x, int y) {
     int iAddr;
     if (x < 0 || x >= VRAM_WIDTH || y < 0 || y >= VRAM_HEIGHT) return;
     iAddr = (y << 4) + (x >> 3);
     pVRAM[iAddr] |= (unsigned char)(0x80 >> (x & 7));
 }
 
-static void rzPutChar(int x, int y, unsigned char ch) {
+static void RzPutChar(int x, int y, unsigned char ch) {
     DrawSprite8x8(x, y, FONT_HYBIRD_6x8 + ((int)ch << 3));
 }
 
@@ -469,9 +496,6 @@ int ParseAndRenderExpr(void) {
 
 /* Draw formula centered in edit area */
 void DrawFormula(void) {
-    /* Clear edit area */
-    Bdisp_AreaClr_VRAM(&BoxEditArea);
-
     if (g_pRenderNode == NULL || g_pAstExpr == NULL) {EzError g_iCompileErr;
         const char* szMsg = "Syntax Error";
         int iLeft = (VRAM_WIDTH - (int)strlen(szMsg) * CURRENT_FONT_WIDTH) / 2;
@@ -487,6 +511,282 @@ void DrawFormula(void) {
         Bdisp_AreaClr_VRAM(&BoxTopArea);
         PutText(0, 0, (const uchar*)"f(x,y)=");
         Bdisp_AreaReverseVRAM(0, 0, VRAM_WIDTH - 1, CURRENT_FONT_HEIGHT - 1);
+    }
+}
+
+/*====================================================
+ * Value Editor Stage
+ *====================================================*/
+
+static char g_szValueEditorBuf[32];
+
+void DrawValueEditor(const char* szTitle) {
+    int iLen, iX, iY;
+    Bdisp_AllClr_VRAM();
+
+    /* Title banner */
+    {
+        int iLeft = (VRAM_WIDTH - (int)strlen(szTitle) * CURRENT_FONT_WIDTH) / 2;
+        PutText(iLeft, 0, (const uchar*)szTitle);
+        Bdisp_AreaReverseVRAM(0, 0, VRAM_WIDTH - 1, 7);
+    }
+
+    /* Edit buffer centered with cursor underscore */
+    {
+        char szDisplay[34];
+        strcpy(szDisplay, g_szValueEditorBuf);
+        iLen = (int)strlen(szDisplay);
+        szDisplay[iLen] = '_';
+        szDisplay[iLen + 1] = '\0';
+        iX = (VRAM_WIDTH - (iLen + 1) * CURRENT_FONT_WIDTH) / 2;
+        iY = (VRAM_HEIGHT - 16 - CURRENT_FONT_HEIGHT) / 2 + 8;
+        if (iX < 0) iX = 0;
+        PutText(iX, iY, (const uchar*)szDisplay);
+    }
+
+    /* Bottom Menu */
+    {
+        static const uchar* pMenuBitmap[B_MENU_ITEM_NUM] = { MENU_BACK, 0, 0, 0, 0, MENU_OK };
+        int bMenuItemVisible[B_MENU_ITEM_NUM];
+        int i;
+        Bdisp_AreaClr_VRAM(&BoxMenuArea);
+        memset(bMenuItemVisible, 1, sizeof(bMenuItemVisible));
+        for (i = 0; i < B_MENU_ITEM_NUM; ++i) {
+            if (pMenuBitmap[i] && bMenuItemVisible[i]) {
+                DrawBitmap(B_MENU_LEFT + B_MENU_ITEM_WIDTH * i, B_MENU_TOP, pMenuBitmap[i]);
+            }
+        }
+    }
+}
+
+int ValueEditorStage(const char* szTitle, const char* szInitial) {
+    uint uKey;
+    int iLen;
+
+    strcpy(g_szValueEditorBuf, szInitial);
+    iLen = (int)strlen(g_szValueEditorBuf);
+
+    while (1) {
+        DrawValueEditor(szTitle);
+        GetKey(&uKey);
+        iLen = (int)strlen(g_szValueEditorBuf);
+
+        switch (uKey) {
+            case KEY_CTRL_F1:
+            case KEY_CTRL_EXIT:
+                strcpy(g_szValueEditorBuf, szInitial);
+                /* fall through */
+            case KEY_CTRL_F6:
+            case KEY_CTRL_EXE:
+                return (int)strlen(g_szValueEditorBuf);
+
+            case KEY_CTRL_DEL:
+                if (iLen > 0)
+                    g_szValueEditorBuf[iLen - 1] = '\0';
+                break;
+
+            default:
+                if (iLen < 30) {
+                    char ch = 0;
+                    if (uKey >= KEY_CHAR_0 && uKey <= KEY_CHAR_9) ch = (char)uKey;
+                    else if (uKey == KEY_CHAR_DP)      ch = '.';
+                    else if (uKey == KEY_CHAR_PMINUS)  ch = '-';
+                    else if (uKey == KEY_CHAR_MINUS)   ch = '-';
+
+                    if (ch) {
+                        g_szValueEditorBuf[iLen] = ch;
+                        g_szValueEditorBuf[iLen + 1] = '\0';
+                    }
+                }
+                break;
+        }
+    }
+}
+
+/*====================================================
+ * Window Editor Stage
+ *====================================================*/
+
+#define WIN_EDIT_ROWS           4
+#define WIN_EDIT_COLS           2
+#define WIN_EDIT_LABEL_X        8
+#define WIN_EDIT_FIELD_X        40
+#define WIN_EDIT_ROW_START_Y    12
+#define WIN_EDIT_ROW_H          10
+#define WIN_EDIT_FIELD_W        36
+
+/* Cursor position in grid */
+static int g_iWinEditCursorRow = 0;
+static int g_iWinEditCursorCol = 0;
+
+/* Row labels */
+static const char* g_szWinEditLabels[WIN_EDIT_ROWS] = { "X:", "Y:", "Z:", "Grid:" };
+
+/* String buffers for each field */
+static char g_szWinEditValues[WIN_EDIT_ROWS][WIN_EDIT_COLS][20];
+
+void DrawWindowEditorStage(void) {
+    int iRow, iCol;
+
+    Bdisp_AllClr_VRAM();
+
+    /* Draw field labels and values */
+    for (iRow = 0; iRow < WIN_EDIT_ROWS; ++iRow) {
+        for (iCol = 0; iCol < WIN_EDIT_COLS; ++iCol) {
+            int iX = WIN_EDIT_FIELD_X + iCol * (WIN_EDIT_FIELD_W + 10);
+            int iY = WIN_EDIT_ROW_START_Y + iRow * WIN_EDIT_ROW_H;
+            PutText(iX, iY, (const uchar*)g_szWinEditValues[iRow][iCol]);
+
+            /* Highlight cursor field */
+            if (iRow == g_iWinEditCursorRow && iCol == g_iWinEditCursorCol) {
+                int iLen = (int)strlen(g_szWinEditValues[iRow][iCol]);
+                Bdisp_AreaReverseVRAM(iX, iY,
+                    iX + iLen * CURRENT_FONT_WIDTH - 1,
+                    iY + CURRENT_FONT_HEIGHT - 1);
+            }
+        }
+        /* Arrow between columns for x/y/z rows */
+        if (iRow < 3) {
+            int iArrowX = WIN_EDIT_FIELD_X + WIN_EDIT_FIELD_W + 2;
+            int iY = WIN_EDIT_ROW_START_Y + iRow * WIN_EDIT_ROW_H;
+            PutChar(iArrowX, iY, '\x18');
+        }
+    }
+
+    /* Row label */
+    for (iRow = 0; iRow < WIN_EDIT_ROWS; ++iRow) {
+        int iY = WIN_EDIT_ROW_START_Y + iRow * WIN_EDIT_ROW_H;
+        PutText(WIN_EDIT_LABEL_X, iY, (const uchar*)g_szWinEditLabels[iRow]);
+    }
+
+    /* Bottom Menu */
+    {
+        static const uchar* pMenuBitmap[B_MENU_ITEM_NUM] = { MENU_BACK, 0, 0, MENU_EDIT, 0, MENU_OK };
+        int bMenuItemVisible[B_MENU_ITEM_NUM];
+        int i;
+        Bdisp_AreaClr_VRAM(&BoxMenuArea);
+        memset(bMenuItemVisible, 1, sizeof(bMenuItemVisible));
+        for (i = 0; i < B_MENU_ITEM_NUM; ++i) {
+            if (pMenuBitmap[i] && bMenuItemVisible[i]) {
+                DrawBitmap(B_MENU_LEFT + B_MENU_ITEM_WIDTH * i, B_MENU_TOP, pMenuBitmap[i]);
+            }
+        }
+    }
+    /* Top Banner */
+    {
+        static const char szTopText[] = "Window Editor";
+        static const int iLeft = (VRAM_WIDTH - (sizeof(szTopText) - 1) * CURRENT_FONT_WIDTH) / 2;
+        PutText(iLeft, 0, (const uchar *)szTopText);
+        Bdisp_AreaReverseVRAM(0, 0, VRAM_WIDTH - 1, 7);
+    }
+}
+
+static void WinEdit_LoadCamera(void) {
+    int i;
+    for (i = 0; i < 4; ++i) {
+        if (i == 0) {
+            Utils_Ftoa((double)Camera.xMin, g_szWinEditValues[0][0], 2);
+            Utils_Ftoa((double)Camera.xMax, g_szWinEditValues[0][1], 2);
+        } else if (i == 1) {
+            Utils_Ftoa((double)Camera.yMin, g_szWinEditValues[1][0], 2);
+            Utils_Ftoa((double)Camera.yMax, g_szWinEditValues[1][1], 2);
+        } else if (i == 2) {
+            Utils_Ftoa((double)Camera.zMin, g_szWinEditValues[2][0], 2);
+            Utils_Ftoa((double)Camera.zMax, g_szWinEditValues[2][1], 2);
+        } else {
+            Utils_Ftoa(Camera.xGrid, g_szWinEditValues[3][0], 2);
+            Utils_Ftoa(Camera.yGrid, g_szWinEditValues[3][1], 2);
+        }
+    }
+}
+
+static void WinEdit_SaveCamera(void) {
+    Camera.xMin  = (PZ_FLOAT)Utils_Atof(g_szWinEditValues[0][0]);
+    Camera.xMax  = (PZ_FLOAT)Utils_Atof(g_szWinEditValues[0][1]);
+    Camera.yMin  = (PZ_FLOAT)Utils_Atof(g_szWinEditValues[1][0]);
+    Camera.yMax  = (PZ_FLOAT)Utils_Atof(g_szWinEditValues[1][1]);
+    Camera.zMin  = (PZ_FLOAT)Utils_Atof(g_szWinEditValues[2][0]);
+    Camera.zMax  = (PZ_FLOAT)Utils_Atof(g_szWinEditValues[2][1]);
+
+    {
+        int iGrid;
+        iGrid = (int)Utils_Atoi(g_szWinEditValues[3][0]);
+        if (iGrid < 5) iGrid = 5;
+        if (iGrid > GRID_MAX) iGrid = GRID_MAX;
+        Camera.xGrid = iGrid;
+
+        iGrid = (int)Utils_Atoi(g_szWinEditValues[3][1]);
+        if (iGrid < 5) iGrid = 5;
+        if (iGrid > GRID_MAX) iGrid = GRID_MAX;
+        Camera.yGrid = iGrid;
+    }
+}
+
+void WindowEditorStage(void) {
+    uint uKey;
+
+    WinEdit_LoadCamera();
+    g_iWinEditCursorRow = 0;
+    g_iWinEditCursorCol = 0;
+
+    while (1) {
+        DrawWindowEditorStage();
+        GetKey(&uKey);
+
+        switch (uKey) {
+            case KEY_CTRL_EXIT:
+            case KEY_CTRL_F1:
+                return;
+
+            case KEY_CTRL_EXE:
+            case KEY_CTRL_F4:
+            {
+                static const char* szFieldTitles[4][2] = {
+                    { "X Min", "X Max" },
+                    { "Y Min", "Y Max" },
+                    { "Z Min", "Z Max" },
+                    { "X Grid", "Y Grid" }
+                };
+                ValueEditorStage(szFieldTitles[g_iWinEditCursorRow][g_iWinEditCursorCol],
+                    g_szWinEditValues[g_iWinEditCursorRow][g_iWinEditCursorCol]);
+                strcpy(g_szWinEditValues[g_iWinEditCursorRow][g_iWinEditCursorCol],
+                    g_szValueEditorBuf);
+                break;
+            }
+
+            case KEY_CTRL_F6:
+                WinEdit_SaveCamera();
+                return;
+
+            case KEY_CTRL_UP:
+                if (g_iWinEditCursorRow > 0)
+                    g_iWinEditCursorRow--;
+                break;
+
+            case KEY_CTRL_DOWN:
+                if (g_iWinEditCursorRow < WIN_EDIT_ROWS - 1)
+                    g_iWinEditCursorRow++;
+                break;
+
+            case KEY_CTRL_LEFT:
+                if (g_iWinEditCursorCol > 0)
+                    g_iWinEditCursorCol--;
+                else if (g_iWinEditCursorRow > 0) {
+                    g_iWinEditCursorRow--;
+                    g_iWinEditCursorCol = WIN_EDIT_COLS - 1;
+                }
+                break;
+
+            case KEY_CTRL_RIGHT:
+                if (g_iWinEditCursorCol < WIN_EDIT_COLS - 1)
+                    g_iWinEditCursorCol++;
+                else if (g_iWinEditCursorRow < WIN_EDIT_ROWS - 1) {
+                    g_iWinEditCursorRow++;
+                    g_iWinEditCursorCol = 0;
+                }
+                break;
+
+        }
     }
 }
 
@@ -591,7 +891,6 @@ int MainStage(void) {
     int iRet;
     while (1) {
         DrawMainStage();
-        Bdisp_PutDisp_DD();
         GetKey(&uKey);
         switch (uKey) {
             case KEY_CTRL_F1:
@@ -602,6 +901,9 @@ int MainStage(void) {
                     else
                         g_iMainState = STATE_ERROR;
                 }
+                break;
+            case KEY_CTRL_F2:
+                WindowEditorStage();
                 break;
             case KEY_CTRL_UP:
                 if (g_iMainState == STATE_READY) g_iFormulaY -= 4;
@@ -634,9 +936,9 @@ int AddIn_main(int isAppli, unsigned short OptionNum) {
     pVRAM = GetVRAMAddress();
 
     /* Set up renderer-Z callback interfaces */
-    g_RenderConfig.sInterfaces.setPixel = rzSetPixel;
+    g_RenderConfig.sInterfaces.setPixel = RzSetPixel;
     g_RenderConfig.sInterfaces.plotLine = Bdisp_DrawLineVRAM;
-    g_RenderConfig.sInterfaces.putChar  = rzPutChar;
+    g_RenderConfig.sInterfaces.putChar  = RzPutChar;
     RenderConfig_GetDefaultStyle(&g_RenderConfig);
 
     MainStage();
