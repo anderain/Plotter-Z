@@ -1,8 +1,20 @@
 #ifndef _FORMULA_Z_
 #define _FORMULA_Z_
 
-#include "../common/vlist.h"
-#include "../common/utils.h"
+/* Workaround for fx-9860 SHC compiler's inability to parse paths correctly */
+#if defined(_SH3) || defined(_SH4)
+#   ifndef PLATFORM_FX9860
+#       define PLATFORM_FX9860
+#   endif
+#endif
+
+#ifdef PLATFORM_FX9860
+#   include "../../common/vlist.h"
+#   include "../../common/utils.h"
+#else
+#   include "../common/vlist.h"
+#   include "../common/utils.h"
+#endif
 
 /*================================================
  * Common

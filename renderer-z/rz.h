@@ -1,7 +1,18 @@
 #ifndef _RENDERER_Z_
 #define _RENDERER_Z_
 
-#include "../formula-z/fz.h"
+/* Workaround for fx-9860 SHC compiler's inability to parse paths correctly */
+#if defined(_SH3) || defined(_SH4)
+#   ifndef PLATFORM_FX9860
+#       define PLATFORM_FX9860
+#   endif
+#endif
+
+#ifdef PLATFORM_FX9860
+#   include "../../formula-z/fz.h"
+#else
+#   include "../formula-z/fz.h"
+#endif
 
 typedef enum tagRenderNodeType {
     RN_TEXT         = 1,
