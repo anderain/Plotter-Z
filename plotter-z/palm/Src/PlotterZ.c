@@ -172,7 +172,7 @@ static void parseFormula(void) {
         g_iFormulaX = (Int16)((g_pBmpBufFormula->iW
             - g_pRenderNode->sLayout.iWidth) / 2);
         if (g_iFormulaX < 0) g_iFormulaX = 0;
-		g_iFormulaY = (Int16)((g_pBmpBufFormula->iH - g_pRenderNode->sLayout.iAscent - g_pRenderNode->sLayout.iDescent) / 2 - g_pRenderNode->sLayout.iAscent);
+		g_iFormulaY = (Int16)((g_pBmpBufFormula->iH - g_pRenderNode->sLayout.iAscent - g_pRenderNode->sLayout.iDescent) / 2) + g_pRenderNode->sLayout.iAscent;
 		if (g_iFormulaY < 0) g_iFormulaY = 0;
     }
 }
@@ -240,9 +240,7 @@ static void renderFormula(void) {
     g_bParseOk = true;
 
     /* Line 2: formula rendering */
-    y = CURRENT_FONT_HEIGHT + 2 + g_iFormulaY;
-    RenderNode_Draw(g_pRenderNode, &g_RenderConfig,
-        g_iFormulaX, y + g_pRenderNode->sLayout.iAscent);
+    RenderNode_Draw(g_pRenderNode, &g_RenderConfig, g_iFormulaX, g_iFormulaY);
 
     /* Line 1: f(x,y)= on filled background */
     {
