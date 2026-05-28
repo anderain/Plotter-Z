@@ -30,6 +30,9 @@ typedef unsigned char uchar;
 #define CHARS_PER_LINE      (EDIT_W / CURRENT_FONT_WIDTH)
 #define VISIBLE_ROWS        (EDIT_H / CURRENT_FONT_HEIGHT)
 
+#define VM_VAR_T_INDEX       3
+#define VM_VAR_T_STEP       ((PZ_FLOAT)1.0f)
+
 static const DISPBOX BoxMenuArea = { 0, 56, VRAM_WIDTH - 1, 63 };
 static const DISPBOX BoxTopArea = { 0, 0, VRAM_WIDTH - 1, 7 };
 static const DISPBOX BoxEditArea = { 0, 8, VRAM_WIDTH - 1, 55 };
@@ -38,7 +41,7 @@ static const DISPBOX BoxEditArea = { 0, 8, VRAM_WIDTH - 1, 55 };
  * Global Variables
  *====================================================*/
 
-char    g_szExpr[300] = "sin(sqr(x^2+y^2))*cos(sqr(x^2+y^2))";
+char    g_szExpr[300] = "sin(sqr(x^2+y^2)+t/5)*cos(sqr(x^2+y^2)+t/5)";
 char    g_szErrorBuf[EZ_ERROR_CONTENT_LENGTH];
 EzError g_iCompileErr = EZERR_NONE;
 
@@ -69,8 +72,8 @@ static struct CameraStruct Camera = {
     VRAM_WIDTH / 2, VRAM_HEIGHT / 2, VRAM_HEIGHT / 2,
     DEFAULT_VIEW_ALPHA, DEFAULT_VIEW_BETA,
     0, 0, 0, 0,
-    -6.0f, 6.0f, 15,
-    -6.0f, 6.0f, 15,
+    -6.0f, 6.0f, 12,
+    -6.0f, 6.0f, 12,
     -3.0f, 3.0f,
     ZOOM_LEVEL_DEFAULT
 };
@@ -492,6 +495,7 @@ int ParseAndRenderExpr(void) {
             EzMachine_DeclareVariable(g_pVm, "x");
             EzMachine_DeclareVariable(g_pVm, "y");
             EzMachine_DeclareVariable(g_pVm, "pi");
+            EzMachine_DeclareVariable(g_pVm, "t");
             EzMachine_AllocateVariables(g_pVm);
             EzMachine_SetVariableByIndex(g_pVm, 2, PZ_PI);
         }
@@ -555,7 +559,108 @@ static void xyz2xy(PZ_FIXED x, PZ_FIXED y, PZ_FIXED z, int* ox, int* oy) {
     *oy = Camera.iViewportY + (int)((iScale * ny + PZ_FIXED_HALF) >> PZ_FIXED_SHIFT);
 }
 
-static int recalcSurface(void) {
+#define BAR_WIDTH   10
+#define BAR_HEIGHT  1
+#define BAR_BORDER  1
+
+static const DISPBOX TopRightProgressBox = {
+    VRAM_WIDTH - BAR_WIDTH - BAR_BORDER * 2,
+    0,
+    VRAM_WIDTH - 1,
+    BAR_BORDER * 2
+};
+
+static void RecalcInitTopRight(void) {
+    static const DISPBOX* pBox = &TopRightProgressBox;
+    Bdisp_AreaClr_VRAM(pBox);
+    /* Border */
+    Bdisp_DrawLineVRAM(pBox->left, pBox->top, pBox->right, pBox->top);
+    Bdisp_DrawLineVRAM(pBox->right, pBox->top, pBox->right, pBox->bottom);
+    Bdisp_DrawLineVRAM(pBox->right, pBox->bottom, pBox->left, pBox->bottom);
+    Bdisp_DrawLineVRAM(pBox->left, pBox->bottom, pBox->left, pBox->top);
+}
+
+static void RecalcRedrawTopRight(int iPct) {
+    static const DISPBOX* pBox = &TopRightProgressBox;
+    /* Progress */
+    Bdisp_DrawLineVRAM(
+        pBox->left + BAR_BORDER,
+        pBox->top + BAR_BORDER,
+        pBox->left + BAR_BORDER + BAR_WIDTH * iPct / 100,
+        pBox->top + BAR_BORDER
+    );
+    Bdisp_PutDisp_DD();
+}
+
+#undef BAR_WIDTH
+#undef BAR_HEIGHT
+#undef BAR_BORDER
+
+#define BAR_W (VRAM_WIDTH * 2 / 3)
+#define BAR_H (CURRENT_FONT_HEIGHT * 3 / 2)
+#define BAR_X ((VRAM_WIDTH - BAR_W) / 2)
+#define BAR_Y ((VRAM_HEIGHT - BAR_H) / 2)
+
+static const DISPBOX CenterProgressBox = {
+    BAR_X + 1,
+    BAR_Y + 1,
+    BAR_X + BAR_W - 2,
+    BAR_Y + BAR_H - 2
+};
+
+static void RecalcRedrawFullscreen(int iPct) {
+    char szBuf[16];
+    int iLen, iFillW;
+
+    /* Percentage text */
+    sprintf(szBuf, "%d%%", iPct);
+    iLen = (int)strlen(szBuf) * CURRENT_FONT_WIDTH;
+    PutText(BAR_X + (BAR_W - iLen) / 2,
+        BAR_Y + (BAR_H - CURRENT_FONT_HEIGHT) / 2,
+        (const uchar*)szBuf);
+
+    /* Clear bar content */
+    Bdisp_AreaClr_VRAM(&CenterProgressBox);
+
+    /* Filled portion invert */
+    iFillW = BAR_W * iPct / 100;
+    if (iFillW > BAR_W) iFillW = BAR_W;
+    if (iFillW > 0)
+        Bdisp_AreaReverseVRAM(BAR_X + 1, BAR_Y + 1,
+            BAR_X + iFillW - 1, BAR_Y + BAR_H - 2);
+
+    Bdisp_PutDisp_DD();
+}
+
+static void RecalcInitFullscreen(void) {
+    int iLen;
+
+    Bdisp_AllClr_VRAM();
+
+    /* "Recalc ..." label above bar */
+    iLen = (int)strlen("Recalc ...") * CURRENT_FONT_WIDTH;
+    PutText((VRAM_WIDTH - iLen) / 2,
+        BAR_Y - CURRENT_FONT_HEIGHT - 2,
+        (const uchar*)"Recalc ...");
+
+    /* Bar border */
+    Bdisp_DrawLineVRAM(BAR_X, BAR_Y, BAR_X + BAR_W - 1, BAR_Y);
+    Bdisp_DrawLineVRAM(BAR_X, BAR_Y + BAR_H - 1,
+        BAR_X + BAR_W - 1, BAR_Y + BAR_H - 1);
+    Bdisp_DrawLineVRAM(BAR_X, BAR_Y, BAR_X, BAR_Y + BAR_H - 1);
+    Bdisp_DrawLineVRAM(BAR_X + BAR_W - 1, BAR_Y,
+        BAR_X + BAR_W - 1, BAR_Y + BAR_H - 1);
+}
+
+#undef BAR_W
+#undef BAR_H
+#undef BAR_X
+#undef BAR_Y
+
+static int RecalcSurface(
+    void (*pfnInit)(void),
+    void (*pfnRedraw)(int iPct)
+) {
     int ix, iy;
     PZ_FLOAT fXbuf[GRID_MAX], fYbuf[GRID_MAX];
     PZ_FLOAT fzMid   = (Camera.zMax + Camera.zMin) * 0.5f;
@@ -567,6 +672,8 @@ static int recalcSurface(void) {
     int iLastPct = -1;
 
     if (g_pVm == NULL) return 0;
+
+    if (pfnInit) pfnInit();
 
     for (ix = 0; ix < Camera.xGrid; ++ix)
         fXbuf[ix] = Camera.xMin + (Camera.xMax - Camera.xMin) * ix / (PZ_FLOAT)(Camera.xGrid - 1);
@@ -585,45 +692,7 @@ static int recalcSurface(void) {
         xBuf[ix] = PZ_FLOAT_TO_FIXED(2.0f * (fx - fxMid) / fxRange);
         iPct = (ix + 1) * 100 / Camera.xGrid;
         if (iPct != iLastPct) {
-            char szBuf[16];
-            int iLen, iBarW, iBarH, iBarX, iBarY, iFillW;
-
-            iBarW = VRAM_WIDTH / 2;
-            iBarH = CURRENT_FONT_HEIGHT * 2;
-            iBarX = (VRAM_WIDTH - iBarW) / 2;
-            iBarY = (VRAM_HEIGHT - iBarH) / 2;
-
-            Bdisp_AllClr_VRAM();
-
-            /* "Recalc ..." label above bar */
-            iLen = (int)strlen("Recalc ...") * CURRENT_FONT_WIDTH;
-            PutText((VRAM_WIDTH - iLen) / 2,
-                iBarY - CURRENT_FONT_HEIGHT - 2,
-                (const uchar*)"Recalc ...");
-
-            /* Bar border */
-            Bdisp_DrawLineVRAM(iBarX, iBarY, iBarX + iBarW - 1, iBarY);
-            Bdisp_DrawLineVRAM(iBarX, iBarY + iBarH - 1,
-                iBarX + iBarW - 1, iBarY + iBarH - 1);
-            Bdisp_DrawLineVRAM(iBarX, iBarY, iBarX, iBarY + iBarH - 1);
-            Bdisp_DrawLineVRAM(iBarX + iBarW - 1, iBarY,
-                iBarX + iBarW - 1, iBarY + iBarH - 1);
-
-            /* Percentage text */
-            sprintf(szBuf, "%d%%", iPct);
-            iLen = (int)strlen(szBuf) * CURRENT_FONT_WIDTH;
-            PutText(iBarX + (iBarW - iLen) / 2,
-                iBarY + (iBarH - CURRENT_FONT_HEIGHT) / 2,
-                (const uchar*)szBuf);
-
-            /* Filled portion invert */
-            iFillW = iBarW * iPct / 100;
-            if (iFillW > iBarW) iFillW = iBarW;
-            if (iFillW > 0)
-                Bdisp_AreaReverseVRAM(iBarX + 1, iBarY + 1,
-                    iBarX + iFillW - 1, iBarY + iBarH - 2);
-
-            Bdisp_PutDisp_DD();
+            if (pfnRedraw) pfnRedraw(iPct);
             iLastPct = iPct;
         }
     }
@@ -708,7 +777,7 @@ void DrawGraphStage(void) {
     redrawCanvas();
     /* Bottom Menu */
     if (g_bGraphMenuVisible) {
-        static const uchar* pMenuBitmap[B_MENU_ITEM_NUM] = { MENU_BACK, 0, 0, 0, MENU_BOX, MENU_HIDE };
+        static const uchar* pMenuBitmap[B_MENU_ITEM_NUM] = { MENU_BACK, 0, MENU_ANIMATION, MENU_RESET, MENU_BOX, MENU_HIDE };
         int i;
         Bdisp_AreaClr_VRAM(&BoxMenuArea);
         for (i = 0; i < B_MENU_ITEM_NUM; ++i) {
@@ -730,6 +799,19 @@ int GraphStage(void) {
             case KEY_CTRL_EXIT:
                 return 0;
 
+            case KEY_CTRL_F3:
+                EzMachine_SetVariableByIndex(g_pVm, VM_VAR_T_INDEX, VM_VAR_T_STEP + EzMachine_GetVariableByIndex(g_pVm, VM_VAR_T_INDEX));
+                RecalcSurface(RecalcInitTopRight, RecalcRedrawTopRight);
+                break;
+
+            case KEY_CTRL_F4:
+                Camera.iAlphaDeg = DEFAULT_VIEW_ALPHA;
+                Camera.iBetaDeg = DEFAULT_VIEW_BETA;
+                Camera.iZoomLevel = ZOOM_LEVEL_DEFAULT;
+                Camera.iViewportX = VRAM_WIDTH / 2;
+                Camera.iViewportY = VRAM_HEIGHT / 2;
+                break;
+            
             case KEY_CTRL_F5:
                 g_bDrawBox = !g_bDrawBox;
                 break;
@@ -1188,12 +1270,12 @@ void HelpStage() {
     /* Redraw Help */
     {
         static const char* szGuide[] = {
-            "Arrow keys: Rotate",
+            "Arrow: Rotate   +/-: Zoom",
             "Num 2/4/6/8: Pan Move",
-            "+/-: Zoom",
+            "F3: Animation via variable",
+            "F4: Reset camera",
             "F5: Toggle boundary box",
-            "F6: Toggle menu",
-            "EXIT: Go back"
+            "F6: Toggle menu"
         };
         static const int iNum = sizeof(szGuide) / sizeof(szGuide[0]);
         int i, iY;
@@ -1295,7 +1377,7 @@ void DrawMainStage(void) {
     }
     /* Draw bttom menu */
     {
-        static const uchar* pMenuBitmap[B_MENU_ITEM_NUM] = { MENU_EXPR, MENU_WIN, MENU_SAMPLE, MENU_ABOUT, 0, MENU_PLOT };
+        static const uchar* pMenuBitmap[B_MENU_ITEM_NUM] = { MENU_EXPR, MENU_WIN, MENU_SAMPLE, MENU_HELP, 0, MENU_PLOT };
         int bMenuItemVisible[B_MENU_ITEM_NUM];
         int i;
         Bdisp_AreaClr_VRAM(&BoxMenuArea);
@@ -1354,11 +1436,10 @@ int MainStage(void) {
     
             case KEY_CTRL_F6:
                 if (g_iMainState == STATE_READY) {
-                    Camera.iViewportS = VRAM_HEIGHT / 2;
-                    Camera.iViewportX = VRAM_WIDTH / 2;
-                    Camera.iViewportY = VRAM_HEIGHT / 2;
-                    if (recalcSurface())
+                    EzMachine_SetVariableByIndex(g_pVm, VM_VAR_T_INDEX, 0);
+                    if (RecalcSurface(RecalcInitFullscreen, RecalcRedrawFullscreen)) {
                         GraphStage();
+                    }
                 }
                 break;
             case KEY_CTRL_UP:
