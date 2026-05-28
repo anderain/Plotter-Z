@@ -210,5 +210,48 @@ This module contains platform-specific implementations of the plotter-z app.
 | `palm` | Palm OS version |
 | `fx` | CASIO fx-9860 version |
 
+## Building
+
+The project favours an out-of-the-box approach, just use each platform's official SDK and toolchain with zero extra configuration.
+
+### 1. Clone Dependencies
+
+This project depends on two small libraries:
+
+- **salvia89** — a compact `sprintf` replacement. Required because Windows CE 1.0 / 2.0 do not provide `sprintf`, and their `wsprintf` lacks important features.
+- **pine89** — a lightweight INI file parser.
+
+Run the `fetch-deps.sh` script to clone them:
+
+```sh
+cd project-path
+./fetch-deps.sh
+```
+
+If you cannot run a shell script or don't have Git, you can clone the repositories manually, or download their source from GitHub and place them into the `deps` directory (refer to the script for exact locations).
+
+### 2. Build Per Platform
+
+#### `sdl`
+Requires an SDL 1.2 development environment plus GCC and `make`. Run:
+
+```sh
+make
+```
+
+#### `win32-native`
+Requires one of the following:
+
+- **CE 1.x**: Visual C++ 5.0 + Windows CE Toolkit for Visual C++ 5.0 (needs Windows NT 4)
+- **CE 2.x / Desktop**: Visual C++ 6.0 + Windows CE Toolkit for Visual C++ 6.0
+
+Open the `*.dsw` workspace file in the corresponding Visual C++ and build.
+
+#### `palm`
+Requires **CodeWarrior IDE for Palm**. Open the `*.mcp` project file and build.
+
+#### `fx`
+Requires the **fx-9860G SDK**. Open the `*.g1w` project file and build.
+
 ## License
 This project is licensed under the MIT License.
