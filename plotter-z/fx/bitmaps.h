@@ -76,9 +76,9 @@ static const unsigned char MENU_WIN[] = {
 
 static const unsigned char MENU_PLOT[] = {
 	/* width */ 19, /* height */ 8,
-	/* bitmap (0, 0) */ 255, 155, 171, 155, 187, 187, 184, 255,
-	/* bitmap (1, 0) */ 255, 216, 173, 173, 173, 173, 221, 255,
-	/* bitmap (2, 0) */ 224, 224, 224, 224, 224, 192, 128, 0
+	/* bitmap (0, 0) */ 255, 128, 178, 170, 178, 162, 162, 163,
+	/* bitmap (1, 0) */ 255, 0, 19, 41, 41, 41, 41, 145,
+	/* bitmap (2, 0) */ 224, 0, 128, 0, 0, 0, 0, 0
 };
 
 /* #BITMAP_END */
@@ -125,16 +125,16 @@ static const unsigned char MENU_OK[] = {
 
 /*
  {
-   "variable_name": "MENU_ABOUT",
+   "variable_name": "MENU_HELP",
    "width": 19,
    "height": 8
  }
 */
 
-static const unsigned char MENU_ABOUT[] = {
+static const unsigned char MENU_HELP[] = {
 	/* width */ 19, /* height */ 8,
-	/* bitmap (0, 0) */ 255, 243, 245, 243, 247, 247, 247, 255,
-	/* bitmap (1, 0) */ 255, 27, 213, 189, 123, 127, 27, 255,
+	/* bitmap (0, 0) */ 255, 168, 171, 136, 171, 171, 168, 255,
+	/* bitmap (1, 0) */ 255, 185, 186, 185, 187, 187, 139, 255,
 	/* bitmap (2, 0) */ 224, 224, 224, 224, 224, 192, 128, 0
 };
 
@@ -171,9 +171,9 @@ static const unsigned char MENU_EDIT[] = {
 
 static const unsigned char MENU_CLEAR[] = {
 	/* width */ 19, /* height */ 8,
-	/* bitmap (0, 0) */ 255, 242, 238, 238, 238, 238, 242, 255,
-	/* bitmap (1, 0) */ 255, 231, 235, 231, 235, 235, 43, 255,
-	/* bitmap (2, 0) */ 224, 224, 224, 224, 224, 192, 128, 0
+	/* bitmap (0, 0) */ 255, 128, 134, 136, 136, 136, 136, 134,
+	/* bitmap (1, 0) */ 255, 0, 140, 138, 140, 138, 138, 234,
+	/* bitmap (2, 0) */ 224, 0, 0, 0, 0, 0, 0, 0
 };
 
 /* #BITMAP_END */
@@ -190,9 +190,9 @@ static const unsigned char MENU_CLEAR[] = {
 
 static const unsigned char MENU_BOX[] = {
 	/* width */ 19, /* height */ 8,
-	/* bitmap (0, 0) */ 255, 231, 234, 230, 234, 234, 231, 255,
-	/* bitmap (1, 0) */ 255, 107, 171, 183, 171, 171, 107, 255,
-	/* bitmap (2, 0) */ 224, 224, 224, 224, 224, 192, 128, 0
+	/* bitmap (0, 0) */ 255, 128, 140, 138, 140, 138, 138, 140,
+	/* bitmap (1, 0) */ 255, 0, 74, 170, 164, 170, 170, 74,
+	/* bitmap (2, 0) */ 224, 0, 0, 0, 0, 0, 0, 0
 };
 
 /* #BITMAP_END */
@@ -209,9 +209,47 @@ static const unsigned char MENU_BOX[] = {
 
 static const unsigned char MENU_HIDE[] = {
 	/* width */ 19, /* height */ 8,
-	/* bitmap (0, 0) */ 255, 168, 173, 141, 173, 173, 168, 255,
-	/* bitmap (1, 0) */ 255, 152, 171, 168, 171, 171, 152, 255,
-	/* bitmap (2, 0) */ 224, 224, 224, 224, 224, 192, 128, 0
+	/* bitmap (0, 0) */ 255, 128, 171, 169, 185, 169, 169, 171,
+	/* bitmap (1, 0) */ 255, 0, 179, 42, 43, 42, 42, 179,
+	/* bitmap (2, 0) */ 224, 0, 128, 0, 128, 0, 0, 128
+};
+
+/* #BITMAP_END */
+
+/* #BITMAP_START */
+
+/*
+ {
+   "variable_name": "MENU_RESET",
+   "width": 19,
+   "height": 8
+ }
+*/
+
+static const unsigned char MENU_RESET[] = {
+	/* width */ 19, /* height */ 8,
+	/* bitmap (0, 0) */ 255, 128, 140, 138, 140, 138, 138, 138,
+	/* bitmap (1, 0) */ 255, 0, 110, 132, 68, 36, 36, 196,
+	/* bitmap (2, 0) */ 224, 0, 0, 0, 0, 0, 0, 0
+};
+
+/* #BITMAP_END */
+
+/* #BITMAP_START */
+
+/*
+ {
+   "variable_name": "MENU_ANIMATION",
+   "width": 19,
+   "height": 8
+ }
+*/
+
+static const unsigned char MENU_ANIMATION[] = {
+	/* width */ 19, /* height */ 8,
+	/* bitmap (0, 0) */ 255, 128, 146, 170, 187, 170, 170, 170,
+	/* bitmap (1, 0) */ 255, 0, 84, 86, 85, 213, 84, 84,
+	/* bitmap (2, 0) */ 224, 0, 64, 192, 64, 64, 64, 64
 };
 
 /* #BITMAP_END */
