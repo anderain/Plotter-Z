@@ -69,13 +69,22 @@ struct CameraStruct {
     int         iZoomLevel;
 };
 
+#define CAM_INIT_XMIN   -6.0f
+#define CAM_INIT_XMAX   6.0f
+#define CAM_INIT_XGRID  12
+#define CAM_INIT_YMIN   -6.0f
+#define CAM_INIT_YMAX   6.0f
+#define CAM_INIT_YGRID  12
+#define CAM_INIT_ZMIN   -3.0f
+#define CAM_INIT_ZMAX   3.0f
+
 static struct CameraStruct Camera = {
     VRAM_WIDTH / 2, VRAM_HEIGHT / 2, VRAM_HEIGHT / 2,
     DEFAULT_VIEW_ALPHA, DEFAULT_VIEW_BETA,
     0, 0, 0, 0,
-    -6.0f, 6.0f, 12,
-    -6.0f, 6.0f, 12,
-    -3.0f, 3.0f,
+    CAM_INIT_XMIN, CAM_INIT_XMAX, CAM_INIT_XGRID,
+    CAM_INIT_YMIN, CAM_INIT_YMAX, CAM_INIT_YGRID,
+    CAM_INIT_ZMIN, CAM_INIT_ZMAX,
     ZOOM_LEVEL_DEFAULT
 };
 
@@ -1083,7 +1092,7 @@ void DrawWindowEditorStage(void) {
 
     /* Bottom Menu */
     {
-        static const uchar* pMenuBitmap[B_MENU_ITEM_NUM] = { MENU_BACK, 0, 0, MENU_EDIT, 0, MENU_OK };
+        static const uchar* pMenuBitmap[B_MENU_ITEM_NUM] = { MENU_BACK, 0, 0, MENU_EDIT, MENU_INIT, MENU_OK };
         int bMenuItemVisible[B_MENU_ITEM_NUM];
         int i;
         Bdisp_AreaClr_VRAM(&BoxMenuArea);
@@ -1144,6 +1153,17 @@ static void WinEdit_SaveCamera(void) {
     }
 }
 
+void WinEdit_ApplyDefault() {
+    Camera.xMin  = CAM_INIT_XMIN;
+    Camera.xMax  = CAM_INIT_XMAX;
+    Camera.xGrid  = CAM_INIT_XGRID;
+    Camera.yMin  = CAM_INIT_YMIN;
+    Camera.yMax  = CAM_INIT_YMAX;
+    Camera.yGrid  = CAM_INIT_YGRID;
+    Camera.zMin  = CAM_INIT_ZMIN;
+    Camera.zMax  = CAM_INIT_ZMAX;
+}
+
 void WindowEditorStage(void) {
     uint uKey;
 
@@ -1175,6 +1195,11 @@ void WindowEditorStage(void) {
                     g_szValueEditorBuf);
                 break;
             }
+
+            case KEY_CTRL_F5: {
+                WinEdit_ApplyDefault();
+                return;
+            };
 
             case KEY_CTRL_F6:
                 WinEdit_SaveCamera();
