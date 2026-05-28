@@ -37,7 +37,7 @@
 #   endif
 #endif
 
-#define PZ_FIXED_SHIFT     14
+#define PZ_FIXED_SHIFT     12
 #define PZ_FIXED_ONE       ((PZ_FIXED_LONG)(1 << PZ_FIXED_SHIFT))
 #define PZ_FIXED_HALF      ((PZ_FIXED_LONG)(1 << (PZ_FIXED_SHIFT - 1)))
 #define PZ_FIXED_NEG_ONE   (-PZ_FIXED_ONE)
