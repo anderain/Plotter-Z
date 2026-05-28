@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, onMounted, onUnmounted } from 'vue'
 import { Check, Expand, Pencil } from '@lucide/vue'
 import MenuBar from '../components/MenuBar.vue'
 import EditorCanvas from '../components/EditorCanvas.vue'
@@ -11,12 +11,14 @@ import {
   editingPixels,
   selectedBitmap,
   tool,
+  activeColor,
   canvasVersion,
   loadedFileName,
   errorMessage,
   selectBitmap,
   applyEdits,
   togglePixel,
+  floodFill,
   addBitmap,
   resizeBitmap,
   renameBitmap,
@@ -194,6 +196,24 @@ function handleBMPChange(e: Event) {
   reader.readAsArrayBuffer(file)
   input.value = ''
 }
+
+function handleCellClick(x: number, y: number) {
+  if (tool.value === 'pen') {
+    togglePixel(x, y)
+  } else {
+    floodFill(x, y)
+  }
+}
+
+function handleKeydown(e: KeyboardEvent) {
+  if (e.key === 'b' || e.key === 'B') {
+    if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return
+    activeColor.value = !activeColor.value
+  }
+}
+
+onMounted(() => window.addEventListener('keydown', handleKeydown))
+onUnmounted(() => window.removeEventListener('keydown', handleKeydown))
 </script>
 
 <template>
@@ -204,11 +224,13 @@ function handleBMPChange(e: Event) {
     <MenuBar
       :editing="editingPixels !== null"
       :tool="tool"
+      :active-color="activeColor"
       @load="handleLoad"
       @save="handleSave"
       @new-bitmap="handleNew"
       @import-b-m-p="handleImportBMP"
       @update:tool="tool = $event"
+      @update:active-color="activeColor = $event"
     />
 
     <main class="flex flex-1 min-h-0">
@@ -224,7 +246,7 @@ function handleBMPChange(e: Event) {
             <EditorCanvas
               :pixels="editingPixels"
               :canvas-version="canvasVersion"
-              @toggle-pixel="togglePixel"
+              @cell-click="handleCellClick"
             />
           </div>
           <div

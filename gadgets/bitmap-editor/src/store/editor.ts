@@ -8,7 +8,8 @@ export const cIdentifierRegex = /^[a-zA-Z_][a-zA-Z0-9_]*$/
 export const bitmaps = ref<Bitmap[]>([])
 export const selectedIndex = ref<number | null>(null)
 export const editingPixels = ref<boolean[][] | null>(null)
-export const tool = ref<'pen' | 'eraser'>('pen')
+export const tool = ref<'pen' | 'fill'>('pen')
+export const activeColor = ref(true)
 export const canvasVersion = ref(0)
 export const loadedFileName = ref<string | null>(null)
 export const errorMessage = ref<string | null>(null)
@@ -49,7 +50,37 @@ export function togglePixel(x: number, y: number) {
   if (!editingPixels.value) return
   if (y < 0 || y >= editingPixels.value.length) return
   if (x < 0 || x >= editingPixels.value[y].length) return
-  editingPixels.value[y][x] = tool.value === 'pen'
+  editingPixels.value[y][x] = activeColor.value
+  canvasVersion.value++
+}
+
+export function floodFill(x: number, y: number) {
+  if (!editingPixels.value) return
+  const pixels = editingPixels.value
+  const h = pixels.length
+  if (h === 0) return
+  const w = pixels[0].length
+  if (x < 0 || x >= w || y < 0 || y >= h) return
+
+  const target = pixels[y][x]
+  const fill = activeColor.value
+  if (target === fill) return
+
+  const stack: number[] = [y * w + x]
+
+  while (stack.length > 0) {
+    const idx = stack.pop()!
+    const px = idx % w
+    const py = (idx / w) | 0
+    if (pixels[py][px] !== target) continue
+    pixels[py][px] = fill
+
+    if (px + 1 < w && pixels[py][px + 1] === target) stack.push(py * w + (px + 1))
+    if (px - 1 >= 0 && pixels[py][px - 1] === target) stack.push(py * w + (px - 1))
+    if (py + 1 < h && pixels[py + 1][px] === target) stack.push((py + 1) * w + px)
+    if (py - 1 >= 0 && pixels[py - 1][px] === target) stack.push((py - 1) * w + px)
+  }
+
   canvasVersion.value++
 }
 

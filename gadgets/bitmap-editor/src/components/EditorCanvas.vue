@@ -7,7 +7,7 @@ const props = defineProps<{
 }>()
 
 const emit = defineEmits<{
-  togglePixel: [x: number, y: number]
+  cellClick: [x: number, y: number]
 }>()
 
 const canvasRef = ref<HTMLCanvasElement | null>(null)
@@ -73,7 +73,7 @@ function handleMouseDown(e: MouseEvent) {
   if (!pos) return
   isDrawing = true
   lastPixel = `${pos.x},${pos.y}`
-  emit('togglePixel', pos.x, pos.y)
+  emit('cellClick', pos.x, pos.y)
 }
 
 function handleMouseMove(e: MouseEvent) {
@@ -83,7 +83,7 @@ function handleMouseMove(e: MouseEvent) {
   const key = `${pos.x},${pos.y}`
   if (key === lastPixel) return
   lastPixel = key
-  emit('togglePixel', pos.x, pos.y)
+  emit('cellClick', pos.x, pos.y)
 }
 
 function handleMouseUp() {
