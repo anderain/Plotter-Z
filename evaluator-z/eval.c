@@ -148,7 +148,7 @@ void EzMachine_SetVariableByIndex(EzMachine* pVm, int iIndex, PZ_FLOAT fValue) {
 
 PZ_FLOAT EzMachine_GetVariableByIndex(EzMachine* pVm, int iIndex) {
     if (iIndex < 0 || iIndex >= pVm->iVariableLength) {
-        return;
+        return 0.0f;
     }
     return pVm->pVariableValueArray[iIndex];
 }
