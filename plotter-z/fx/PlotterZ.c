@@ -1390,7 +1390,7 @@ int MainStage(void) {
  *====================================================*/
 int AddIn_main(int isAppli, unsigned short OptionNum) {
     pVRAM = GetVRAMAddress();
-    HelpStage();
+
     /* Set up renderer-Z callback interfaces */
     g_RenderConfig.sInterfaces.setPixel = RzSetPixel;
     g_RenderConfig.sInterfaces.plotLine = Bdisp_DrawLineVRAM;
