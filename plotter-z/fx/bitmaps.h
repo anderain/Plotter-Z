@@ -159,4 +159,81 @@ static const unsigned char MENU_EDIT[] = {
 
 /* #BITMAP_END */
 
+/* #BITMAP_START */
+
+/*
+ {
+   "variable_name": "MENU_CLEAR",
+   "width": 19,
+   "height": 8
+ }
+*/
+
+static const unsigned char MENU_CLEAR[] = {
+	/* width */ 19, /* height */ 8,
+	/* bitmap (0, 0) */ 255, 242, 238, 238, 238, 238, 242, 255,
+	/* bitmap (1, 0) */ 255, 231, 235, 231, 235, 235, 43, 255,
+	/* bitmap (2, 0) */ 224, 224, 224, 224, 224, 192, 128, 0
+};
+
+/* #BITMAP_END */
+
+/* #BITMAP_START */
+
+/*
+ {
+   "variable_name": "MENU_BOX",
+   "width": 19,
+   "height": 8
+ }
+*/
+
+static const unsigned char MENU_BOX[] = {
+	/* width */ 19, /* height */ 8,
+	/* bitmap (0, 0) */ 255, 231, 234, 230, 234, 234, 231, 255,
+	/* bitmap (1, 0) */ 255, 107, 171, 183, 171, 171, 107, 255,
+	/* bitmap (2, 0) */ 224, 224, 224, 224, 224, 192, 128, 0
+};
+
+/* #BITMAP_END */
+
+/* #BITMAP_START */
+
+/*
+ {
+   "variable_name": "MENU_HIDE",
+   "width": 19,
+   "height": 8
+ }
+*/
+
+static const unsigned char MENU_HIDE[] = {
+	/* width */ 19, /* height */ 8,
+	/* bitmap (0, 0) */ 255, 168, 173, 141, 173, 173, 168, 255,
+	/* bitmap (1, 0) */ 255, 152, 171, 168, 171, 171, 152, 255,
+	/* bitmap (2, 0) */ 224, 224, 224, 224, 224, 192, 128, 0
+};
+
+/* #BITMAP_END */
+
+/* #BITMAP_START */
+
+/*
+ {
+   "variable_name": "ICON_16",
+   "width": 16,
+   "height": 16
+ }
+*/
+
+static const unsigned char ICON_16[] = {
+	/* width */ 16, /* height */ 16,
+	/* bitmap (0, 0) */ 7, 24, 96, 129, 70, 32, 16, 16,
+	/* bitmap (1, 0) */ 128, 64, 32, 144, 147, 143, 142, 156,
+	/* bitmap (0, 1) */ 9, 9, 9, 25, 60, 60, 30, 7,
+	/* bitmap (1, 1) */ 56, 116, 100, 130, 1, 6, 28, 248
+};
+
+/* #BITMAP_END */
+
 #endif /* _BITMAPS_ */
