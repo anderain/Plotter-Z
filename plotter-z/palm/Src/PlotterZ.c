@@ -39,7 +39,7 @@ static Int16 g_iFormulaY = 0;
  * Camera and surface data
  *====================================================*/
 #define GRID_MAX            25
-#define ZOOM_LEVEL_DEFAULT  3
+#define ZOOM_LEVEL_DEFAULT  6
 #define DEFAULT_VIEW_ALPHA  30
 #define DEFAULT_VIEW_BETA   30
 
@@ -56,11 +56,18 @@ struct CameraStruct {
 static const int arrZoomLevels[] = {
     PZ_FLOAT_TO_FIXED(0.33f),
     PZ_FLOAT_TO_FIXED(0.50f),
-    PZ_FLOAT_TO_FIXED(0.75f),
+    PZ_FLOAT_TO_FIXED(0.60f),
+    PZ_FLOAT_TO_FIXED(0.70f),
+    PZ_FLOAT_TO_FIXED(0.80f),
+    PZ_FLOAT_TO_FIXED(0.90f),
     (int)PZ_FIXED_ONE,
+    PZ_FLOAT_TO_FIXED(1.25f),
     PZ_FLOAT_TO_FIXED(1.50f),
-    (int)PZ_FIXED_ONE * 2
+    (int)PZ_FIXED_ONE * 2,
+	(int)PZ_FIXED_ONE * 4,
+	(int)PZ_FIXED_ONE * 6
 };
+
 static const int iNumZoomLevel = sizeof(arrZoomLevels) / sizeof(arrZoomLevels[0]);
 
 static struct CameraStruct Camera = {
@@ -87,7 +94,7 @@ static Int16 g_iSurfaceDragThreshold = 12;   /* ticks (120 ms at 100 ticks/s) */
 static Int16 g_iFormulaDragThreshold = 6;   /* ticks (60 ms at 100 ticks/s) */
 static UInt32 g_dwLastDrawUpdate = 0;
 
-#define DRAW_ZOOM_THRESHOLD 15
+#define DRAW_ZOOM_THRESHOLD 8
 
 #define CURRENT_FONT_WIDTH  6
 #define CURRENT_FONT_HEIGHT 8
