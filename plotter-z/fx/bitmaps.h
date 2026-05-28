@@ -258,6 +258,64 @@ static const unsigned char MENU_ANIMATION[] = {
 
 /*
  {
+   "variable_name": "MENU_PLAY",
+   "width": 19,
+   "height": 8
+ }
+*/
+
+static const unsigned char MENU_PLAY[] = {
+	/* width */ 19, /* height */ 8,
+	/* bitmap (0, 0) */ 255, 128, 178, 170, 178, 162, 162, 163,
+	/* bitmap (1, 0) */ 255, 0, 18, 42, 57, 41, 41, 169,
+	/* bitmap (2, 0) */ 224, 0, 128, 128, 0, 0, 0, 0
+};
+
+/* #BITMAP_END */
+
+/* #BITMAP_START */
+
+/*
+ {
+   "variable_name": "MENU_INIT",
+   "width": 19,
+   "height": 8
+ }
+*/
+
+static const unsigned char MENU_INIT[] = {
+	/* width */ 19, /* height */ 8,
+	/* bitmap (0, 0) */ 255, 139, 217, 218, 219, 219, 139, 255,
+	/* bitmap (1, 0) */ 255, 68, 110, 110, 110, 110, 70, 255,
+	/* bitmap (2, 0) */ 224, 96, 224, 224, 224, 192, 128, 0
+};
+
+/* #BITMAP_END */
+
+/* #BITMAP_START */
+
+/*
+ {
+   "variable_name": "MENU_STOP",
+   "width": 29,
+   "height": 8
+ }
+*/
+
+static const unsigned char MENU_STOP[] = {
+	/* width */ 29, /* height */ 8,
+	/* bitmap (0, 0) */ 255, 128, 145, 170, 186, 170, 170, 169,
+	/* bitmap (1, 0) */ 255, 0, 131, 52, 50, 1, 49, 182,
+	/* bitmap (2, 0) */ 255, 0, 114, 37, 37, 37, 37, 34,
+	/* bitmap (3, 0) */ 248, 0, 96, 80, 96, 64, 64, 64
+};
+
+/* #BITMAP_END */
+
+/* #BITMAP_START */
+
+/*
+ {
    "variable_name": "ICON_16",
    "width": 16,
    "height": 16

@@ -4,6 +4,7 @@
 #include <string.h>
 #include <math.h>
 #include "bitmaps.h"
+#include "keycode.h"
 #include "../utils/hybird_6x8.h"
 #include "../utils/samples.h"
 #include "../../formula-z/fz.h"
@@ -738,6 +739,7 @@ static void redrawCanvas(void) {
  *====================================================*/
 int g_bGraphMenuVisible = 1;
 int g_bDrawBox = 0;
+int g_bPlaying = 0;
 
 void DrawGraphStage(void) {
     Bdisp_AllClr_VRAM();
@@ -775,11 +777,24 @@ void DrawGraphStage(void) {
     }
     /* Canvas */
     redrawCanvas();
+    /* Busy Indicator*/
+    if (g_bPlaying) {
+        int i, j, s = 4;
+        for (i = 0; i < s; ++i) {
+            for (j = 0; j < s; ++j) {
+                RzSetPixel(VRAM_WIDTH - 1 - i, j);
+            }
+        }
+    }
     /* Bottom Menu */
     if (g_bGraphMenuVisible) {
-        static const uchar* pMenuBitmap[B_MENU_ITEM_NUM] = { MENU_BACK, 0, MENU_ANIMATION, MENU_RESET, MENU_BOX, MENU_HIDE };
+        const uchar* pMenuBitmap[B_MENU_ITEM_NUM] = { MENU_BACK, MENU_PLAY, MENU_ANIMATION, MENU_RESET, MENU_BOX, MENU_HIDE };
         int i;
         Bdisp_AreaClr_VRAM(&BoxMenuArea);
+        if (g_bPlaying) {
+            pMenuBitmap[0] = MENU_STOP;
+            pMenuBitmap[1] = 0;
+        }
         for (i = 0; i < B_MENU_ITEM_NUM; ++i) {
             if (pMenuBitmap[i]) {
                 DrawBitmap(B_MENU_LEFT + B_MENU_ITEM_WIDTH * i, B_MENU_TOP, pMenuBitmap[i]);
@@ -788,88 +803,133 @@ void DrawGraphStage(void) {
     }
 }
 
+void GraphStageHandleKey(uint uKey) {
+    switch (uKey) {
+        case KEY_CTRL_F2:
+            g_bPlaying = 1;
+            break;
+
+        case KEY_CTRL_F3:
+            if (!g_bPlaying) {
+                EzMachine_SetVariableByIndex(g_pVm, VM_VAR_T_INDEX, VM_VAR_T_STEP + EzMachine_GetVariableByIndex(g_pVm, VM_VAR_T_INDEX));
+                RecalcSurface(RecalcInitTopRight, RecalcRedrawTopRight);
+            }
+            break;
+
+        case KEY_CTRL_F4:
+            Camera.iAlphaDeg = DEFAULT_VIEW_ALPHA;
+            Camera.iBetaDeg = DEFAULT_VIEW_BETA;
+            Camera.iZoomLevel = ZOOM_LEVEL_DEFAULT;
+            Camera.iViewportX = VRAM_WIDTH / 2;
+            Camera.iViewportY = VRAM_HEIGHT / 2;
+            break;
+
+        case KEY_CTRL_F5:
+            g_bDrawBox = !g_bDrawBox;
+            break;
+
+        case KEY_CTRL_F6:
+            g_bGraphMenuVisible = !g_bGraphMenuVisible;
+            break;
+
+        case KEY_CHAR_PLUS:
+            if (Camera.iZoomLevel < iNumZoomLevel - 1)
+                Camera.iZoomLevel++;
+            break;
+
+        case KEY_CHAR_MINUS:
+            if (Camera.iZoomLevel > 0)
+                Camera.iZoomLevel--;
+            break;
+
+        case KEY_CHAR_2:
+            Camera.iViewportY += 10;
+            break;
+
+        case KEY_CHAR_8:
+            Camera.iViewportY -= 10;
+            break;
+
+        case KEY_CHAR_4:
+            Camera.iViewportX -= 10;
+            break;
+
+        case KEY_CHAR_6:
+            Camera.iViewportX += 10;
+            break;
+
+        case KEY_CTRL_UP:
+            Camera.iAlphaDeg -= 5;
+            break;
+
+        case KEY_CTRL_DOWN:
+            Camera.iAlphaDeg += 5;
+            break;
+
+        case KEY_CTRL_LEFT:
+            Camera.iBetaDeg -= 5;
+            break;
+
+        case KEY_CTRL_RIGHT:
+            Camera.iBetaDeg += 5;
+            break;
+        default:
+            return;
+    }
+    /* Normalize angles */
+    Camera.iBetaDeg  = Camera.iBetaDeg % 360;
+    if (Camera.iBetaDeg < 0) Camera.iBetaDeg += 360;
+    Camera.iAlphaDeg = Camera.iAlphaDeg % 360;
+    if (Camera.iAlphaDeg < 0) Camera.iAlphaDeg += 360;
+}
+
 int GraphStage(void) {
     uint uKey;
-
+    g_bPlaying = 0;
     while (1) {
         DrawGraphStage();
+        if (g_bPlaying) {
+            int iCode1, iCode2, iUnused;
+            /* EXIT or AC pressed */
+            if (Bkey_GetKeyWait(&iCode1, &iCode2, KEYWAIT_HALTOFF_TIMEROFF, 0, 1, &iUnused) == KEYREP_KEYEVENT) {
+                int nKey = KEYCODE_COMBINE(iCode1, iCode2);
+                switch(nKey) {
+                    case NKEY_AC:
+                    case NKEY_EXIT:
+                        g_bPlaying = 0;
+                        continue;
+                    case NKEY_F2: GraphStageHandleKey(KEY_CTRL_F2); break;
+                    case NKEY_F3: GraphStageHandleKey(KEY_CTRL_F3); break;
+                    case NKEY_F4: GraphStageHandleKey(KEY_CTRL_F4); break;
+                    case NKEY_F5: GraphStageHandleKey(KEY_CTRL_F5); break;
+                    case NKEY_F6: GraphStageHandleKey(KEY_CTRL_F6); break;
+                    case NKEY_PLUS: GraphStageHandleKey(KEY_CHAR_PLUS); break;
+                    case NKEY_MINUS: GraphStageHandleKey(KEY_CHAR_MINUS); break;
+                    case NKEY_2: GraphStageHandleKey(KEY_CHAR_2); break;
+                    case NKEY_8: GraphStageHandleKey(KEY_CHAR_8); break;
+                    case NKEY_4: GraphStageHandleKey(KEY_CHAR_4); break;
+                    case NKEY_6: GraphStageHandleKey(KEY_CHAR_6); break;
+                    case NKEY_UP: GraphStageHandleKey(KEY_CTRL_UP); break;
+                    case NKEY_DOWN: GraphStageHandleKey(KEY_CTRL_DOWN); break;
+                    case NKEY_LEFT: GraphStageHandleKey(KEY_CTRL_LEFT); break;
+                    case NKEY_RIGHT: GraphStageHandleKey(KEY_CTRL_RIGHT); break;
+                    default: break;
+                }
+            }
+            Bdisp_PutDisp_DD();
+            EzMachine_SetVariableByIndex(g_pVm, VM_VAR_T_INDEX, VM_VAR_T_STEP + EzMachine_GetVariableByIndex(g_pVm, VM_VAR_T_INDEX));
+            RecalcSurface(NULL, NULL);
+            continue;
+        }
         GetKey(&uKey);
         switch (uKey) {
             case KEY_CTRL_F1:
             case KEY_CTRL_EXIT:
                 return 0;
-
-            case KEY_CTRL_F3:
-                EzMachine_SetVariableByIndex(g_pVm, VM_VAR_T_INDEX, VM_VAR_T_STEP + EzMachine_GetVariableByIndex(g_pVm, VM_VAR_T_INDEX));
-                RecalcSurface(RecalcInitTopRight, RecalcRedrawTopRight);
-                break;
-
-            case KEY_CTRL_F4:
-                Camera.iAlphaDeg = DEFAULT_VIEW_ALPHA;
-                Camera.iBetaDeg = DEFAULT_VIEW_BETA;
-                Camera.iZoomLevel = ZOOM_LEVEL_DEFAULT;
-                Camera.iViewportX = VRAM_WIDTH / 2;
-                Camera.iViewportY = VRAM_HEIGHT / 2;
-                break;
-            
-            case KEY_CTRL_F5:
-                g_bDrawBox = !g_bDrawBox;
-                break;
-
-            case KEY_CTRL_F6:
-                g_bGraphMenuVisible = !g_bGraphMenuVisible;
-                break;
-
-            case KEY_CHAR_PLUS:
-                if (Camera.iZoomLevel < iNumZoomLevel - 1)
-                    Camera.iZoomLevel++;
-                break;
-
-            case KEY_CHAR_MINUS:
-                if (Camera.iZoomLevel > 0)
-                    Camera.iZoomLevel--;
-                break;
-
-            case KEY_CHAR_2:
-                Camera.iViewportY += 10;
-                break;
-
-            case KEY_CHAR_8:
-                Camera.iViewportY -= 10;
-                break;
-
-            case KEY_CHAR_4:
-                Camera.iViewportX -= 10;
-                break;
-
-            case KEY_CHAR_6:
-                Camera.iViewportX += 10;
-                break;
-
-            case KEY_CTRL_UP:
-                Camera.iAlphaDeg -= 5;
-                break;
-
-            case KEY_CTRL_DOWN:
-                Camera.iAlphaDeg += 5;
-                break;
-
-            case KEY_CTRL_LEFT:
-                Camera.iBetaDeg -= 5;
-                break;
-
-            case KEY_CTRL_RIGHT:
-                Camera.iBetaDeg += 5;
-                break;
-
             default:
+                GraphStageHandleKey(uKey);
                 break;
         }
-        /* Normalize angles */
-        Camera.iBetaDeg  = Camera.iBetaDeg % 360;
-        if (Camera.iBetaDeg < 0) Camera.iBetaDeg += 360;
-        Camera.iAlphaDeg = Camera.iAlphaDeg % 360;
-        if (Camera.iAlphaDeg < 0) Camera.iAlphaDeg += 360;
     }
 }
 
