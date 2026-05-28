@@ -14,6 +14,9 @@ Install the `.prc` file via HotSync and run it.
 
 > **Note:** MathLib is required. Download and install it from [palmdb.net/app/mathlib](https://palmdb.net/app/mathlib) before running Plotter-Z.
 
+### On CASIO fx-9860G Series
+Connect the calculator to your PC via USB and use **FA-124** to transfer the `.g1a` file, or copy it directly through Windows Explorer, or via an SD card to the calculator's storage.
+
 ## Supported Functions
 The following mathematical functions can be used in expressions:
 
@@ -55,6 +58,35 @@ You can also toggle a footer status bar (`View` > `Toggle Footer`) showing the c
      - **Bottom-left** — toggle the bounding box (`b`/`B`).
      - **Bottom-right** — reset camera angles, viewport, and zoom level.
   2. Drag on the canvas to interact (rotate / pan / zoom depending on the current mode).
+
+### CASIO fx-9860G Series
+
+- **Main Screen:**
+
+  | Key | Action |
+  |-----|--------|
+  | **F1** | Edit expression |
+  | **F2** | Window Editor (set X/Y/Z ranges and grid) |
+  | **F3** | Browse sample expressions |
+  | **F4** | Help screen |
+  | **F6** | Enter Graph Screen (recalc and plot) |
+  | **Arrow keys** | Move formula position |
+
+- **Graph Screen:**
+
+  | Key | Action |
+  |-----|--------|
+  | **F1** | Return to Main Screen |
+  | **F3** | Animate: increment variable `t` by 1 and recalculate |
+  | **F4** | Reset Camera |
+  | **F5** | Toggle bounding box |
+  | **F6** | Toggle bottom menu |
+  | **Arrow keys** | Rotate camera |
+  | **2 / 4 / 6 / 8** | Pan (translate viewport) |
+  | **+ / -** | Zoom in / out |
+
+- **Animation:**
+  Insert the variable `t` into your expression to create animated surfaces. Each time you press **F3** in the Graph Screen, `t` increments by 1 and the surface is recalculated, creating a frame-by-frame animation effect.
 
 ### Troubleshooting on Windows CE
 If the program fails with `FAILED: DIB SECTION`, some devices (tested on CASIO E-100 and iPAQ H3600) have trouble creating a 16-bit DIB section.
