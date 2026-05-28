@@ -146,6 +146,13 @@ void EzMachine_SetVariableByIndex(EzMachine* pVm, int iIndex, PZ_FLOAT fValue) {
     pVm->pVariableValueArray[iIndex] = fValue;
 }
 
+PZ_FLOAT EzMachine_GetVariableByIndex(EzMachine* pVm, int iIndex) {
+    if (iIndex < 0 || iIndex >= pVm->iVariableLength) {
+        return;
+    }
+    return pVm->pVariableValueArray[iIndex];
+}
+
 #define evalPush(fValue)    (pVm->pStack[pVm->iStackSize++] = (fValue))
 #define evalPop()           (pVm->pStack[--pVm->iStackSize])
 #define handleSingleParamFunc(funcName) { fArg = evalPop(); evalPush((PZ_FLOAT)funcName(fArg)); } return
