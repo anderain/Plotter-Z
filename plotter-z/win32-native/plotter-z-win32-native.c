@@ -88,24 +88,49 @@ static int g_iBarHeight      = 0;
 #define DEFAULT_EXPR "sin(sqr(x^2+y^2))*cos(sqr(x^2+y^2))"
 char szExpr[EXPR_MAX] = DEFAULT_EXPR;
 
-const int arrZoomLevels[] = {
+static const int iZoomLevels[] = {
     PZ_FLOAT_TO_FIXED(0.20f),
+    PZ_FLOAT_TO_FIXED(0.30f),
     PZ_FLOAT_TO_FIXED(0.40f),
+    PZ_FLOAT_TO_FIXED(0.50f),
     PZ_FLOAT_TO_FIXED(0.60f),
+    PZ_FLOAT_TO_FIXED(0.70f),
     PZ_FLOAT_TO_FIXED(0.80f),
+    PZ_FLOAT_TO_FIXED(0.90f),
     (int)PZ_FIXED_ONE,
-    PZ_FLOAT_TO_FIXED(1.20f),
-    PZ_FLOAT_TO_FIXED(1.60f),
+    PZ_FLOAT_TO_FIXED(1.25f),
+    PZ_FLOAT_TO_FIXED(1.5f),
     (int)PZ_FIXED_ONE * 2,
-    PZ_FLOAT_TO_FIXED(2.5f),
+    (int)PZ_FIXED_ONE * 3,
     (int)PZ_FIXED_ONE * 4,
+    (int)PZ_FIXED_ONE * 6,
     (int)PZ_FIXED_ONE * 8,
 };
-const int iNumZoomLevel = sizeof(arrZoomLevels) / sizeof(arrZoomLevels[0]);
+
+static const char* szZoomLevelText[] = {
+    "20%",
+    "30%",
+    "40%",
+    "50%",
+    "60%",
+    "70%",
+    "80%",
+    "90%",
+    "100%",
+    "125%",
+    "150%",
+    "200%",
+    "300%",
+    "400%",
+    "600%",
+    "800%"
+};
+
+const int iNumZoomLevel = sizeof(iZoomLevels) / sizeof(iZoomLevels[0]);
 
 #define DEFAULT_VIEW_ALPHA  30
 #define DEFAULT_VIEW_BETA   30
-#define ZOOM_LEVEL_DEFAULT  4
+#define ZOOM_LEVEL_DEFAULT  8
 #define GRID_MAX            30
 
 struct CameraStruct {
@@ -582,7 +607,7 @@ static void rzPutChar(int x, int y, unsigned char ch) {
  * 3D projection (fixed-point)
  *====================================================*/
 static void xyz2xy(PZ_FIXED x, PZ_FIXED y, PZ_FIXED z, int *ox, int *oy) {
-    int iZoom = arrZoomLevels[Camera.iZoomLevel];
+    int iZoom = iZoomLevels[Camera.iZoomLevel];
     int iScale = (int)(((int)Camera.iViewportS * iZoom + PZ_FIXED_HALF) >> PZ_FIXED_SHIFT);
     int nx, ny;
     nx = PZ_FIXED_MUL(y, Camera.sinB) - PZ_FIXED_MUL(x, Camera.cosB);
@@ -681,7 +706,6 @@ static void redrawCanvas(HWND hWnd) {
 
     /* Footer bar */
     if (g_bShowFooter) {
-        int iZoomPct;
         char szBuf[64];
         BOOL bIsWideCanvas = g_iCanvasW >= 240;
 
@@ -738,12 +762,11 @@ static void redrawCanvas(HWND hWnd) {
         }
 
         /* Right: zoom%, (viewportX, viewportY) */
-        iZoomPct = (int)(PZ_FIXED_TO_FLOAT(arrZoomLevels[Camera.iZoomLevel]) * 100.0f);
         if (bIsWideCanvas) {
-            Salvia_Format(szBuf, "%d%%(%d,%d)", iZoomPct, Camera.iViewportX, Camera.iViewportY);
+            Salvia_Format(szBuf, "%s(%d,%d)", szZoomLevelText[Camera.iZoomLevel], Camera.iViewportX, Camera.iViewportY);
         }
         else {
-            Salvia_Format(szBuf, "%d%%", iZoomPct);
+            Salvia_Format(szBuf, "%s", szZoomLevelText[Camera.iZoomLevel]);
         }
         iLen = (int)strlen(szBuf) * CURRENT_FONT_WIDTH;
         putTextCanvas(g_iCanvasW - iLen - 2, iStartY + 2,
