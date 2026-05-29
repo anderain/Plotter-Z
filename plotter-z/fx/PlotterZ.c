@@ -746,9 +746,13 @@ static void redrawCanvas(void) {
 /*====================================================
  * Graph Stage
  *====================================================*/
+
+#define KEY_REPEAT_INTERVAL_TICKS 64 /* = 500ms */
+
 int g_bGraphMenuVisible = 1;
 int g_bDrawBox = 0;
 int g_bPlaying = 0;
+int g_iPlayKeyTicks = 0;
 
 void DrawGraphStage(void) {
     Bdisp_AllClr_VRAM();
@@ -811,6 +815,7 @@ void GraphStageHandleKey(uint uKey) {
     switch (uKey) {
         case KEY_CTRL_F2:
             g_bPlaying = 1;
+            g_iPlayKeyTicks = RTC_GetTicks();
             break;
 
         case KEY_CTRL_F3:
@@ -897,11 +902,17 @@ int GraphStage(void) {
             /* EXIT or AC pressed */
             if (Bkey_GetKeyWait(&iCode1, &iCode2, KEYWAIT_HALTOFF_TIMEROFF, 0, 1, &iUnused) == KEYREP_KEYEVENT) {
                 int nKey = KEYCODE_COMBINE(iCode1, iCode2);
+                /* Stop */
+                if (nKey == NKEY_AC || nKey == NKEY_EXIT) {
+                    g_bPlaying = 0;
+                    continue;
+                }
+                /* Check key repeat */
+                if (RTC_GetTicks() - g_iPlayKeyTicks < KEY_REPEAT_INTERVAL_TICKS) {
+                    continue;
+                }
+                g_iPlayKeyTicks = RTC_GetTicks();
                 switch(nKey) {
-                    case NKEY_AC:
-                    case NKEY_EXIT:
-                        g_bPlaying = 0;
-                        continue;
                     case NKEY_F2: GraphStageHandleKey(KEY_CTRL_F2); break;
                     case NKEY_F3: GraphStageHandleKey(KEY_CTRL_F3); break;
                     case NKEY_F4: GraphStageHandleKey(KEY_CTRL_F4); break;
