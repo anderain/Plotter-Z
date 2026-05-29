@@ -788,12 +788,7 @@ void DrawGraphStage(void) {
     redrawCanvas();
     /* Busy Indicator*/
     if (g_bPlaying) {
-        int i, j, s = 4;
-        for (i = 0; i < s; ++i) {
-            for (j = 0; j < s; ++j) {
-                RzSetPixel(VRAM_WIDTH - 1 - i, j);
-            }
-        }
+        DrawBitmap(VRAM_WIDTH - 8, 0, SPRITE_BUSY);
     }
     /* Bottom Menu */
     if (g_bGraphMenuVisible) {

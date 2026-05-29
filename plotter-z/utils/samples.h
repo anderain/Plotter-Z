@@ -1,6 +1,12 @@
 #ifndef _PZ_SAMPLES_
 #define _PZ_SAMPLES_
 
+#if defined(_SH3) || defined(_SH4)
+#   ifndef PLATFORM_FX9860
+#       define PLATFORM_FX9860
+#   endif
+#endif
+
 typedef struct tagPzSample {
     float xMin;
     float xMax;
@@ -28,6 +34,9 @@ typedef struct tagPzSample {
 */
 
 static const PzSample PlotterZSamples[] = {
+#ifdef PLATFORM_FX9860
+    { /* x range */ -6.0f, 6.0f, /* y range */ -6.0f, 6.0f, /* z range */ -6.0f, 6.0f, /* expr */ "sin(x+t/5)+cos(y+t/5)" },
+#endif
     { /* x range */ -3.0f, 3.0f, /* y range */ -3.0f, 3.0f, /* z range */ -7.5f, 8.5f, /* expr */ "3*(1-x)^2*exp(-x^2-(y+1)^2)-10*(x/5-x^3-y^5)*exp(-x^2-y^2)-exp(-(x+1)^2-y^2)/3" },
     { /* x range */ -4.0f, 4.0f, /* y range */ -4.0f, 4.0f, /* z range */ -0.0f, 15.0f, /* expr */ "-20*exp(-1/5*sqr(1/2*(x^2+y^2)))-exp(1/2*(cos(2*pi*x)+cos(2*pi*y)))+exp(1)+20" },
     { /* x range */ -5.0f, 5.0f, /* y range */ -5.0f, 5.0f, /* z range */ -1.0f, 1.0f, /* expr */ "exp(-abs(2*x/3))*cos(sqr(x^2+y^2))" },

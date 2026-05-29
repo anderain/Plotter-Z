@@ -297,17 +297,35 @@ static const unsigned char MENU_INIT[] = {
 /*
  {
    "variable_name": "MENU_STOP",
-   "width": 29,
+   "width": 40,
    "height": 8
  }
 */
 
 static const unsigned char MENU_STOP[] = {
-	/* width */ 29, /* height */ 8,
-	/* bitmap (0, 0) */ 255, 128, 145, 170, 186, 170, 170, 169,
-	/* bitmap (1, 0) */ 255, 0, 131, 52, 50, 1, 49, 182,
-	/* bitmap (2, 0) */ 255, 0, 114, 37, 37, 37, 37, 34,
-	/* bitmap (3, 0) */ 248, 0, 96, 80, 96, 64, 64, 64
+	/* width */ 40, /* height */ 8,
+	/* bitmap (0, 0) */ 255, 227, 221, 186, 182, 174, 221, 227,
+	/* bitmap (1, 0) */ 255, 128, 136, 149, 157, 149, 149, 148,
+	/* bitmap (2, 0) */ 255, 0, 193, 26, 25, 0, 24, 219,
+	/* bitmap (3, 0) */ 255, 0, 185, 18, 18, 146, 146, 17,
+	/* bitmap (4, 0) */ 255, 0, 48, 168, 176, 160, 160, 32
+};
+
+/* #BITMAP_END */
+
+/* #BITMAP_START */
+
+/*
+ {
+   "variable_name": "SPRITE_BUSY",
+   "width": 8,
+   "height": 8
+ }
+*/
+
+static const unsigned char SPRITE_BUSY[] = {
+	/* width */ 8, /* height */ 8,
+	/* bitmap (0, 0) */ 15, 15, 15, 15, 0, 0, 0, 0
 };
 
 /* #BITMAP_END */
