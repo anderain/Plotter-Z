@@ -173,8 +173,19 @@ static void transform(RenderNode* pParentHorz, const FzAstNode* pAstNode) {
                 transform(pParentHorz, pAstNode->uData.sBinaryOperator.pAstRightOperand);
             }
             else {
-                RenderNode* pTextOperator = createRenderNode(RN_TEXT);
-                pTextOperator->uData.sText.szText = Utils_StringDump(FzOperator_GetSymbolById(iOprId));
+                RenderNode* pTextOperator;
+                if (iOprId == OPR_GTEQ) {
+                    pTextOperator = createRenderNode(RN_SPECIAL_CHAR);
+                    pTextOperator->uData.sSpecialChar.c = PZ_AE_GEQ;
+                }
+                else if (iOprId == OPR_LTEQ) {
+                    pTextOperator = createRenderNode(RN_SPECIAL_CHAR);
+                    pTextOperator->uData.sSpecialChar.c = PZ_AE_LEQ;
+                }
+                else {
+                    pTextOperator = createRenderNode(RN_TEXT);
+                    pTextOperator->uData.sText.szText = Utils_StringDump(FzOperator_GetSymbolById(iOprId));
+                }
                 transform(pParentHorz, pAstNode->uData.sBinaryOperator.pAstLeftOperand);
                 vlPushBack(pParentHorz->uData.sHorizontal.pList, pTextOperator);
                 transform(pParentHorz, pAstNode->uData.sBinaryOperator.pAstRightOperand);
