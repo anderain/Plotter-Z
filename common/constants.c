@@ -16,11 +16,22 @@ const static PzFuncMeta FunctionMetadata[] = {
     { "ln",     1,  PZF_LN      }
 };
 
-const PzFuncMeta* Constant_GetFunctionMetadata(const char* szFuncName) {
+const PzFuncMeta* Constant_GetFunctionMetadataByName(const char* szFuncName) {
     static const int iSize = sizeof(FunctionMetadata) / sizeof(FunctionMetadata[0]);
     int i;
     for (i = 0; i < iSize; ++i) {
         if (Utils_IsStringEqual(szFuncName, FunctionMetadata[i].szName)) {
+            return FunctionMetadata + i;
+        }
+    }
+    return (void *)0;
+}
+
+const PzFuncMeta* Constant_GetFunctionMetadataByView(const StringView* pStrView) {
+    static const int iSize = sizeof(FunctionMetadata) / sizeof(FunctionMetadata[0]);
+    int i;
+    for (i = 0; i < iSize; ++i) {
+        if (Utils_StringViewEqual(pStrView, FunctionMetadata[i].szName)) {
             return FunctionMetadata + i;
         }
     }

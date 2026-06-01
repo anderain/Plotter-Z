@@ -1,7 +1,7 @@
 #include <stdlib.h>
 #include "fz.h"
 
-#define tokenIs(szString)           (Utils_IsStringEqual((szString), pToken->szContent))
+#define tokenIs(szString)           (Utils_StringViewEqual(&pToken->svContent, (szString)))
 #define tokenTypeIs(iTokenType)     (pToken->iType == (iTokenType))
 
 const struct {
@@ -26,11 +26,11 @@ const struct {
     { "<=", OPR_LTEQ        }
 };
 
-static FzOperatorId getOperatorId(const char* szOperator) {
+static FzOperatorId getOperatorId(const StringView* pStrViewOpr) {
     static const int iSize = sizeof(BinaryOperatorSzIdMap) / sizeof(BinaryOperatorSzIdMap[0]);
     int i;
     for (i = 0; i < iSize; ++i) {
-        if (Utils_IsStringEqual(BinaryOperatorSzIdMap[i].szOperator, szOperator)) {
+        if (Utils_StringViewEqual(pStrViewOpr, BinaryOperatorSzIdMap[i].szOperator)) {
             return BinaryOperatorSzIdMap[i].iOperatorId;
         }
     }
@@ -98,11 +98,17 @@ static FzAstNode* createAst(AstNodeType iAstType, FzAstNode* pAstParent) {
         case AST_PAREN:
             pAstNode->uData.sParen.pAstExpr = NULL;
             break;
+        case AST_VARIABLE:
+            /* pAstNode->uData.sVariable.szName = NULL; */
+            Utils_StringViewCopy(&pAstNode->uData.sVariable.svName, NULL);
+            break;
         case AST_LITERAL_NUMERIC:
-            pAstNode->uData.sLiteralNumeric.szNumber = NULL;
+            /* pAstNode->uData.sLiteralNumeric.szNumber = NULL; */
+            Utils_StringViewCopy(&pAstNode->uData.sLiteralNumeric.svNumber, NULL);
             break;
         case AST_FUNCTION_CALL:
-            pAstNode->uData.sFunctionCall.szFunction = NULL;
+            /* pAstNode->uData.sFunctionCall.szFunction = NULL; */
+            Utils_StringViewCopy(&pAstNode->uData.sFunctionCall.svFunction, NULL);
             pAstNode->uData.sFunctionCall.pListArguments = vlNewList();
             break;
     }
@@ -136,14 +142,11 @@ void FzAstNode_Destroy(FzAstNode* pAstNode) {
         case AST_PAREN:
             FzAstNode_Destroy(pAstNode->uData.sParen.pAstExpr);
             break;
-        case AST_LITERAL_NUMERIC:
-            checkNullAndFreeString(pAstNode->uData.sLiteralNumeric.szNumber);
-            break;
         case AST_VARIABLE:
-            checkNullAndFreeString(pAstNode->uData.sVariable.szName);
+            break;
+        case AST_LITERAL_NUMERIC:
             break;
         case AST_FUNCTION_CALL:
-            checkNullAndFreeString(pAstNode->uData.sFunctionCall.szFunction);
             vlDestroy(pAstNode->uData.sFunctionCall.pListArguments, destroyAstVoidPtr);
             break;
     }
@@ -256,7 +259,7 @@ static void buildExprAstTryOperator(FzLineAnalyzer* pAnalyzer, Vlist* pStackOper
     if (tokenTypeIs(TOKEN_OPERATOR)) {
         /* Create operator node */
         FzAstNode*      pAstOpr = createAst(AST_BINARY_OPERATOR, NULL);
-        FzOperatorId    iOprId  = getOperatorId(pToken->szContent);
+        FzOperatorId    iOprId  = getOperatorId(&pToken->svContent);
         int             iCurrentPrecedence = FzOperator_GetPrecedenceById(iOprId);
 
         pAstOpr->uData.sBinaryOperator.iOperatorId = iOprId;
@@ -301,7 +304,7 @@ static void buildExprAstTryOperand(FzLineAnalyzer *pAnalyzer, Vlist* pStackOpera
     /* Literal: number */
     if (tokenTypeIs(TOKEN_NUMERIC)) {
         FzAstNode *pAstLiteral = createAst(AST_LITERAL_NUMERIC, NULL);
-        pAstLiteral->uData.sLiteralNumeric.szNumber = Utils_StringDump(pToken->szContent);
+        Utils_StringViewCopy(&pAstLiteral->uData.sLiteralNumeric.svNumber, &pToken->svContent);
         /* Push directly onto operand stack */
         vlPushBack(pStackOperand, pAstLiteral);
         /* Check if the next token is an operator */
@@ -321,13 +324,14 @@ static void buildExprAstTryOperand(FzLineAnalyzer *pAnalyzer, Vlist* pStackOpera
     }
     /* Identifier */
     else if (tokenTypeIs(TOKEN_IDENTIFIER)) {
-        char* szIdentifier = Utils_StringDump(pToken->szContent);
+        StringView svIdentifier;
+        Utils_StringViewCopy(&svIdentifier, &pToken->svContent);
         FzAnalyzer_NextToken(pAnalyzer);
         /* Function call */
         if (tokenTypeIs(TOKEN_PAREN_L)) {
             /* Create function call node and push onto operator stack */
             FzAstNode* pAstFuncCall = createAst(AST_FUNCTION_CALL, NULL);
-            pAstFuncCall->uData.sFunctionCall.szFunction = szIdentifier;
+            Utils_StringViewCopy(&pAstFuncCall->uData.sFunctionCall.svFunction, &svIdentifier);
             vlPushBack(pStackOperator, pAstFuncCall);
             
             FzAnalyzer_NextToken(pAnalyzer);
@@ -368,7 +372,7 @@ static void buildExprAstTryOperand(FzLineAnalyzer *pAnalyzer, Vlist* pStackOpera
         /* Variable */
         else {
             FzAstNode *pAstVar = createAst(AST_VARIABLE, NULL);
-            pAstVar->uData.sVariable.szName = szIdentifier;
+            Utils_StringViewCopy(&pAstVar->uData.sVariable.svName, &svIdentifier);
             /* Push directly onto operand stack */
             vlPushBack(pStackOperand, pAstVar);
             /* Rewind to previous token */

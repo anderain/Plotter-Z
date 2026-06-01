@@ -175,7 +175,7 @@ static void transform(RenderNode* pParentHorz, FzAstNode* pAstNode) {
         }
         case AST_LITERAL_NUMERIC: {
             RenderNode* pText = createRenderNode(RN_TEXT);
-            pText->uData.sText.szText = Utils_StringDump(pAstNode->uData.sLiteralNumeric.szNumber);
+            pText->uData.sText.szText = Utils_StringViewDump(&pAstNode->uData.sLiteralNumeric.svNumber);
             vlPushBack(pParentHorz->uData.sHorizontal.pList, pText);
             break;
         }
@@ -183,7 +183,7 @@ static void transform(RenderNode* pParentHorz, FzAstNode* pAstNode) {
             unsigned char ucSpecialChar = 0;
             int i;
             for (i = 0; SpecialCharMapping[i].szToken != NULL; ++i) {
-                if (Utils_IsStringEqual(pAstNode->uData.sVariable.szName, SpecialCharMapping[i].szToken)) {
+                if (Utils_StringViewEqual(&pAstNode->uData.sVariable.svName, SpecialCharMapping[i].szToken)) {
                     ucSpecialChar = SpecialCharMapping[i].ucSpecial;
                 }
             }
@@ -194,15 +194,15 @@ static void transform(RenderNode* pParentHorz, FzAstNode* pAstNode) {
             }
             else {
                 RenderNode* pText = createRenderNode(RN_TEXT);
-                pText->uData.sText.szText = Utils_StringDump(pAstNode->uData.sVariable.szName);
+                pText->uData.sText.szText = Utils_StringViewDump(&pAstNode->uData.sVariable.svName);
                 vlPushBack(pParentHorz->uData.sHorizontal.pList, pText);
             }
             break;
         }
         case AST_FUNCTION_CALL: {
-            const char* szFuncName = pAstNode->uData.sFunctionCall.szFunction;
+            const StringView* psvFuncName = &pAstNode->uData.sFunctionCall.svFunction;
             int iNumArg = pAstNode->uData.sFunctionCall.pListArguments->iSize;
-            if (Utils_IsStringEqual(szFuncName, "sqr") && iNumArg == 1) {
+            if (Utils_StringViewEqual(psvFuncName, "sqr") && iNumArg == 1) {
                 RenderNode* pRoot = createRenderNode(RN_ROOT);
                 RenderNode* pChildHorz = createRenderNode(RN_HORIZONTAL);
                 FzAstNode* pAstContent = (FzAstNode *)pAstNode->uData.sFunctionCall.pListArguments->pHead->pData;
@@ -212,7 +212,7 @@ static void transform(RenderNode* pParentHorz, FzAstNode* pAstNode) {
 
                 vlPushBack(pParentHorz->uData.sHorizontal.pList, pRoot);
             }
-            else if (Utils_IsStringEqual(szFuncName, "exp") && iNumArg == 1) {
+            else if (Utils_StringViewEqual(psvFuncName, "exp") && iNumArg == 1) {
                 RenderNode* pSuperscriptNode = createRenderNode(RN_SUPERSCRIPT);
                 RenderNode* pBody = createRenderNode(RN_SPECIAL_CHAR);
                 RenderNode* pScript = createRenderNode(RN_HORIZONTAL);
@@ -226,7 +226,7 @@ static void transform(RenderNode* pParentHorz, FzAstNode* pAstNode) {
 
                 vlPushBack(pParentHorz->uData.sHorizontal.pList, pSuperscriptNode);
             }
-            else if (Utils_IsStringEqual(szFuncName, "abs") && iNumArg == 1) {
+            else if (Utils_StringViewEqual(psvFuncName, "abs") && iNumArg == 1) {
                 RenderNode* pEnclosureNode = createRenderNode(RN_ENCLOSURE);
                 RenderNode* pChildHorz = createRenderNode(RN_HORIZONTAL);
                 FzAstNode* pAstContent = (FzAstNode *)pAstNode->uData.sFunctionCall.pListArguments->pHead->pData;
@@ -243,7 +243,7 @@ static void transform(RenderNode* pParentHorz, FzAstNode* pAstNode) {
                 RenderNode* pEnclosureNode = createRenderNode(RN_ENCLOSURE);
                 RenderNode* pChildHorz = createRenderNode(RN_HORIZONTAL);
 
-                pFuncName->uData.sText.szText = Utils_StringDump(pAstNode->uData.sFunctionCall.szFunction);
+                pFuncName->uData.sText.szText = Utils_StringViewDump(&pAstNode->uData.sFunctionCall.svFunction);
                 vlPushBack(pParentHorz->uData.sHorizontal.pList, pFuncName);
 
                 pEnclosureNode->uData.sEnclosure.pContent = pChildHorz;

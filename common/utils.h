@@ -13,6 +13,21 @@
 #   define FALSE 0
 #endif
 
+
+/* String View */
+
+typedef struct tagStringView {
+    const char* pBegin;
+    int iLen;
+} StringView;
+
+int     Utils_StringViewCompareString       (const StringView* pStrView, const char* sz);
+void    Utils_StringViewCopy                (StringView* pDest, const StringView* pSource);
+void    Utils_StringViewCopyToBuffer        (char* pBuf, int iBufSize, const StringView* pSource);
+char*   Utils_StringViewDump                (const StringView* pSource);
+
+#define Utils_StringViewEqual(psv, str) (Utils_StringViewCompareString((psv), (str)) == 0)
+
 /*
  * PZ_FLOAT = float
  */

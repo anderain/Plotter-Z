@@ -22,7 +22,8 @@ typedef struct {
     PzFuncIndex iIndex;
 } PzFuncMeta;
 
-const PzFuncMeta* Constant_GetFunctionMetadata(const char* szFuncName);
-const PzFuncMeta* Constant_GetFunctionMetadataByIndex(PzFuncIndex iIndex);
+const PzFuncMeta* Constant_GetFunctionMetadataByName    (const char* szFuncName);
+const PzFuncMeta* Constant_GetFunctionMetadataByView    (const StringView* pStrView);
+const PzFuncMeta* Constant_GetFunctionMetadataByIndex   (PzFuncIndex iIndex);
 
 #endif

@@ -53,9 +53,7 @@ typedef enum tagFzTokenType {
 
 typedef struct tagFzToken {
     FzTokenType iType;
-    int         iSourceStart;
-    int         iSourceLength;
-    char        szContent[FZ_TOKEN_LENGTH_MAX];
+    StringView svContent;
 } FzToken;
 
 typedef struct tagFzLineAnalyzer {
@@ -97,13 +95,13 @@ typedef struct tagFzAstNode {
             struct tagFzAstNode* pAstRightOperand;
         } sBinaryOperator;
         struct {
-            char* szNumber;
+            StringView svNumber;
         } sLiteralNumeric;
         struct {
-            char *szName;
+            StringView svName;
         } sVariable;
         struct {
-            char* szFunction;
+            StringView svFunction;
             Vlist* pListArguments; /* <AstNode> */
         } sFunctionCall;
     } uData;

@@ -2,6 +2,54 @@
 #include <string.h>
 #include "utils.h"
 
+int Utils_StringViewCompareString(const StringView* pStrView, const char* sz) {
+    const char* p1 = (pStrView && pStrView->pBegin) ? pStrView->pBegin : "";
+    int len = (pStrView && pStrView->iLen > 0) ? pStrView->iLen : 0;
+    const char* p2 = sz ? sz : "";
+
+    int i = 0;
+    while (i < len && p2[i] != '\0') {
+        if (p1[i] != p2[i]) {
+            return (int)p1[i] - (int)p2[i];
+        }
+        ++i;
+    }
+
+    if (i == len && p2[i] == '\0') {
+        return 0; 
+    } else if (i == len) {
+        return -(int)p2[i];
+    } else {
+        return (int)p1[i];
+    }
+}
+
+void Utils_StringViewCopy(StringView* pDest, const StringView* pSource) {
+    if (pSource == NULL) {
+        pDest->pBegin = NULL;
+        pDest->iLen = 0;
+    } else {
+        /* memcpy(pDest, sizeof(StringView), pSource); */
+        pDest->pBegin = pSource->pBegin;
+        pDest->iLen = pSource->iLen;
+    }
+}
+
+void Utils_StringViewCopyToBuffer(char* pBuf, int iBufSize, const StringView* pSource) {
+    int i;
+    for (i = 0; i < iBufSize - 1 && i < pSource->iLen; ++i) {
+        pBuf[i] = pSource->pBegin[i];
+    }
+    pBuf[i] = '\0';
+}
+
+char* Utils_StringViewDump(const StringView* pSource) {
+    int iSize = pSource->iLen + 1;
+    char* pBuf = (char *)malloc(iSize);
+    Utils_StringViewCopyToBuffer(pBuf, iSize, pSource);
+    return pBuf;
+}
+
 int Utils_StringCopy(char *dest, int max, const char *src) {
     int i;
     for (i = 0; i < max - 1 && src[i]; ++i) {

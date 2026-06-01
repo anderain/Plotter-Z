@@ -40,8 +40,8 @@ static EzError estimateAndCheck(EzMachine* pVm, const FzAstNode* pAstNode, Estim
             break;
         case AST_VARIABLE:
             /* Check if variable exist */
-            if (EzMachine_GetVariableIndexByName(pVm, pAstNode->uData.sVariable.szName) < 0) {
-                Utils_StringCopy(szErrorContent, EZ_ERROR_CONTENT_LENGTH, pAstNode->uData.sVariable.szName);
+            if (EzMachine_GetVariableIndexByView(pVm, &pAstNode->uData.sVariable.svName) < 0) {
+                Utils_StringViewCopyToBuffer(szErrorContent, EZ_ERROR_CONTENT_LENGTH, &pAstNode->uData.sVariable.svName);
                 return EZERR_VARIABLE_UNDEFINED;
             }
             estimateAddInstruction(pCtx);
@@ -73,15 +73,15 @@ static EzError estimateAndCheck(EzMachine* pVm, const FzAstNode* pAstNode, Estim
             const PzFuncMeta* pFuncMeta;
             int i;
             /* Check if function exist */
-            pFuncMeta = Constant_GetFunctionMetadata(pAstNode->uData.sFunctionCall.szFunction);
+            pFuncMeta = Constant_GetFunctionMetadataByView(&pAstNode->uData.sFunctionCall.svFunction);
             if (pFuncMeta == NULL) {
-                Utils_StringCopy(szErrorContent, EZ_ERROR_CONTENT_LENGTH, pAstNode->uData.sFunctionCall.szFunction);
+                Utils_StringViewCopyToBuffer(szErrorContent, EZ_ERROR_CONTENT_LENGTH, &pAstNode->uData.sFunctionCall.svFunction);
                 return EZERR_FUNCTION_UNDEFINED;
             }
 
             /* Check if the number of parameters is correct */
             if (pFuncMeta->iNumArguments != pAstNode->uData.sFunctionCall.pListArguments->iSize) {
-                Utils_StringCopy(szErrorContent, EZ_ERROR_CONTENT_LENGTH, pAstNode->uData.sFunctionCall.szFunction);
+                Utils_StringViewCopyToBuffer(szErrorContent, EZ_ERROR_CONTENT_LENGTH, &pAstNode->uData.sFunctionCall.svFunction);
                 return EZERR_FUNCTION_PARAM_MISMATCH;
             }
 
@@ -169,11 +169,14 @@ static void compile(EzMachine* pVm, const FzAstNode* pAstNode) {
         default:
         case AST_EMPTY:
             break;
-        case AST_LITERAL_NUMERIC:
-            addInstructionPushImmediate(pVm, (PZ_FLOAT)Utils_Atof(pAstNode->uData.sLiteralNumeric.szNumber));
+        case AST_LITERAL_NUMERIC: {
+            char szBuf[50];
+            Utils_StringViewCopyToBuffer(szBuf, sizeof(szBuf), &pAstNode->uData.sLiteralNumeric.svNumber);
+            addInstructionPushImmediate(pVm, (PZ_FLOAT)Utils_Atof(szBuf));
             break;
+        }
         case AST_VARIABLE:
-            addInstructionPushVariable(pVm, EzMachine_GetVariableIndexByName(pVm, pAstNode->uData.sVariable.szName));
+            addInstructionPushVariable(pVm, EzMachine_GetVariableIndexByView(pVm, &pAstNode->uData.sVariable.svName));
             break;
         case AST_UNARY_OPERATOR:
             compile(pVm, pAstNode->uData.sUnaryOperator.pAstOperand);
@@ -189,7 +192,7 @@ static void compile(EzMachine* pVm, const FzAstNode* pAstNode) {
             break;
         case AST_FUNCTION_CALL: {
             VlistNode* pListNode;
-            const PzFuncMeta* pFuncMeta = Constant_GetFunctionMetadata(pAstNode->uData.sFunctionCall.szFunction);
+            const PzFuncMeta* pFuncMeta = Constant_GetFunctionMetadataByView(&pAstNode->uData.sFunctionCall.svFunction);
             for (
                 pListNode = pAstNode->uData.sFunctionCall.pListArguments->pHead;
                 pListNode != NULL;

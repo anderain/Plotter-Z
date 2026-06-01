@@ -139,6 +139,22 @@ int EzMachine_GetVariableIndexByName(EzMachine* pVm, const char* szVarName) {
     return -1;
 }
 
+int EzMachine_GetVariableIndexByView(EzMachine* pVm, const StringView* pStrView) {
+    VlistNode*  pNode = NULL;
+    int         i = 0;
+    for (
+        pNode = pVm->pListVariableName->pHead;
+        pNode != NULL;
+        pNode = pNode->pNext, i++
+    ) {
+        const char* szVarInVm = (const char *)pNode->pData;
+        if (Utils_StringViewEqual(pStrView, szVarInVm)) {
+            return i;
+        }
+    }
+    return -1;
+}
+
 void EzMachine_SetVariableByIndex(EzMachine* pVm, int iIndex, PZ_FLOAT fValue) {
     if (iIndex < 0 || iIndex >= pVm->iVariableLength) {
         return;

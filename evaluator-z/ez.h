@@ -96,6 +96,7 @@ void                EzMachine_Destroy               (EzMachine* pVm);
 BOOL                EzMachine_DeclareVariable       (EzMachine* pVm, const char* szVarName);
 void                EzMachine_AllocateVariables     (EzMachine* pVm);
 int                 EzMachine_GetVariableIndexByName(EzMachine* pVm, const char* szVarName);
+int                 EzMachine_GetVariableIndexByView(EzMachine* pVm, const StringView* pStrView);
 void                EzMachine_SetVariableByIndex    (EzMachine* pVm, int iIndex, PZ_FLOAT fValue);
 PZ_FLOAT            EzMachine_GetVariableByIndex    (EzMachine* pVm, int iIndex);
 PZ_FLOAT            EzMachine_Eval                  (EzMachine* pVm);

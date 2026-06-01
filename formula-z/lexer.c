@@ -1,25 +1,16 @@
 #include <stdlib.h>
+#include <stdio.h>
 #include "fz.h"
 
-static void assignToken(FzLineAnalyzer* pAnalyzer, FzTokenType iType, const char *szContent, const char *pSourceStart) {
+static void assignToken(FzLineAnalyzer* pAnalyzer, FzTokenType iType, const char* pSourceBegin, int iLength) {
     FzToken* pToken = &pAnalyzer->token;
     pToken->iType = iType;
-
-    /* This is the processed token content. Since escape characters, quotation marks, */
-    /* left parentheses, etc. may have been consumed, the original length is recorded. */
-    Utils_StringCopy(pToken->szContent, sizeof(pToken->szContent), szContent);
-
-    /* The starting index of the token in this line */
-    pToken->iSourceStart = pSourceStart - pAnalyzer->szLine;
-
-    /* The original length of the token in this line. */
-    pToken->iSourceLength = pAnalyzer->pCurrent - pSourceStart;
+    pToken->svContent.pBegin = pSourceBegin;
+    pToken->svContent.iLen = iLength;
 }
 
 void FzAnalyzer_NextToken(FzLineAnalyzer *pAnalyzer) {
-    char        firstChar, secondChar;
-    char        szBuffer[FZ_TOKEN_LENGTH_MAX * 2];
-    char*       pBuffer = szBuffer;
+    char        chFirst, chSecond;
     const char* pSourceStart;
 
     while (isSpace(*pAnalyzer->pCurrent)) {
@@ -28,156 +19,119 @@ void FzAnalyzer_NextToken(FzLineAnalyzer *pAnalyzer) {
 
     pSourceStart = pAnalyzer->pCurrent;
 
-    firstChar = *pAnalyzer->pCurrent;
+    chFirst = *pAnalyzer->pCurrent;
 
     /* Operators */
-    switch (firstChar) {
+    switch (chFirst) {
     case '+':   case '-':   case '*':   case '/':   case '^':
     case '%':   case '=':   case '!':   case '\\':
-        szBuffer[0] = firstChar;
-        szBuffer[1] = '\0';
         pAnalyzer->pCurrent++;
-        assignToken(pAnalyzer, TOKEN_OPERATOR, szBuffer, pSourceStart);
+        assignToken(pAnalyzer, TOKEN_OPERATOR, pSourceStart, 1);
         return;
     case '(':
-        szBuffer[0] = firstChar;
-        szBuffer[1] = '\0';
         pAnalyzer->pCurrent++;
-        assignToken(pAnalyzer, TOKEN_PAREN_L, szBuffer, pSourceStart);
+        assignToken(pAnalyzer, TOKEN_PAREN_L, pSourceStart, 1);
         return;
     case ')':
-        szBuffer[0] = firstChar;
-        szBuffer[1] = '\0';
         pAnalyzer->pCurrent++;
-        assignToken(pAnalyzer, TOKEN_PAREN_R, szBuffer, pSourceStart);
+        assignToken(pAnalyzer, TOKEN_PAREN_R, pSourceStart, 1);
         return;
     case ',':
-        szBuffer[0] = firstChar;
-        szBuffer[1] = '\0';
         pAnalyzer->pCurrent++;
-        assignToken(pAnalyzer, TOKEN_COMMA, szBuffer, pSourceStart);
+        assignToken(pAnalyzer, TOKEN_COMMA, pSourceStart, 1);
         return;
     case '>':
-        secondChar = *(pAnalyzer->pCurrent + 1);
-        if (secondChar == '=') {
-            szBuffer[0] = firstChar;
-            szBuffer[1] = secondChar;
-            szBuffer[2] = '\0';
+        chSecond = *(pAnalyzer->pCurrent + 1);
+        if (chSecond == '=') {
             pAnalyzer->pCurrent += 2;
-            assignToken(pAnalyzer, TOKEN_OPERATOR, szBuffer, pSourceStart);
+            assignToken(pAnalyzer, TOKEN_OPERATOR, pSourceStart, 2);
             return;
         } else {
-            szBuffer[0] = firstChar;
-            szBuffer[1] = '\0';
             pAnalyzer->pCurrent++;
-            assignToken(pAnalyzer, TOKEN_OPERATOR, szBuffer, pSourceStart);
+            assignToken(pAnalyzer, TOKEN_OPERATOR, pSourceStart, 1);
             return;
         }
     case '<':
-        secondChar = *(pAnalyzer->pCurrent + 1);
-        if (secondChar == '=') {
-            szBuffer[0] = firstChar;
-            szBuffer[1] = secondChar;
-            szBuffer[2] = '\0';
+        chSecond = *(pAnalyzer->pCurrent + 1);
+        if (chSecond == '=') {
             pAnalyzer->pCurrent += 2;
-            assignToken(pAnalyzer, TOKEN_OPERATOR, szBuffer, pSourceStart);
+            assignToken(pAnalyzer, TOKEN_OPERATOR, pSourceStart, 2);
             return;
-        } else if (secondChar == '>') {
-            szBuffer[0] = firstChar;
-            szBuffer[1] = secondChar;
-            szBuffer[2] = '\0';
+        } else if (chSecond == '>') {
             pAnalyzer->pCurrent += 2;
-            assignToken(pAnalyzer, TOKEN_OPERATOR, szBuffer, pSourceStart);
+            assignToken(pAnalyzer, TOKEN_OPERATOR, pSourceStart, 2);
             return;
         } else {
-            szBuffer[0] = firstChar;
-            szBuffer[1] = '\0';
             pAnalyzer->pCurrent++;
-            assignToken(pAnalyzer, TOKEN_OPERATOR, szBuffer, pSourceStart);
+            assignToken(pAnalyzer, TOKEN_OPERATOR, pSourceStart, 1);
             return;
         }
     case '&':
-        secondChar = *(pAnalyzer->pCurrent + 1);
-        if (secondChar == '&') {
-            szBuffer[0] = firstChar;
-            szBuffer[1] = secondChar;
-            szBuffer[2] = '\0';
+        chSecond = *(pAnalyzer->pCurrent + 1);
+        if (chSecond == '&') {
             pAnalyzer->pCurrent += 2;
-            assignToken(pAnalyzer, TOKEN_OPERATOR, szBuffer, pSourceStart);
+            assignToken(pAnalyzer, TOKEN_OPERATOR, pSourceStart, 2);
             return;
         } else {
-            szBuffer[0] = firstChar;
-            szBuffer[1] = '\0';
             pAnalyzer->pCurrent++;
-            assignToken(pAnalyzer, TOKEN_OPERATOR, szBuffer, pSourceStart);
+            assignToken(pAnalyzer, TOKEN_OPERATOR, pSourceStart, 1);
             return;
         }
     case '|':
-        secondChar = *(pAnalyzer->pCurrent + 1);
-        if (secondChar == '|') {
-            szBuffer[0] = firstChar;
-            szBuffer[1] = secondChar;
-            szBuffer[2] = '\0';
+        chSecond = *(pAnalyzer->pCurrent + 1);
+        if (chSecond == '|') {
             pAnalyzer->pCurrent += 2;
-            assignToken(pAnalyzer, TOKEN_OPERATOR, szBuffer, pSourceStart);
+            assignToken(pAnalyzer, TOKEN_OPERATOR, pSourceStart, 2);
             return;
         } else {
-            szBuffer[0] = firstChar;
-            szBuffer[1] = '\0';
             pAnalyzer->pCurrent++;
-            assignToken(pAnalyzer, TOKEN_UNDEFINED, szBuffer, pSourceStart);
+            assignToken(pAnalyzer, TOKEN_UNDEFINED, pSourceStart, 1);
             return;
         }
     }
 
     /* Line end */
-    if (firstChar == '\0') {
-        assignToken(pAnalyzer, TOKEN_LINE_END, "", pSourceStart);
+    if (chFirst == '\0') {
+        assignToken(pAnalyzer, TOKEN_LINE_END, pSourceStart, 0);
         return;
     }
     
     /* Numeric */
-    if (isDigit(firstChar)) {
+    if (isDigit(chFirst)) {
         while (isDigit(*pAnalyzer->pCurrent)) {
-            *pBuffer++ = *pAnalyzer->pCurrent++;
+            pAnalyzer->pCurrent++;
         }
         /* Check if it contains decimals. */
         if (*pAnalyzer->pCurrent == '.') {
-            /* Preserve decimal point */
-            *pBuffer++ = *pAnalyzer->pCurrent++;
+            /* Decimal point */
+            pAnalyzer->pCurrent++;
             /* Continue writing numbers */
             while (isDigit(*pAnalyzer->pCurrent)) {
-                *pBuffer++ = *pAnalyzer->pCurrent++;
+                pAnalyzer->pCurrent++;
             }
         }
 
-        *pBuffer = '\0';
-
-        assignToken(pAnalyzer, TOKEN_NUMERIC, szBuffer, pSourceStart);
+        assignToken(pAnalyzer, TOKEN_NUMERIC, pSourceStart, pAnalyzer->pCurrent - pSourceStart);
         return;
     }
     /* Identifier */
-    else if (isAlpha(firstChar)) {
+    else if (isAlpha(chFirst)) {
         while (isAlphaNum(*pAnalyzer->pCurrent)) {
-            *pBuffer++ = *pAnalyzer->pCurrent++;
+            pAnalyzer->pCurrent++;
         }
-        *pBuffer = '\0';
-
-        assignToken(pAnalyzer, TOKEN_IDENTIFIER, szBuffer, pSourceStart);
+        assignToken(pAnalyzer, TOKEN_IDENTIFIER, pSourceStart, pAnalyzer->pCurrent - pSourceStart);
         return;
     }
     /* Undefined character */
     else {
         pAnalyzer->pCurrent++;
-        szBuffer[0] = firstChar;
-        szBuffer[1] = '\0';
-        assignToken(pAnalyzer, TOKEN_UNDEFINED, szBuffer, pSourceStart);
+        assignToken(pAnalyzer, TOKEN_UNDEFINED, pSourceStart, 1);
         return;
     }
 }
 
 void FzAnalyzer_RewindToken(FzLineAnalyzer* pAnalyzer) {
-    pAnalyzer->pCurrent -= pAnalyzer->token.iSourceLength;
+    pAnalyzer->pCurrent -= pAnalyzer->token.svContent.iLen;
 }
 
 void FzAnalyzer_ResetToken(FzLineAnalyzer* pAnalyzer) {

@@ -19,7 +19,9 @@ static void printNewline(void) {
     }
 }
 
-void printAstNode(int iLevel, const FzAstNode* pAstNode) {
+static void printAstNode(int iLevel, const FzAstNode* pAstNode) {
+    char szBuf[50];
+
     if (pAstNode == NULL) {
         printIndent(iLevel);
         printf("<Null />");
@@ -64,26 +66,29 @@ void printAstNode(int iLevel, const FzAstNode* pAstNode) {
             break;
         case AST_LITERAL_NUMERIC:
             printIndent(iLevel);
+            Utils_StringViewCopyToBuffer(szBuf, sizeof(szBuf), &pAstNode->uData.sLiteralNumeric.svNumber);
             if (g_bPretty) {
-                printf("<Literal> %s </Literal>", pAstNode->uData.sLiteralNumeric.szNumber);
+                printf("<Literal> %s </Literal>", szBuf);
             } else {
-                printf("<Literal>%s</Literal>", pAstNode->uData.sLiteralNumeric.szNumber);
+                printf("<Literal>%s</Literal>", szBuf);
             }
             printNewline();
             break;
         case AST_VARIABLE:
             printIndent(iLevel);
+            Utils_StringViewCopyToBuffer(szBuf, sizeof(szBuf), &pAstNode->uData.sVariable.svName);
             if (g_bPretty) {
-                printf("<Variable> %s </Variable>", pAstNode->uData.sVariable.szName);
+                printf("<Variable> %s </Variable>", szBuf);
             } else {
-                printf("<Variable>%s</Variable>", pAstNode->uData.sVariable.szName);
+                printf("<Variable>%s</Variable>", szBuf);
             }
             printNewline();
             break;
         case AST_FUNCTION_CALL: {
             VlistNode* pListNode;
             printIndent(iLevel);
-            printf("<Function name=\"%s\">", pAstNode->uData.sFunctionCall.szFunction);
+            Utils_StringViewCopyToBuffer(szBuf, sizeof(szBuf), &pAstNode->uData.sFunctionCall.svFunction);
+            printf("<Function name=\"%s\">", szBuf);
             printNewline();
             for (pListNode = pAstNode->uData.sFunctionCall.pListArguments->pHead; pListNode; pListNode = pListNode->pNext) {
                 const FzAstNode* pAstParam = (FzAstNode *)pListNode->pData;
