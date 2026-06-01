@@ -1363,6 +1363,7 @@ void HelpStage() {
         static const char* szGuide[] = {
             "Arrow: Rotate   +/-: Zoom",
             "Num 2/4/6/8: Pan Move",
+            "F2: Continuous animation effect",
             "F3: Animation via variable",
             "F4: Reset camera",
             "F5: Toggle boundary box",
@@ -1371,11 +1372,11 @@ void HelpStage() {
         static const int iNum = sizeof(szGuide) / sizeof(szGuide[0]);
         int i, iY;
         Bdisp_AllClr_VRAM();
-        DrawBitmap(18, 4, ICON_16);
-        PutText(40, 6, (const uchar *)"Plotter-Z");
-        PrintMini(40, 16, (const uchar *)"By Kuki Himekawa", 0);
-        for (iY = 24, i = 0; i < iNum; ++i, iY += 6) {
-            PrintMini(4, iY, (const uchar *)szGuide[i], 0);
+        DrawBitmap(18, 2, ICON_16);
+        PutText(40, 2, (const uchar *)"Plotter-Z");
+        PrintMini(40, 12, (const uchar *)"By Kuki Himekawa", 0);
+        for (iY = 20, i = 0; i < iNum; ++i, iY += 6) {
+            PrintMini(2, iY, (const uchar *)szGuide[i], 0);
         }
     }
     while (1) {
