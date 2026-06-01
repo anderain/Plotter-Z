@@ -1090,7 +1090,7 @@ static Err AppStart(void) {
 
 	/* Set up renderer-Z config */
 	RenderConfig_GetDefaultStyle(&g_RenderConfig);
-	RenderConfig_CalculateBigSymbolPoints(&g_pRenderNode);
+	RenderConfig_CalculateBigSymbolPoints(&g_RenderConfig);
 	g_RenderConfig.sInterfaces.setPixel = rzSetPixel;
 	g_RenderConfig.sInterfaces.plotLine = rzPlotLine;
 	g_RenderConfig.sInterfaces.putChar  = rzPutChar;
