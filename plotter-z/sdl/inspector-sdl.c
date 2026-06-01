@@ -61,7 +61,6 @@ int             g_iMousePrevX = 0;
 int             g_iMousePrevY = 0;
 
 FzAstNode*      pAstExpr = NULL;
-EzMachine*      pVm;
 RenderNode*     pRenderNode;
 RenderConfig    config;
 
@@ -271,8 +270,8 @@ static void redraw(void) {
     /* Render expression */
     if (pAstExpr != NULL && pRenderNode != NULL){
         const int iMargin = 4;
-        int iStartX = 2;
-        int iStartY = 2;
+        int iStartX = 0;
+        int iStartY = 0;
         int iNodeWidth = pRenderNode->sLayout.iWidth;
         int iNodeHeight = pRenderNode->sLayout.iAscent + pRenderNode->sLayout.iDescent;
         int iBaseline;
@@ -281,57 +280,13 @@ static void redraw(void) {
         int i;
         VlistNode* pListNode;
 
-        putText(iStartX, iStartY, (const unsigned char *)"Expression:", uSolidColor);
-
-        iStartY += CURRENT_FONT_HEIGHT + iMargin;
         iBaseline = iStartY + pRenderNode->sLayout.iAscent;
 
         RenderNode_Draw(pRenderNode, &config, iStartX, iBaseline);
-
-        /* Render VM instructions */
-        iVmInfoStartY = iStartY + iNodeHeight + iMargin * 2;
-        iStartY = iVmInfoStartY;
-        putText(iStartX, iStartY, (const unsigned char *)"EzMachine Instructions:", uSolidColor);
-        iStartY += CURRENT_FONT_HEIGHT + iMargin;
-
-        for (i = 0; i < pVm->iInstructionLength; ++i, iStartY += CURRENT_FONT_HEIGHT) {
-            EzInstruction* pInst = pVm->pInstructions + i;
-            switch(pInst->iOpCode) {
-                case EZOP_PUSH_IMD: {
-                    sprintf(szBuf, "%3d \x18 %-10s", i, EzOpCode_GetName(pInst->iOpCode));
-                    Utils_Ftoa(pInst->uData.fImmediate, strchr(szBuf, '\0'), DEFAULT_FTOA_PRECISION);
-                    break;
-                }
-                case EZOP_PUSH_VAR:
-                    sprintf(szBuf, "%3d \x18 %-10s%d", i, EzOpCode_GetName(pInst->iOpCode), pInst->uData.iVarIndex);
-                    break;
-                case EZOP_FUNC: {
-                    const PzFuncMeta* pFuncMeta = Constant_GetFunctionMetadataByIndex(pInst->uData.iFuncIndex);
-                    sprintf(szBuf, "%3d \x18 %-10s%s", i, EzOpCode_GetName(pInst->iOpCode), pFuncMeta->szName);
-                    break;
-                }
-                default:
-                    sprintf(szBuf, "%3d \x18 %-10s", i, EzOpCode_GetName(pInst->iOpCode));
-                    break;
-            }
-            putText(iStartX, iStartY, (const unsigned char *)szBuf, uSolidColor);
-        }
-    
-        /* Render VM instructions */
-        iStartY = iVmInfoStartY;
-        iStartX = 160;
-        putText(iStartX, iStartY, (const unsigned char *)"Predefined variables:", uSolidColor);
-        iStartY += CURRENT_FONT_HEIGHT + iMargin;
-        for (
-            i = 0, pListNode = pVm->pListVariableName->pHead;
-            pListNode != NULL;
-            pListNode = pListNode->pNext, iStartY += CURRENT_FONT_HEIGHT, ++i
-        ) {
-            sprintf(szBuf, "%02d \x18 %s", i, (const char *)pListNode->pData);
-            putText(iStartX, iStartY, (const unsigned char *)szBuf, uSolidColor);
-        }
     }
-
+    else {
+        putText(0, 0, (const unsigned char *)"ERROR", uSolidColor);
+    }
 
     SDL_FillRect(sfScreen, NULL, uBgColor);
     scaleBlit(sfCanvas, sfScreen, iScale, bLcd, uLcdDarken, iBlitOffX, iBlitOffY);
@@ -379,10 +334,11 @@ int main(int argc, char* argv[]) {
     bFullscreen = cfg.bFullscreen;
 
     /* Initialize renderer interface */
+    RenderConfig_GetDefaultStyle(&config);
+    RenderConfig_CalculateBigSymbolPoints(&config);
     config.sInterfaces.setPixel = setPixel;
     config.sInterfaces.plotLine = plotLine;
     config.sInterfaces.putChar = putChar;
-    RenderConfig_GetDefaultStyle(&config);
 
     /* Parse expression */
     if (cfg.szExpr != NULL) {
@@ -391,31 +347,7 @@ int main(int argc, char* argv[]) {
             g_bError = 1;
         } else {
             pRenderNode = Render_Transform(pAstExpr);
-            RenderNode_EstimateSize(pRenderNode, &config);
-            /* Compile expression to VM */
-            pVm = EzMachine_Create();
-            EzMachine_DeclareVariable(pVm, "x");
-            EzMachine_DeclareVariable(pVm, "y");
-            EzMachine_DeclareVariable(pVm, "pi");
-            EzMachine_DeclareVariable(pVm, "const_i");
-            EzMachine_DeclareVariable(pVm, "inf");
-            EzMachine_DeclareVariable(pVm, "dots");
-            EzMachine_DeclareVariable(pVm, "alpha");
-            EzMachine_DeclareVariable(pVm, "beta");
-            EzMachine_DeclareVariable(pVm, "theta");
-            EzMachine_DeclareVariable(pVm, "lambda");
-            EzMachine_DeclareVariable(pVm, "delta");
-            EzMachine_DeclareVariable(pVm, "Delta");
-            EzMachine_DeclareVariable(pVm, "omega");
-            EzMachine_DeclareVariable(pVm, "Omega");
-            EzMachine_AllocateVariables(pVm);
-            EzMachine_SetVariableByIndex(pVm, 2, PZ_PI);
-
-            iCompileError = EzMachine_Compile(pVm, pAstExpr, szErrorBuf);
-
-            if (iCompileError != EZERR_NONE) {
-                g_bError = 1;
-            }
+            RenderNode_CalculateSize(pRenderNode, &config);
         }
     }
 
@@ -468,9 +400,6 @@ int main(int argc, char* argv[]) {
 
     if (pRenderNode != NULL) {
         RenderNode_Destroy(pRenderNode);
-    }
-    if (pVm != NULL) {
-        EzMachine_Destroy(pVm);
     }
     if (pAstExpr != NULL) {
         FzAstNode_Destroy(pAstExpr);

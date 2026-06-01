@@ -930,10 +930,11 @@ int main(int argc, char* argv[]) {
     bFullscreen = cfg.bFullscreen;
 
     /* Initialize renderer interface */
+    RenderConfig_GetDefaultStyle(&config);
+    RenderConfig_CalculateBigSymbolPoints(&config);
     config.sInterfaces.setPixel = setPixel;
     config.sInterfaces.plotLine = plotLine;
     config.sInterfaces.putChar = putChar;
-    RenderConfig_GetDefaultStyle(&config);
 
     /* Parse expression */
     pAstExpr = FzParser_ParseExpression(cfg.szExpr);
@@ -941,7 +942,7 @@ int main(int argc, char* argv[]) {
         g_bError = 1;
     } else {
         pRenderNode = Render_Transform(pAstExpr);
-        RenderNode_EstimateSize(pRenderNode, &config);
+        RenderNode_CalculateSize(pRenderNode, &config);
 
         /* Compile expression to VM */
         pVm = EzMachine_Create();

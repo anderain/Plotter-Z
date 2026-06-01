@@ -1,5 +1,4 @@
 #include <stdlib.h>
-#include <stdio.h>
 #include "fz.h"
 
 static void assignToken(FzLineAnalyzer* pAnalyzer, FzTokenType iType, const char* pSourceBegin, int iLength) {

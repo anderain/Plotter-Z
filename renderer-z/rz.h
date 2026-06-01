@@ -21,8 +21,17 @@ typedef enum tagRenderNodeType {
     RN_ENCLOSURE    = 8,
     RN_STACK        = 16,
     RN_ROOT         = 32,
-    RN_SUPERSCRIPT  = 64
+    RN_SUPERSCRIPT  = 64,
+    RN_OVERUNDER    = 128,
+    RN_BIG_SYMBOL   = 256
 } RenderNodeType;
+
+typedef enum tagBigSymbolType {
+    ST_NONE = 0,
+    ST_SUM, /* Summation */
+    ST_PRD, /* Product */
+    ST_INT  /* Integration */
+} BigSymbolType;
 
 typedef struct tagRenderNode {
     RenderNodeType iType;
@@ -57,11 +66,23 @@ typedef struct tagRenderNode {
             struct tagRenderNode* pBody;
             struct tagRenderNode* pScript;
         } sSuperscript;
+        struct {
+            struct tagRenderNode* pOver;
+            struct tagRenderNode* pBase;
+            struct tagRenderNode* pUnder;
+        } sOverunder;
+        struct {
+            BigSymbolType iType;
+        } sBigSymbol;
     } uData;
 } RenderNode;
 
 void        RenderNode_Destroy  (RenderNode* pNode);
-RenderNode* Render_Transform    (FzAstNode* pAstNode);
+RenderNode* Render_Transform    (const FzAstNode* pAstNode);
+
+typedef struct tagGlyphPoint {
+    int x, y;
+} GlyphPoint;
 
 typedef struct tagRenderConfig {
     struct {
@@ -85,6 +106,27 @@ typedef struct tagRenderConfig {
         int iRadius;
     } sEnclosure;
     struct {
+        int iPaddingY;
+        int iPaddingRight;
+    } sOverunder;
+    struct {
+        struct {
+            int iWidth;
+            int iHeight;
+            GlyphPoint sPoints[7];
+        } sSum;
+        struct {
+            int iWidth;
+            int iHeight;
+            GlyphPoint sPoints[6];
+        } sPrd;
+        struct {
+            int iWidth;
+            int iHeight;
+            GlyphPoint sPoints[6];
+        } sInt;
+    } sBigSymbol;
+    struct {
         int bOutline;
     } sDebug;
     struct {
@@ -94,8 +136,9 @@ typedef struct tagRenderConfig {
     } sInterfaces;
 } RenderConfig;
 
-void RenderConfig_GetDefaultStyle   (RenderConfig* pConfig);
-void RenderNode_EstimateSize        (RenderNode* pNode, const RenderConfig* pConfig);
-void RenderNode_Draw                (RenderNode* pNode, const RenderConfig* pConfig, int iStartX, int iBaseline);
+void RenderConfig_GetDefaultStyle           (RenderConfig* pConfig);
+void RenderConfig_CalculateBigSymbolPoints  (RenderConfig* pConfig);
+void RenderNode_CalculateSize               (RenderNode* pNode, const RenderConfig* pConfig);
+void RenderNode_Draw                        (RenderNode* pNode, const RenderConfig* pConfig, int iStartX, int iBaseline);
 
 #endif

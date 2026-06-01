@@ -174,7 +174,7 @@ static void parseFormula(void) {
     /* Build render tree */
     g_pRenderNode = Render_Transform(g_pAstExpr);
     if (g_pRenderNode != NULL) {
-        RenderNode_EstimateSize(g_pRenderNode, &g_RenderConfig);
+        RenderNode_CalculateSize(g_pRenderNode, &g_RenderConfig);
         /* Center formula horizontally */
         g_iFormulaX = (Int16)((g_pBmpBufFormula->iW
             - g_pRenderNode->sLayout.iWidth) / 2);
@@ -1089,10 +1089,11 @@ static Err AppStart(void) {
 	g_pBmpCanvas     = BmpBuffer_Create(160, 160);
 
 	/* Set up renderer-Z config */
+	RenderConfig_GetDefaultStyle(&g_RenderConfig);
+	RenderConfig_CalculateBigSymbolPoints(&g_pRenderNode);
 	g_RenderConfig.sInterfaces.setPixel = rzSetPixel;
 	g_RenderConfig.sInterfaces.plotLine = rzPlotLine;
 	g_RenderConfig.sInterfaces.putChar  = rzPutChar;
-	RenderConfig_GetDefaultStyle(&g_RenderConfig);
 
 	/* Initialize Camera defaults */
 	MemSet(&Camera, sizeof(Camera), 0);

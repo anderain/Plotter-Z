@@ -115,6 +115,51 @@ void printRenderNode(int iLevel, const RenderNode* pNode) {
             printf("</Superscript>");
             printNewline();
             break;
+        case RN_OVERUNDER:
+            printIndent(iLevel);
+            printf("<Overunder>");
+            printNewline();
+            if (pNode->uData.sOverunder.pOver) {
+                printIndent(iLevel + 1);
+                printf("<Over>");
+                printNewline();
+                printRenderNode(iLevel + 2, pNode->uData.sOverunder.pOver);
+                printIndent(iLevel + 1);
+                printf("</Over>");
+                printNewline();
+            }
+            if (pNode->uData.sOverunder.pBase) {
+                printIndent(iLevel + 1);
+                printf("<Base>");
+                printNewline();
+                printRenderNode(iLevel + 2, pNode->uData.sOverunder.pBase);
+                printIndent(iLevel + 1);
+                printf("</Base>");
+                printNewline();
+            }
+            if (pNode->uData.sOverunder.pUnder) {
+                printIndent(iLevel + 1);
+                printf("<Under>");
+                printNewline();
+                printRenderNode(iLevel + 2, pNode->uData.sOverunder.pUnder);
+                printIndent(iLevel + 1);
+                printf("</Under>");
+                printNewline();
+            }
+            printIndent(iLevel);
+            printf("</Overunder>");
+            printNewline();
+            break;
+        case RN_BIG_SYMBOL:
+            printIndent(iLevel);
+            printf("<BigSymbol type=\"%d\" />", pNode->uData.sBigSymbol.iType);
+            printNewline();
+            break;
+        default:
+            printIndent(iLevel);
+            printf("<Error> </Error>");
+            printNewline();
+            break;
     }
 }
 

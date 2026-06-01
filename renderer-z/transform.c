@@ -54,6 +54,14 @@ static RenderNode* createRenderNode(RenderNodeType iType) {
             pNode->uData.sSuperscript.pBody = NULL;
             pNode->uData.sSuperscript.pScript = NULL;
             break;
+        case RN_OVERUNDER:
+            pNode->uData.sOverunder.pOver = NULL;
+            pNode->uData.sOverunder.pBase = NULL;
+            pNode->uData.sOverunder.pUnder = NULL;
+            break;
+        case RN_BIG_SYMBOL:
+            pNode->uData.sBigSymbol.iType = ST_NONE;
+            break;
     }
 
     return pNode;
@@ -94,6 +102,14 @@ static void cleanUpRenderNode(RenderNode* pNode) {
             RenderNode_Destroy(pNode->uData.sSuperscript.pBody);
             RenderNode_Destroy(pNode->uData.sSuperscript.pScript);
             break;
+        case RN_OVERUNDER:
+            RenderNode_Destroy(pNode->uData.sOverunder.pOver);
+            RenderNode_Destroy(pNode->uData.sOverunder.pBase);
+            RenderNode_Destroy(pNode->uData.sOverunder.pUnder);
+            break;
+        case RN_BIG_SYMBOL:
+            pNode->uData.sBigSymbol.iType = ST_NONE;
+            break;
     }
 }
 
@@ -105,7 +121,7 @@ void RenderNode_Destroy(RenderNode* pNode) {
     free(pNode);
 }
 
-static void transform(RenderNode* pParentHorz, FzAstNode* pAstNode) {
+static void transform(RenderNode* pParentHorz, const FzAstNode* pAstNode) {
     switch (pAstNode->iType){
         case AST_UNARY_OPERATOR: {
             RenderNode* pTextOperator = createRenderNode(RN_TEXT);
@@ -205,7 +221,7 @@ static void transform(RenderNode* pParentHorz, FzAstNode* pAstNode) {
             if (Utils_StringViewEqual(psvFuncName, "sqr") && iNumArg == 1) {
                 RenderNode* pRoot = createRenderNode(RN_ROOT);
                 RenderNode* pChildHorz = createRenderNode(RN_HORIZONTAL);
-                FzAstNode* pAstContent = (FzAstNode *)pAstNode->uData.sFunctionCall.pListArguments->pHead->pData;
+                const FzAstNode* pAstContent = (const FzAstNode *)pAstNode->uData.sFunctionCall.pListArguments->pHead->pData;
                 
                 pRoot->uData.sRoot.pContent = pChildHorz;
                 transform(pChildHorz, pAstContent);
@@ -216,7 +232,7 @@ static void transform(RenderNode* pParentHorz, FzAstNode* pAstNode) {
                 RenderNode* pSuperscriptNode = createRenderNode(RN_SUPERSCRIPT);
                 RenderNode* pBody = createRenderNode(RN_SPECIAL_CHAR);
                 RenderNode* pScript = createRenderNode(RN_HORIZONTAL);
-                FzAstNode* pAstContent = (FzAstNode *)pAstNode->uData.sFunctionCall.pListArguments->pHead->pData;
+                const FzAstNode* pAstContent = (const FzAstNode *)pAstNode->uData.sFunctionCall.pListArguments->pHead->pData;
 
                 pSuperscriptNode->uData.sSuperscript.pBody = pBody;
                 pSuperscriptNode->uData.sSuperscript.pScript = pScript;
@@ -229,13 +245,150 @@ static void transform(RenderNode* pParentHorz, FzAstNode* pAstNode) {
             else if (Utils_StringViewEqual(psvFuncName, "abs") && iNumArg == 1) {
                 RenderNode* pEnclosureNode = createRenderNode(RN_ENCLOSURE);
                 RenderNode* pChildHorz = createRenderNode(RN_HORIZONTAL);
-                FzAstNode* pAstContent = (FzAstNode *)pAstNode->uData.sFunctionCall.pListArguments->pHead->pData;
+                const FzAstNode* pAstContent = (const FzAstNode *)pAstNode->uData.sFunctionCall.pListArguments->pHead->pData;
 
                 pEnclosureNode->uData.sEnclosure.pContent = pChildHorz;
                 transform(pChildHorz, pAstContent);
 
                 pEnclosureNode->uData.sEnclosure.bCurve = 0;
                 vlPushBack(pParentHorz->uData.sHorizontal.pList, pEnclosureNode);
+            }
+            else if ((
+                Utils_StringViewEqual(psvFuncName, "sum") ||
+                Utils_StringViewEqual(psvFuncName, "prd")
+            ) && iNumArg == 4) {
+                RenderNode* pOverunder = createRenderNode(RN_OVERUNDER);
+                RenderNode* pOver = createRenderNode(RN_HORIZONTAL);
+                RenderNode* pSymbol = createRenderNode(RN_BIG_SYMBOL);
+                RenderNode* pEqual = createRenderNode(RN_SPECIAL_CHAR);
+                RenderNode* pUnder = createRenderNode(RN_HORIZONTAL);
+                RenderNode* pRemaining = createRenderNode(RN_ENCLOSURE);
+                VlistNode* pArg1st = pAstNode->uData.sFunctionCall.pListArguments->pHead;
+                VlistNode* pArg2nd = pArg1st->pNext;
+                VlistNode* pArg3rd = pArg2nd->pNext;
+                VlistNode* pArg4th = pArg3rd->pNext;
+
+                switch (psvFuncName->pBegin[0]) {
+                    case 's': pSymbol->uData.sBigSymbol.iType = ST_SUM; break;
+                    case 'p': pSymbol->uData.sBigSymbol.iType = ST_PRD; break;
+                    default: pSymbol->uData.sBigSymbol.iType = ST_NONE;
+                }
+
+                /* Under part: [var] [=] [expr] */
+                transform(pUnder, (const FzAstNode *)pArg1st->pData);
+                pEqual->uData.sSpecialChar.c = '=';
+                vlPushBack(pUnder->uData.sHorizontal.pList, pEqual);
+                transform(pUnder, (const FzAstNode *)pArg2nd->pData);
+
+                /* Over part: [expr] */
+                transform(pOver, (const FzAstNode *)pArg3rd->pData);
+
+                pOverunder->uData.sOverunder.pBase = pSymbol;
+                pOverunder->uData.sOverunder.pOver = pOver;
+                pOverunder->uData.sOverunder.pUnder = pUnder;
+
+                vlPushBack(pParentHorz->uData.sHorizontal.pList, pOverunder);
+
+                /* 4th argument as remaining */
+                pRemaining->uData.sEnclosure.pContent = createRenderNode(RN_HORIZONTAL);
+                transform(pRemaining->uData.sEnclosure.pContent, (const FzAstNode *)pArg4th->pData);
+                vlPushBack(pParentHorz->uData.sHorizontal.pList, pRemaining);
+            }
+            else if (Utils_StringViewEqual(psvFuncName, "int") && iNumArg == 4) {
+                RenderNode* pOverunder = createRenderNode(RN_OVERUNDER);
+                RenderNode* pOver = createRenderNode(RN_HORIZONTAL);
+                RenderNode* pSymbol = createRenderNode(RN_BIG_SYMBOL);
+                RenderNode* pUnder = createRenderNode(RN_HORIZONTAL);
+                RenderNode* pRemaining = createRenderNode(RN_HORIZONTAL);
+                RenderNode* pAppended = createRenderNode(RN_HORIZONTAL);
+                RenderNode* pCharD = createRenderNode(RN_SPECIAL_CHAR);
+
+                VlistNode* pArg1st = pAstNode->uData.sFunctionCall.pListArguments->pHead;
+                VlistNode* pArg2nd = pArg1st->pNext;
+                VlistNode* pArg3rd = pArg2nd->pNext;
+                VlistNode* pArg4th = pArg3rd->pNext;
+
+                pSymbol->uData.sBigSymbol.iType = ST_INT;
+   
+                /* Under part */
+                transform(pUnder, (const FzAstNode *)pArg2nd->pData);
+
+                /* Over part: [expr] */
+                transform(pOver, (const FzAstNode *)pArg3rd->pData);
+
+                pOverunder->uData.sOverunder.pBase = pSymbol;
+                pOverunder->uData.sOverunder.pOver = pOver;
+                pOverunder->uData.sOverunder.pUnder = pUnder;
+
+                vlPushBack(pParentHorz->uData.sHorizontal.pList, pOverunder);
+
+                /* 4th argument as remaining */
+                transform(pRemaining, (const FzAstNode *)pArg4th->pData);
+                vlPushBack(pParentHorz->uData.sHorizontal.pList, pRemaining);
+
+                /* [d][var] */
+                pCharD->uData.sSpecialChar.c = 'd';
+                vlPushBack(pAppended->uData.sHorizontal.pList, pCharD);
+                transform(pAppended, (const FzAstNode *)pArg1st->pData);
+                vlPushBack(pParentHorz->uData.sHorizontal.pList, pAppended);
+            }
+            else if (Utils_StringViewEqual(psvFuncName, "int") && iNumArg == 2) {
+                RenderNode* pOverunder = createRenderNode(RN_OVERUNDER);
+                RenderNode* pSymbol = createRenderNode(RN_BIG_SYMBOL);
+                RenderNode* pRemaining = createRenderNode(RN_HORIZONTAL);
+                RenderNode* pAppended = createRenderNode(RN_HORIZONTAL);
+                RenderNode* pCharD = createRenderNode(RN_SPECIAL_CHAR);
+
+                VlistNode* pArg1st = pAstNode->uData.sFunctionCall.pListArguments->pHead;
+                VlistNode* pArg2nd = pArg1st->pNext;
+
+                pSymbol->uData.sBigSymbol.iType = ST_INT;
+
+                pOverunder->uData.sOverunder.pBase = pSymbol;
+                pOverunder->uData.sOverunder.pOver = NULL;
+                pOverunder->uData.sOverunder.pUnder = NULL;
+
+                vlPushBack(pParentHorz->uData.sHorizontal.pList, pOverunder);
+
+                /* 4th argument as remaining */
+                transform(pRemaining, (const FzAstNode *)pArg2nd->pData);
+                vlPushBack(pParentHorz->uData.sHorizontal.pList, pRemaining);
+
+                /* [d][var] */
+                pCharD->uData.sSpecialChar.c = 'd';
+                vlPushBack(pAppended->uData.sHorizontal.pList, pCharD);
+                transform(pAppended, (const FzAstNode *)pArg1st->pData);
+                vlPushBack(pParentHorz->uData.sHorizontal.pList, pAppended);
+            }
+            else if (Utils_StringViewEqual(psvFuncName, "lim") && iNumArg == 3) {
+                RenderNode* pOverunder = createRenderNode(RN_OVERUNDER);
+                RenderNode* pLimitText = createRenderNode(RN_TEXT);
+                RenderNode* pArrow = createRenderNode(RN_SPECIAL_CHAR);
+                RenderNode* pUnder = createRenderNode(RN_HORIZONTAL);
+                RenderNode* pRemaining = createRenderNode(RN_ENCLOSURE);
+
+                VlistNode* pArg1st = pAstNode->uData.sFunctionCall.pListArguments->pHead;
+                VlistNode* pArg2nd = pArg1st->pNext;
+                VlistNode* pArg3rd = pArg2nd->pNext;
+                
+                pLimitText->uData.sText.szText = Utils_StringViewDump(psvFuncName);
+   
+                /* Under part: [var] [->] [expr] */
+                transform(pUnder, (const FzAstNode *)pArg1st->pData);
+                pArrow->uData.sSpecialChar.c = PZ_AE_ARROW_RIGHT;
+                vlPushBack(pUnder->uData.sHorizontal.pList, pArrow);
+                transform(pUnder, (const FzAstNode *)pArg2nd->pData);
+
+                pOverunder->uData.sOverunder.pBase = pLimitText;
+                pOverunder->uData.sOverunder.pOver = NULL;
+                pOverunder->uData.sOverunder.pUnder = pUnder;
+
+                vlPushBack(pParentHorz->uData.sHorizontal.pList, pOverunder);
+
+                /* 4th argument as remaining */
+                pRemaining->uData.sEnclosure.pContent = createRenderNode(RN_HORIZONTAL);
+                transform(pRemaining->uData.sEnclosure.pContent, (const FzAstNode *)pArg3rd->pData);
+                vlPushBack(pParentHorz->uData.sHorizontal.pList, pRemaining);
             }
             else {
                 VlistNode* pParam = NULL;
@@ -252,7 +405,7 @@ static void transform(RenderNode* pParentHorz, FzAstNode* pAstNode) {
                     pParam != NULL;
                     pParam = pParam->pNext
                 ) {
-                    transform(pChildHorz, (FzAstNode *)pParam->pData);
+                    transform(pChildHorz, (const FzAstNode *)pParam->pData);
                     if (pParam->pNext != NULL) { /* Not last parameter */
                         RenderNode* pSpecialCharNode = createRenderNode(RN_SPECIAL_CHAR);
                         pSpecialCharNode->uData.sSpecialChar.c = ',';
@@ -307,7 +460,7 @@ static void reduceHorizontal(RenderNode* pNode) {
     }
 }
 
-RenderNode* Render_Transform(FzAstNode* pAstNode) {
+RenderNode* Render_Transform(const FzAstNode* pAstNode) {
     RenderNode* pHorz = createRenderNode(RN_HORIZONTAL);
     transform(pHorz, pAstNode);
     reduceHorizontal(pHorz);

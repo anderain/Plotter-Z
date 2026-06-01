@@ -209,7 +209,7 @@ int recalc(void) {
         if (iCompileErr != EZERR_NONE) return 0;
         if (g_pRenderNode == NULL) {
             g_pRenderNode = Render_Transform(g_pAstExpr);
-            RenderNode_EstimateSize(g_pRenderNode, &g_RenderConfig);
+            RenderNode_CalculateSize(g_pRenderNode, &g_RenderConfig);
         }
     }
 
@@ -631,10 +631,11 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
                 Camera.iViewportS = (g_iCanvasH < g_iCanvasW ? g_iCanvasH : g_iCanvasW) / 2;
                 Camera.iViewportX = g_iCanvasW / 2;
                 Camera.iViewportY = g_iCanvasH / 2;
+                RenderConfig_GetDefaultStyle(&g_RenderConfig);
+                RenderConfig_CalculateBigSymbolPoints(&g_RenderConfig);
                 g_RenderConfig.sInterfaces.setPixel = rzSetPixel;
                 g_RenderConfig.sInterfaces.plotLine = rzPlotLine;
                 g_RenderConfig.sInterfaces.putChar = rzPutChar;
-                RenderConfig_GetDefaultStyle(&g_RenderConfig);
                 g_pVm = EzMachine_Create();
                 if (recalc()) {
                     redrawCanvas();

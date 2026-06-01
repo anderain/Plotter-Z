@@ -521,7 +521,7 @@ int ParseAndRenderExpr(void) {
     g_pRenderNode = Render_Transform(g_pAstExpr);
     if (g_pRenderNode == NULL) return 0;
 
-    RenderNode_EstimateSize(g_pRenderNode, &g_RenderConfig);
+    RenderNode_CalculateSize(g_pRenderNode, &g_RenderConfig);
 
     /* Center formula */
     g_iFormulaX = (iW - g_pRenderNode->sLayout.iWidth) / 2;
@@ -1565,10 +1565,11 @@ int AddIn_main(int isAppli, unsigned short OptionNum) {
     pVRAM = GetVRAMAddress();
 
     /* Set up renderer-Z callback interfaces */
+    RenderConfig_GetDefaultStyle(&g_RenderConfig);
+    RenderConfig_CalculateBigSymbolPoints(&g_RenderConfig);
     g_RenderConfig.sInterfaces.setPixel = RzSetPixel;
     g_RenderConfig.sInterfaces.plotLine = Bdisp_DrawLineVRAM;
     g_RenderConfig.sInterfaces.putChar  = RzPutChar;
-    RenderConfig_GetDefaultStyle(&g_RenderConfig);
 
     MainStage();
     return 1;
