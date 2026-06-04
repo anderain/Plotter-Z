@@ -47,9 +47,6 @@ static const PzSdlConfig DEFAULT_CONFIG = {
 /*====================================================
  * Global state
  *====================================================*/
-#define DEFAULT_VIEW_ALPHA 30
-#define DEFAULT_VIEW_BETA 30
-
 int             bMainLoop = 1;
 int             iScreenWidth = 640;
 int             iScreenHeight = 480;
@@ -95,31 +92,6 @@ int             g_iMousePrevY = 0;
 
 typedef struct { PZ_FLOAT x, y, z; } Vertex;
 typedef struct { int i0, i1; } Edge;
-
-const PZ_FLOAT arrZoomLevels[] = { 0.33, 0.5, 0.75, 1, 1.5, 2, 4, 8 };
-const int iNumZoomLevel = sizeof(arrZoomLevels) / sizeof(arrZoomLevels[0]);
-#define ZOOM_LEVEL_DEFAULT 3
-
-struct {
-    int iViewportX;
-    int iViewportY;
-    int iViewportS;
-    int iAlphaDeg;
-    int iBetaDeg;
-    PZ_FLOAT cosA;  PZ_FLOAT sinA;  PZ_FLOAT cosB;  PZ_FLOAT sinB; 
-    PZ_FLOAT xMin;  PZ_FLOAT xMax;  int xGrid;
-    PZ_FLOAT yMin;  PZ_FLOAT yMax;  int yGrid;
-    PZ_FLOAT zMin;  PZ_FLOAT zMax;
-    int iZoomLevel;
-} Camera = {
-    0, 0, 0,
-    DEFAULT_VIEW_ALPHA, DEFAULT_VIEW_BETA,
-    0.0f, 0.0f, 0.0f, 0.0f,
-    -6.0f, 6.0f, 20,
-    -6.0f, 6.0f, 20,
-    -3.0f, 3.0f,
-    ZOOM_LEVEL_DEFAULT
-};
 
 PZ_FLOAT zBuf[2000];
 PZ_FLOAT xBuf[50];
@@ -179,7 +151,7 @@ static const char* TextI18n[I18N_LANG_COUNT][I18N_COUNT] = {
         "Syntax Error - could not parse expression",
         "Press [Tab] to exit",
         "VIEW: %c=%d, %c=%d",
-        "%d%%(%d, %d)",
+        "%s%%(%d, %d)",
         "VARIABLE UNDEFINED: '%s'",
         "FUNCTION UNDEFINED: '%s'",
         "FUNCTION PARAM MISMATCH: '%s'",
@@ -207,7 +179,7 @@ static const char* TextI18n[I18N_LANG_COUNT][I18N_COUNT] = {
         "\xC6\xE7\xCA\xB9\xC2\xC7\xBE\xE1\xBA,\xBE\xC2\xC7\xD6\xE9\xE4\xB9\xC6\xB8\xE7 \xB0 \xD4\xE9\xBA\xC7 \xCD\xE8\xC1\xD9\xC8\xE7",
         "[\xCA\xD6\xE8\xC1\xBA] \xB0 \xBF\xC6\xCD \xC6\xB7\xBD\xE2\xB8\xBD",
         "\xD5\xE8\xB7\xBA: %c=%d, %c=%d",
-        "%d%%(%d, %d)",
+        "%s%%(%d, %d)",
         "\xD4\xE8\xE2\xBB\xD6\xE8\xE3 \xBB\xE7\xCD\xE8\xD6\xB1\xBC\xE7\xCE\xE8: '%s'",
         "\xD6\xB1\xE7\xC2\xC6\xB8\xE7 \xBB\xE7\xCD\xE8\xD6\xB1\xBC\xE7\xCE\xE8: '%s'",
         "\xD6\xB1\xE7\xC2\xC6\xB8\xE7 \xD4\xE9\xE1\xDB \xDA\xC7\xD9\xB9\xCB: '%s'",
@@ -390,17 +362,13 @@ static void putText(int x, int y, const unsigned char* usz, Uint32 uColor) {
 }
 
 /*====================================================
- * 3D projection
+ * Projection
  *====================================================*/
+#define ORTHOGRAPHIC    0
+#define PERSPECTIVE     1
 
-static void xyz2xy(PZ_FLOAT x, PZ_FLOAT y, PZ_FLOAT z, int *ox, int *oy) {
-    PZ_FLOAT zoom = arrZoomLevels[Camera.iZoomLevel];
-    PZ_FLOAT scale = Camera.iViewportS * zoom;
-    PZ_FLOAT nx = y * Camera.sinB - x * Camera.cosB;
-    PZ_FLOAT ny = (x * Camera.sinB + y * Camera.cosB) * Camera.sinA - z * Camera.cosA;
-    *ox = (int)(Camera.iViewportX + scale * nx);
-    *oy = (int)(Camera.iViewportY + scale * ny);
-}
+void (*xyz2xy)(PZ_FLOAT, PZ_FLOAT, PZ_FLOAT, int*, int *) = PzCamera_OrthoProjectFloat;
+int g_iProjection = ORTHOGRAPHIC;
 
 /*====================================================
  * Scale blit (integer nearest-neighbour)
@@ -584,7 +552,7 @@ static void redraw(void) {
         sprintf(
             szBuf,
             I18N(I18N_ZOOM_FMT),
-            (int)(arrZoomLevels[Camera.iZoomLevel] * 100),
+            szZoomLevels[Camera.iZoomLevel],
             Camera.iViewportX,
             Camera.iViewportY
         );
@@ -863,6 +831,8 @@ int main(int argc, char* argv[]) {
     EzError iCompileError = EZERR_NONE;
     char szErrorBuf[EZ_ERROR_CONTENT_LENGTH];
 
+    PzCamera_Initialize();
+    
     /* Parse command-line arguments */
     for (i = 1; i < argc; ++i) {
         if (strcmp(argv[i], "-r") == 0 || strcmp(argv[i], "--resolution") == 0) {
@@ -1119,11 +1089,7 @@ int main(int argc, char* argv[]) {
                             Camera.iAlphaDeg += 5;
                         }
                         else if (sdlEvent.key.keysym.sym == SDLK_r) {
-                            Camera.iViewportX = iCanvasW / 2;
-                            Camera.iViewportY = iCanvasH / 2;
-                            Camera.iZoomLevel = ZOOM_LEVEL_DEFAULT;
-                            Camera.iBetaDeg = DEFAULT_VIEW_BETA;
-                            Camera.iAlphaDeg = DEFAULT_VIEW_ALPHA;
+                            PzCamera_Reset(iCanvasW / 2, iCanvasH / 2);
                         }
                         else if (sdlEvent.key.keysym.sym == SDLK_z) {
                             Camera.iZoomLevel--;
@@ -1132,6 +1098,25 @@ int main(int argc, char* argv[]) {
                         else if (sdlEvent.key.keysym.sym == SDLK_x) {
                             Camera.iZoomLevel++;
                             if (Camera.iZoomLevel >= iNumZoomLevel) Camera.iZoomLevel = iNumZoomLevel - 1;
+                        }
+                        else if (sdlEvent.key.keysym.sym == SDLK_c) {
+                            Camera.iFovLevel--;
+                            if (Camera.iFovLevel < FOV_LEVEL_MIN) Camera.iFovLevel = FOV_LEVEL_MIN;
+                        }
+                        else if (sdlEvent.key.keysym.sym == SDLK_v) {
+                            Camera.iFovLevel++;
+                            if (Camera.iFovLevel > FOV_LEVEL_MAX) Camera.iFovLevel = FOV_LEVEL_MAX;
+                        }
+                        else if (sdlEvent.key.keysym.sym == SDLK_p) {
+                            g_iProjection = !g_iProjection;
+                            switch (g_iProjection) {
+                                case ORTHOGRAPHIC:
+                                    xyz2xy = PzCamera_OrthoProjectFloat;
+                                    break;
+                                default:
+                                    xyz2xy = PzCamera_PerspProjectFloat;
+                                    break;
+                            }
                         }
                         else if (sdlEvent.key.keysym.sym == SDLK_b) {
                             bShowBox = !bShowBox;

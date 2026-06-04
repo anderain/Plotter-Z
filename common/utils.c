@@ -322,3 +322,109 @@ int Utils_IsLittleEndian() {
     UTILS_BYTE *bytePtr = (UTILS_BYTE *)&num;
     return *bytePtr == 1;
 }
+
+/*****************************************
+ * Camera
+ *****************************************/
+#define ZOOM_LEVEL_DEFAULT  6
+#define DEFAULT_VIEW_ALPHA  30
+#define DEFAULT_VIEW_BETA   30
+
+PzCamera Camera;
+
+const PzCamera DefaultCamera = {
+    0, 0, 0,
+    DEFAULT_VIEW_ALPHA, DEFAULT_VIEW_BETA,
+    0.0f, 0.0f, 0.0f, 0.0f,
+    -6.0f, 6.0f, 20,
+    -6.0f, 6.0f, 20,
+    -3.0f, 3.0f,
+    ZOOM_LEVEL_DEFAULT,
+    5
+};
+
+const PZ_FLOAT fZoomLevels[] = {
+    0.33f,
+    0.5f,
+    0.6f,
+    0.7f,
+    0.8f,
+    0.9f,
+    1.0f,
+    1.25f,
+    1.5f,
+    2.0f,
+    4.0f,
+    6.0f
+};
+
+const PZ_FIXED iZoomLevels[] = {
+    PZ_FLOAT_TO_FIXED(0.33f),
+    PZ_FLOAT_TO_FIXED(0.50f),
+    PZ_FLOAT_TO_FIXED(0.60f),
+    PZ_FLOAT_TO_FIXED(0.70f),
+    PZ_FLOAT_TO_FIXED(0.80f),
+    PZ_FLOAT_TO_FIXED(0.90f),
+    (int)PZ_FIXED_ONE,
+    PZ_FLOAT_TO_FIXED(1.25f),
+    PZ_FLOAT_TO_FIXED(1.50f),
+    (int)PZ_FIXED_ONE * 2,
+	(int)PZ_FIXED_ONE * 4,
+	(int)PZ_FIXED_ONE * 6
+};
+
+const char* szZoomLevels[] = {
+    "33",
+    "50",
+    "60",
+    "70",
+    "80",
+    "90",
+    "100",
+    "125",
+    "150",
+    "200",
+    "400",
+    "600"
+};
+
+const int iNumZoomLevel = sizeof(iZoomLevels) / sizeof(iZoomLevels[0]);
+
+void PzCamera_Initialize() {
+    memset(&Camera, 0, sizeof(Camera));
+    memcpy(&Camera, &DefaultCamera, sizeof(Camera));
+}
+
+void PzCamera_Reset(int iViewportX, int iViewportY) {
+    Camera.iViewportX = iViewportX;
+    Camera.iViewportY = iViewportY;
+    Camera.iZoomLevel = ZOOM_LEVEL_DEFAULT;
+    Camera.iBetaDeg = DEFAULT_VIEW_BETA;
+    Camera.iAlphaDeg = DEFAULT_VIEW_ALPHA;
+}
+
+void PzCamera_OrthoProjectFloat(PZ_FLOAT x, PZ_FLOAT y, PZ_FLOAT z, int *ox, int *oy) {
+    PZ_FLOAT scale = Camera.iViewportS * fZoomLevels[Camera.iZoomLevel];
+    PZ_FLOAT nx = y * Camera.sinB - x * Camera.cosB;
+    PZ_FLOAT ny = (x * Camera.sinB + y * Camera.cosB) * Camera.sinA - z * Camera.cosA;
+    *ox = (int)(Camera.iViewportX + scale * nx);
+    *oy = (int)(Camera.iViewportY + scale * ny);
+}
+
+void PzCamera_PerspProjectFloat(PZ_FLOAT x, PZ_FLOAT y, PZ_FLOAT z, int *ox, int *oy) {
+    PZ_FLOAT y1 = y * Camera.cosA - z * Camera.sinA;
+    PZ_FLOAT z1 = y * Camera.sinA + z * Camera.cosA;
+    PZ_FLOAT x2 = x * Camera.cosB + z1 * Camera.sinB;
+    PZ_FLOAT z2 = -x * Camera.sinB + z1 * Camera.cosB;
+    PZ_FLOAT scale, projX, projY;
+
+    z2 += Camera.iFovLevel;
+    if (z2 < 0.1f) z2 = 0.1f;
+
+    scale = (Camera.iFovLevel / z2) * Camera.iViewportS * fZoomLevels[Camera.iZoomLevel];
+    projX = x2 * scale;
+    projY = y1 * scale;
+
+    *ox = projX + Camera.iViewportX;
+    *oy = projY + Camera.iViewportY;
+}

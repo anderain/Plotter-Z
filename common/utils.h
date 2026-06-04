@@ -86,4 +86,36 @@ int     Utils_IsLittleEndian    ();
 
 #define DEFAULT_FTOA_PRECISION  8
 
+/*****************************************
+ * Camera
+ *****************************************/
+
+#define FOV_LEVEL_MIN   2
+#define FOV_LEVEL_MAX   10
+
+typedef struct tagPzCamera {
+    int iViewportX;
+    int iViewportY;
+    int iViewportS;
+    int iAlphaDeg;
+    int iBetaDeg;
+    PZ_FLOAT cosA;  PZ_FLOAT sinA;  PZ_FLOAT cosB;  PZ_FLOAT sinB; 
+    PZ_FLOAT xMin;  PZ_FLOAT xMax;  int xGrid;
+    PZ_FLOAT yMin;  PZ_FLOAT yMax;  int yGrid;
+    PZ_FLOAT zMin;  PZ_FLOAT zMax;
+    int iZoomLevel;
+    int iFovLevel; /* Only for perspective projection */
+} PzCamera;
+
+extern PzCamera         Camera;
+extern const PZ_FLOAT   fZoomLevels[];
+extern const PZ_FIXED   iZoomLevels[];
+extern const char*      szZoomLevels[];
+extern const int        iNumZoomLevel;
+
+void PzCamera_Initialize            ();
+void PzCamera_Reset                 (int, int);
+void PzCamera_OrthoProjectFloat     (PZ_FLOAT, PZ_FLOAT, PZ_FLOAT, int *, int *);
+void PzCamera_PerspProjectFloat     (PZ_FLOAT, PZ_FLOAT, PZ_FLOAT, int *, int *);
+
 #endif
