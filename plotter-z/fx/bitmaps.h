@@ -239,17 +239,17 @@ static const unsigned char MENU_RESET[] = {
 
 /*
  {
-   "variable_name": "MENU_ANIMATION",
+   "variable_name": "MENU_O_P_SWITCH",
    "width": 19,
    "height": 8
  }
 */
 
-static const unsigned char MENU_ANIMATION[] = {
+static const unsigned char MENU_O_P_SWITCH[] = {
 	/* width */ 19, /* height */ 8,
-	/* bitmap (0, 0) */ 255, 128, 146, 170, 187, 170, 170, 170,
-	/* bitmap (1, 0) */ 255, 0, 84, 86, 85, 213, 84, 84,
-	/* bitmap (2, 0) */ 224, 0, 64, 192, 64, 64, 64, 64
+	/* bitmap (0, 0) */ 255, 128, 176, 169, 179, 161, 160, 160,
+	/* bitmap (1, 0) */ 255, 0, 144, 9, 253, 9, 145, 0,
+	/* bitmap (2, 0) */ 224, 0, 128, 64, 64, 64, 64, 128
 };
 
 /* #BITMAP_END */
@@ -288,6 +288,25 @@ static const unsigned char MENU_INIT[] = {
 	/* bitmap (0, 0) */ 255, 139, 217, 218, 219, 219, 139, 255,
 	/* bitmap (1, 0) */ 255, 68, 110, 110, 110, 110, 70, 255,
 	/* bitmap (2, 0) */ 224, 96, 224, 224, 224, 192, 128, 0
+};
+
+/* #BITMAP_END */
+
+/* #BITMAP_START */
+
+/*
+ {
+   "variable_name": "MENU_NEXT",
+   "width": 19,
+   "height": 8
+ }
+*/
+
+static const unsigned char MENU_NEXT[] = {
+	/* width */ 19, /* height */ 8,
+	/* bitmap (0, 0) */ 255, 128, 165, 181, 172, 165, 165, 128,
+	/* bitmap (1, 0) */ 255, 0, 93, 73, 137, 73, 73, 0,
+	/* bitmap (2, 0) */ 224, 0, 128, 64, 32, 64, 128, 0
 };
 
 /* #BITMAP_END */

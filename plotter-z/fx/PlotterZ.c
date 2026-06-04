@@ -55,19 +55,6 @@ RenderConfig    g_RenderConfig;
  * Camera and surface data
  *====================================================*/
 #define GRID_MAX            30
-#define ZOOM_LEVEL_DEFAULT  6
-#define DEFAULT_VIEW_ALPHA  30
-#define DEFAULT_VIEW_BETA   30
-
-struct CameraStruct {
-    int         iViewportX, iViewportY, iViewportS;
-    int         iAlphaDeg, iBetaDeg;
-    PZ_FIXED    cosA, sinA, cosB, sinB;
-    PZ_FLOAT    xMin, xMax; int xGrid;
-    PZ_FLOAT    yMin, yMax; int yGrid;
-    PZ_FLOAT    zMin, zMax;
-    int         iZoomLevel;
-};
 
 #define CAM_INIT_XMIN   -6.0f
 #define CAM_INIT_XMAX   6.0f
@@ -78,37 +65,10 @@ struct CameraStruct {
 #define CAM_INIT_ZMIN   -3.0f
 #define CAM_INIT_ZMAX   3.0f
 
-static struct CameraStruct Camera = {
-    VRAM_WIDTH / 2, VRAM_HEIGHT / 2, VRAM_HEIGHT / 2,
-    DEFAULT_VIEW_ALPHA, DEFAULT_VIEW_BETA,
-    0, 0, 0, 0,
-    CAM_INIT_XMIN, CAM_INIT_XMAX, CAM_INIT_XGRID,
-    CAM_INIT_YMIN, CAM_INIT_YMAX, CAM_INIT_YGRID,
-    CAM_INIT_ZMIN, CAM_INIT_ZMAX,
-    ZOOM_LEVEL_DEFAULT
-};
-
 static PZ_FIXED xBuf[GRID_MAX];
 static PZ_FIXED yBuf[GRID_MAX];
 static PZ_FIXED zBuf[GRID_MAX * GRID_MAX];
 #define Z_BUF(x,y) (zBuf[(x) + (y) * Camera.xGrid])
-
-static const int arrZoomLevels[] = {
-    PZ_FLOAT_TO_FIXED(0.33f),
-    PZ_FLOAT_TO_FIXED(0.50f),
-    PZ_FLOAT_TO_FIXED(0.60f),
-    PZ_FLOAT_TO_FIXED(0.70f),
-    PZ_FLOAT_TO_FIXED(0.80f),
-    PZ_FLOAT_TO_FIXED(0.90f),
-    (int)PZ_FIXED_ONE,
-    PZ_FLOAT_TO_FIXED(1.25f),
-    PZ_FLOAT_TO_FIXED(1.50f),
-    (int)PZ_FIXED_ONE * 2,
-    (int)PZ_FIXED_ONE * 4,
-    (int)PZ_FIXED_ONE * 6,
-    (int)PZ_FIXED_ONE * 8,
-};
-static const int iNumZoomLevel = sizeof(arrZoomLevels) / sizeof(arrZoomLevels[0]);
 
 int g_iFormulaX = 0;
 int g_iFormulaY = 0;
@@ -558,16 +518,11 @@ void DrawFormula(void) {
 /*====================================================
  * 3D Projection & Recalc
  *====================================================*/
-static void xyz2xy(PZ_FIXED x, PZ_FIXED y, PZ_FIXED z, int* ox, int* oy) {
-    int iZoom = arrZoomLevels[Camera.iZoomLevel];
-    int iScale = (int)((Camera.iViewportS * iZoom + PZ_FIXED_HALF) >> PZ_FIXED_SHIFT);
-    int nx, ny;
-    nx = PZ_FIXED_MUL(x, Camera.cosB) - PZ_FIXED_MUL(y, Camera.sinB);
-    ny = PZ_FIXED_MUL(PZ_FIXED_MUL(x, Camera.sinB) + PZ_FIXED_MUL(y, Camera.cosB), Camera.sinA)
-       - PZ_FIXED_MUL(z, Camera.cosA);
-    *ox = Camera.iViewportX + (int)((iScale * nx + PZ_FIXED_HALF) >> PZ_FIXED_SHIFT);
-    *oy = Camera.iViewportY + (int)((iScale * ny + PZ_FIXED_HALF) >> PZ_FIXED_SHIFT);
-}
+#define ORTHOGRAPHIC    0
+#define PERSPECTIVE     1
+
+void (*xyz2xy)(PZ_FIXED, PZ_FIXED, PZ_FIXED, int*, int *) = PzCamera_OrthoProjectFixed;
+int g_iProjection = ORTHOGRAPHIC;
 
 #define BAR_WIDTH   10
 #define BAR_HEIGHT  1
@@ -796,7 +751,7 @@ void DrawGraphStage(void) {
     }
     /* Bottom Menu */
     if (g_bGraphMenuVisible) {
-        const uchar* pMenuBitmap[B_MENU_ITEM_NUM] = { MENU_BACK, MENU_PLAY, MENU_ANIMATION, MENU_RESET, MENU_BOX, MENU_HIDE };
+        const uchar* pMenuBitmap[B_MENU_ITEM_NUM] = { MENU_BACK, MENU_PLAY, MENU_O_P_SWITCH, MENU_RESET, MENU_BOX, MENU_HIDE };
         int i;
         Bdisp_AreaClr_VRAM(&BoxMenuArea);
         if (g_bPlaying) {
@@ -819,18 +774,19 @@ void GraphStageHandleKey(uint uKey) {
             break;
 
         case KEY_CTRL_F3:
-            if (!g_bPlaying) {
-                EzMachine_SetVariableByIndex(g_pVm, VM_VAR_T_INDEX, VM_VAR_T_STEP + EzMachine_GetVariableByIndex(g_pVm, VM_VAR_T_INDEX));
-                RecalcSurface(RecalcInitTopRight, RecalcRedrawTopRight);
+            g_iProjection = !g_iProjection;
+            switch (g_iProjection) {
+                case ORTHOGRAPHIC:
+                    xyz2xy = PzCamera_OrthoProjectFixed;
+                    break;
+                case PERSPECTIVE:
+                    xyz2xy = PzCamera_PerspProjectFixed;
+                    break;
             }
             break;
 
         case KEY_CTRL_F4:
-            Camera.iAlphaDeg = DEFAULT_VIEW_ALPHA;
-            Camera.iBetaDeg = DEFAULT_VIEW_BETA;
-            Camera.iZoomLevel = ZOOM_LEVEL_DEFAULT;
-            Camera.iViewportX = VRAM_WIDTH / 2;
-            Camera.iViewportY = VRAM_HEIGHT / 2;
+            PzCamera_Reset(VRAM_WIDTH / 2, VRAM_HEIGHT / 2);
             break;
 
         case KEY_CTRL_F5:
@@ -849,6 +805,16 @@ void GraphStageHandleKey(uint uKey) {
         case KEY_CHAR_MINUS:
             if (Camera.iZoomLevel > 0)
                 Camera.iZoomLevel--;
+            break;
+
+        case KEY_CHAR_MULT:
+            if (Camera.iFovLevel > FOV_LEVEL_MIN)
+                Camera.iFovLevel--;
+            break;
+
+        case KEY_CHAR_DIV:
+            if (Camera.iFovLevel < FOV_LEVEL_MAX)
+                Camera.iFovLevel++;
             break;
 
         case KEY_CHAR_2:
@@ -882,6 +848,14 @@ void GraphStageHandleKey(uint uKey) {
         case KEY_CTRL_RIGHT:
             Camera.iBetaDeg += 5;
             break;
+
+        case KEY_CTRL_FD: {
+            if (!g_bPlaying) {
+                EzMachine_SetVariableByIndex(g_pVm, VM_VAR_T_INDEX, VM_VAR_T_STEP + EzMachine_GetVariableByIndex(g_pVm, VM_VAR_T_INDEX));
+                RecalcSurface(RecalcInitTopRight, RecalcRedrawTopRight);
+            }
+            break;
+        }
         default:
             return;
     }
@@ -918,6 +892,8 @@ int GraphStage(void) {
                     case NKEY_F4: GraphStageHandleKey(KEY_CTRL_F4); break;
                     case NKEY_F5: GraphStageHandleKey(KEY_CTRL_F5); break;
                     case NKEY_F6: GraphStageHandleKey(KEY_CTRL_F6); break;
+                    case NKEY_MUL: GraphStageHandleKey(KEY_CHAR_MULT); break;
+                    case NKEY_DIV: GraphStageHandleKey(KEY_CHAR_DIV); break;
                     case NKEY_PLUS: GraphStageHandleKey(KEY_CHAR_PLUS); break;
                     case NKEY_MINUS: GraphStageHandleKey(KEY_CHAR_MINUS); break;
                     case NKEY_2: GraphStageHandleKey(KEY_CHAR_2); break;
@@ -928,6 +904,7 @@ int GraphStage(void) {
                     case NKEY_DOWN: GraphStageHandleKey(KEY_CTRL_DOWN); break;
                     case NKEY_LEFT: GraphStageHandleKey(KEY_CTRL_LEFT); break;
                     case NKEY_RIGHT: GraphStageHandleKey(KEY_CTRL_RIGHT); break;
+                    case NKEY_FD: GraphStageHandleKey(KEY_CTRL_FD); break;
                     default: break;
                 }
             }
@@ -1162,10 +1139,10 @@ static void WinEdit_SaveCamera(void) {
 void WinEdit_ApplyDefault() {
     Camera.xMin  = CAM_INIT_XMIN;
     Camera.xMax  = CAM_INIT_XMAX;
-    Camera.xGrid  = CAM_INIT_XGRID;
+    Camera.xGrid = CAM_INIT_XGRID;
     Camera.yMin  = CAM_INIT_YMIN;
     Camera.yMax  = CAM_INIT_YMAX;
-    Camera.yGrid  = CAM_INIT_YGRID;
+    Camera.yGrid = CAM_INIT_YGRID;
     Camera.zMin  = CAM_INIT_ZMIN;
     Camera.zMax  = CAM_INIT_ZMAX;
 }
@@ -1355,34 +1332,73 @@ int SamplesStage(void) {
 /*====================================================
  * Help Stage
  *====================================================*/
+#define HELP_PAGE_SIZE 2
+int g_iHelpPage;
+
+static const char* szHelpPage0[] = {
+    "F1: Edit Expression",
+    "F2: Edit Window Settings",
+    "F3: Samples",
+    "F4: Display Help",
+    "F6: Plot graph"
+};
+
+static const char* szHelpPage1[] = {
+    "Arrow Key  : Rotate Camera",
+    "Num 2/4/6/8: Pan Move",
+    "F2 : Continuous animation effect",
+    "F3 : Orthographic/Perspective",
+    "F4 : Reset camera",
+    "F5 : Toggle boundary box",
+    "F6 : Toggle menu",
+    "F-D: Animation via variable"
+};
+
+void RedrawHelpPage() {
+    int i, iX, iY, iNum;
+    const char** szGuides;
+
+    Bdisp_AllClr_VRAM();
+    switch (g_iHelpPage) {
+        case 0:
+            DrawBitmap(18, 2, ICON_16);
+            PutText(40, 2, (const uchar *)"Plotter-Z");
+            PrintMini(40, 12, (const uchar *)"By Kuki Himekawa", 0);
+            iX = 12;
+            iY = 22;
+            szGuides = szHelpPage0;
+            iNum = 5;
+            break;
+        case 1:
+            iX = 0;
+            iY = 8;
+            szGuides = szHelpPage1;
+            iNum = 8;
+            PrintMini(50, 1, (const uchar *)"Graph", 0);
+            Bdisp_AreaReverseVRAM(0, 0, 127, 6);
+            break;
+    }
+    for (i = 0; i < iNum; ++i, iY += 6) {
+        PrintMini(iX, iY, (const uchar *)szGuides[i], 0);
+    }
+    /* Draw 'next page' icon */
+    DrawBitmap(107, B_MENU_TOP, MENU_NEXT);
+}
 
 void HelpStage() {
     uint uKey;
-    /* Redraw Help */
-    {
-        static const char* szGuide[] = {
-            "Arrow: Rotate   +/-: Zoom",
-            "Num 2/4/6/8: Pan Move",
-            "F2: Continuous animation effect",
-            "F3: Animation via variable",
-            "F4: Reset camera",
-            "F5: Toggle boundary box",
-            "F6: Toggle menu"
-        };
-        static const int iNum = sizeof(szGuide) / sizeof(szGuide[0]);
-        int i, iY;
-        Bdisp_AllClr_VRAM();
-        DrawBitmap(18, 2, ICON_16);
-        PutText(40, 2, (const uchar *)"Plotter-Z");
-        PrintMini(40, 12, (const uchar *)"By Kuki Himekawa", 0);
-        for (iY = 20, i = 0; i < iNum; ++i, iY += 6) {
-            PrintMini(2, iY, (const uchar *)szGuide[i], 0);
-        }
-    }
+    g_iHelpPage = 0;
     while (1) {
+        RedrawHelpPage();
         GetKey(&uKey);
         if (uKey == KEY_CTRL_EXIT || uKey == KEY_CTRL_EXE) {
             return;
+        }
+        else if (uKey == KEY_CTRL_F6) {
+            g_iHelpPage++;
+            if (g_iHelpPage >= HELP_PAGE_SIZE) {
+                g_iHelpPage = 0;
+            }
         }
     }
 }
@@ -1563,6 +1579,11 @@ int MainStage(void) {
  *====================================================*/
 int AddIn_main(int isAppli, unsigned short OptionNum) {
     pVRAM = GetVRAMAddress();
+    PzCamera_Initialize();
+    Camera.iViewportS = VRAM_HEIGHT / 2;
+    Camera.iViewportX = VRAM_WIDTH / 2;
+    Camera.iViewportY = VRAM_HEIGHT / 2;
+    WinEdit_ApplyDefault();
 
     /* Set up renderer-Z callback interfaces */
     RenderConfig_GetDefaultStyle(&g_RenderConfig);
