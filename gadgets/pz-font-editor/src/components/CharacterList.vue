@@ -8,14 +8,17 @@
         <div
           v-for="idx in charCount"
           :key="idx - 1"
-          class="flex flex-col items-center cursor-pointer border-2 rounded py-0.5"
+          class="flex flex-col items-center cursor-pointer border-2 rounded py-0.5 border-gray-300"
           :class="(idx - 1) === selectedIndex
             ? 'border-blue-500 bg-blue-50'
-            : 'border-transparent hover:border-gray-300'"
+            : 'hover:border-gray-400'"
           @click="$emit('select', idx - 1)"
         >
-          <span class="text-[10px] text-gray-500 w-full font-mono leading-tight text-left">
-            {{ formatTitle(idx - 1) }}
+          <span class="text-[10px] text-gray-500 w-full font-mono leading-tight text-center text-nowrap overflow-hidden text-ellipsis">
+            {{ formatHex(idx - 1) }}
+          </span>
+          <span class="text-[10px] text-gray-500 w-full font-mono leading-tight text-center text-nowrap overflow-hidden text-ellipsis mb-1">
+            {{ formatName(idx - 1) }}
           </span>
           <canvas
             :ref="(el) => setCanvasRef(idx - 1, el as HTMLCanvasElement)"
@@ -32,6 +35,7 @@
 <script setup lang="ts">
 import { watch, onMounted, nextTick, computed } from 'vue'
 import { getCharBitmap } from '../utils/fontParser'
+import { getCharName } from '../utils/fontMapping'
 
 const props = defineProps<{
   data: Uint8Array | null
@@ -41,6 +45,7 @@ const props = defineProps<{
   charCount: number
   selectedIndex: number
   dataVersion: number
+  varWidth: boolean
 }>()
 
 defineEmits<{
@@ -59,12 +64,15 @@ function setCanvasRef(index: number, el: HTMLCanvasElement) {
   }
 }
 
-function formatTitle(index: number): string {
-  const hex = '0x' + index.toString(16).toUpperCase().padStart(2, '0')
-  if (index >= 0x20 && index <= 0x7E) {
-    return hex + ' "' + String.fromCharCode(index) + '"'
+function formatHex(index: number): string {
+  return '0x' + index.toString(16).toUpperCase().padStart(2, '0')
+}
+
+function formatName(index: number): string {
+  if (index >= 0x21 && index <= 0x7E) {
+    return '"' + String.fromCharCode(index) + '"'
   }
-  return hex
+  return getCharName(index)
 }
 
 function drawChar(index: number) {
@@ -79,7 +87,7 @@ function drawChar(index: number) {
   if (canvas.height !== h) canvas.height = h
 
   ctx.clearRect(0, 0, w, h)
-  const bitmap = getCharBitmap(props.data, props.bytesPerChar, index, props.width, props.height)
+  const bitmap = getCharBitmap(props.data, props.bytesPerChar, index, props.width, props.height, props.varWidth)
 
   for (let row = 0; row < props.height; row++) {
     for (let col = 0; col < props.width; col++) {

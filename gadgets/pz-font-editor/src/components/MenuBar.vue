@@ -3,10 +3,25 @@
     <div class="max-w-6xl mx-auto flex items-center gap-2">
       <button
         class="inline-flex items-center gap-1 px-3 py-1.5 bg-white border border-gray-400 rounded text-sm hover:bg-gray-50 cursor-pointer select-none"
+        @click="openDialog('new')"
+      >
+        <FilePlus :size="16" />
+        New
+      </button>
+      <button
+        class="inline-flex items-center gap-1 px-3 py-1.5 bg-white border border-gray-400 rounded text-sm hover:bg-gray-50 cursor-pointer select-none"
         @click="openFile"
       >
         <FolderOpen :size="16" />
         Open
+      </button>
+      <button
+        class="inline-flex items-center gap-1 px-3 py-1.5 bg-white border border-gray-400 rounded text-sm hover:bg-gray-50 cursor-pointer select-none"
+        :disabled="!hasFont"
+        @click="openDialog('setting')"
+      >
+        <Settings :size="16" />
+        Setting
       </button>
       <button
         class="inline-flex items-center gap-1 px-3 py-1.5 bg-white border border-gray-400 rounded text-sm hover:bg-gray-50 cursor-pointer select-none disabled:opacity-50 disabled:cursor-not-allowed"
@@ -81,7 +96,7 @@
       </button>
 
       <span v-if="hasFont" class="text-sm text-gray-600 ml-2 select-none">
-        {{ config?.font_name }} ({{ config?.font_width }}×{{ config?.font_height }})
+        {{ config?.font_name }} ({{ config?.font_width }}×{{ config?.font_height }}){{ config?.var_width ? ' VW' : '' }}
       </span>
     </div>
   </div>
@@ -93,6 +108,87 @@
     class="hidden"
     @change="handleFileSelect"
   />
+
+  <Dialog
+    :open="dialogMode === 'new'"
+    title="New Font"
+    @confirm="handleNewConfirm"
+    @cancel="closeDialog"
+  >
+    <div class="flex flex-col gap-3">
+      <div class="flex items-center gap-3">
+        <label class="text-sm text-gray-600 select-none w-28">Variable Name:</label>
+        <input
+          ref="newVariableInput"
+          v-model="newCvar"
+          class="flex-1 px-2 py-1 border border-gray-300 rounded text-sm font-mono"
+          placeholder="FONT_EXAMPLE"
+          @keyup.enter="handleNewConfirm"
+        />
+      </div>
+      <div class="flex items-center gap-3">
+        <label class="text-sm text-gray-600 select-none w-28">Font Name:</label>
+        <input
+          v-model="newFontName"
+          class="flex-1 px-2 py-1 border border-gray-300 rounded text-sm font-mono"
+          placeholder="example"
+        />
+      </div>
+      <div class="flex items-center gap-3">
+        <label class="text-sm text-gray-600 select-none w-28">Width:</label>
+        <input
+          v-model.number="newWidth"
+          type="number"
+          min="1"
+          max="32"
+          class="w-20 px-2 py-1 border border-gray-300 rounded text-sm font-mono"
+        />
+        <label class="text-sm text-gray-600 select-none ml-4">Height:</label>
+        <input
+          v-model.number="newHeight"
+          type="number"
+          min="1"
+          max="64"
+          class="w-20 px-2 py-1 border border-gray-300 rounded text-sm font-mono"
+        />
+      </div>
+      <div class="flex items-center gap-3">
+        <label class="text-sm text-gray-600 select-none w-28">Variable Width:</label>
+        <input
+          v-model="newVarWidth"
+          type="checkbox"
+          class="w-4 h-4"
+        />
+      </div>
+    </div>
+  </Dialog>
+
+  <Dialog
+    :open="dialogMode === 'setting'"
+    title="Font Settings"
+    @confirm="handleSettingConfirm"
+    @cancel="closeDialog"
+  >
+    <div class="flex flex-col gap-3">
+      <div class="flex items-center gap-3">
+        <label class="text-sm text-gray-600 select-none w-28">Variable Name:</label>
+        <input
+          ref="settingVariableInput"
+          v-model="settingCvar"
+          class="flex-1 px-2 py-1 border border-gray-300 rounded text-sm font-mono"
+          @keyup.enter="handleSettingConfirm"
+        />
+      </div>
+      <div class="flex items-center gap-3">
+        <label class="text-sm text-gray-600 select-none w-28">Variable Width:</label>
+        <input
+          v-model="settingVarWidth"
+          type="checkbox"
+          class="w-4 h-4"
+        />
+      </div>
+    </div>
+  </Dialog>
 
   <Dialog
     :open="dialogMode === 'swap'"
@@ -174,6 +270,7 @@
       :bytes-per-char="bytesPerChar"
       :width="config?.font_width ?? 0"
       :height="config?.font_height ?? 0"
+      :var-width="config?.var_width ?? false"
     />
   </Dialog>
 </template>
@@ -181,8 +278,10 @@
 <script setup lang="ts">
 import { ref, nextTick } from 'vue'
 import {
+  FilePlus,
   FolderOpen,
   Download,
+  Settings,
   Brush,
   Eraser,
   Trash2,
@@ -194,7 +293,7 @@ import type { FontConfig } from '../utils/types'
 import Dialog from './Dialog.vue'
 import FontPreview from './FontPreview.vue'
 
-defineProps<{
+const props = defineProps<{
   hasFont: boolean
   config: FontConfig | null
   tool: 'brush' | 'eraser'
@@ -210,17 +309,30 @@ const emit = defineEmits<{
   'swap': [a: number, b: number]
   'duplicate': [src: number, dest: number]
   'duplicate-range': [sources: number[], dests: number[]]
+  'new-font': [config: FontConfig]
+  'update-settings': [c_variable: string, var_width: boolean]
 }>()
 
 const fileInput = ref<HTMLInputElement>()
 const swapInputA = ref<HTMLInputElement>()
 const dupInputSrc = ref<HTMLInputElement>()
 const previewRef = ref<InstanceType<typeof FontPreview>>()
+const newVariableInput = ref<HTMLInputElement>()
+const settingVariableInput = ref<HTMLInputElement>()
 
-const dialogMode = ref<'swap' | 'duplicate' | 'preview' | null>(null)
+const dialogMode = ref<'new' | 'setting' | 'swap' | 'duplicate' | 'preview' | null>(null)
 const hexA = ref('')
 const hexB = ref('')
 const dupError = ref<string | null>(null)
+
+const newCvar = ref('')
+const newFontName = ref('')
+const newWidth = ref(8)
+const newHeight = ref(16)
+const newVarWidth = ref(false)
+
+const settingCvar = ref('')
+const settingVarWidth = ref(false)
 
 function parseHex(s: string): number | null {
   const v = parseInt(s, 16)
@@ -253,18 +365,28 @@ function parseHexRange(raw: string): number[] | null {
   return null
 }
 
-function openDialog(mode: 'swap' | 'duplicate') {
+function openDialog(mode: 'new' | 'setting' | 'swap' | 'duplicate') {
   dialogMode.value = mode
   hexA.value = ''
   hexB.value = ''
   dupError.value = null
-  nextTick(() => {
-    if (mode === 'swap') {
-      swapInputA.value?.focus()
-    } else {
-      dupInputSrc.value?.focus()
-    }
-  })
+
+  if (mode === 'new') {
+    newCvar.value = props.config?.c_variable ?? ''
+    newFontName.value = props.config?.font_name ?? ''
+    newWidth.value = props.config?.font_width ?? 8
+    newHeight.value = props.config?.font_height ?? 16
+    newVarWidth.value = props.config?.var_width ?? false
+    nextTick(() => { newVariableInput.value?.focus() })
+  } else if (mode === 'setting') {
+    settingCvar.value = props.config?.c_variable ?? ''
+    settingVarWidth.value = props.config?.var_width ?? false
+    nextTick(() => { settingVariableInput.value?.focus() })
+  } else if (mode === 'swap') {
+    nextTick(() => { swapInputA.value?.focus() })
+  } else {
+    nextTick(() => { dupInputSrc.value?.focus() })
+  }
 }
 
 function closeDialog() {
@@ -276,6 +398,25 @@ function openPreview() {
   nextTick(() => {
     previewRef.value?.focus()
   })
+}
+
+function handleNewConfirm() {
+  if (!newCvar.value.trim() || !newFontName.value.trim()) return
+  const w = Math.max(1, Math.min(32, newWidth.value))
+  const h = Math.max(1, Math.min(64, newHeight.value))
+  emit('new-font', {
+    c_variable: newCvar.value.trim(),
+    font_name: newFontName.value.trim(),
+    font_width: w,
+    font_height: h,
+    var_width: newVarWidth.value,
+  })
+  closeDialog()
+}
+
+function handleSettingConfirm() {
+  emit('update-settings', settingCvar.value.trim(), settingVarWidth.value)
+  closeDialog()
 }
 
 function handleSwapConfirm() {

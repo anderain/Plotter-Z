@@ -18,6 +18,17 @@
         @mouseup="handleMouseUp"
         @mouseleave="handleMouseUp"
       />
+      <div v-if="varWidth" class="flex items-center gap-2">
+        <label class="text-sm text-gray-600 select-none">Char Width:</label>
+        <input
+          v-model.number="localCharWidth"
+          type="number"
+          :min="1"
+          :max="fontWidth"
+          class="w-16 px-2 py-1 border border-gray-300 rounded text-sm font-mono"
+          @input="onCharWidthInput"
+        />
+      </div>
       <button
         class="px-4 py-1.5 bg-blue-500 text-white rounded text-sm hover:bg-blue-600 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
         :disabled="!hasChanges"
@@ -38,10 +49,14 @@ const props = defineProps<{
   height: number
   selectedIndex: number
   tool: 'brush' | 'eraser'
+  varWidth: boolean
+  charWidth: number
+  fontWidth: number
 }>()
 
 const emit = defineEmits<{
   'apply': [bitmap: boolean[][]]
+  'apply-width': [width: number]
 }>()
 
 const canvasRef = ref<HTMLCanvasElement>()
@@ -54,14 +69,11 @@ const canvasHeight = computed(() => props.height * cellSize)
 
 const workingBitmap = ref<boolean[][] | null>(null)
 const hasChanges = ref(false)
+const localCharWidth = ref(props.charWidth)
 
-function cloneBitmap(b: boolean[][]): boolean[][] {
-  return b.map((row) => [...row])
-}
-
-function emptyBitmap(): boolean[][] {
-  return Array.from({ length: props.height }, () => Array(props.width).fill(false))
-}
+watch(() => props.charWidth, (v) => {
+  localCharWidth.value = v
+})
 
 watch(() => props.bitmap, (newVal) => {
   if (newVal) {
@@ -71,6 +83,14 @@ watch(() => props.bitmap, (newVal) => {
   }
   hasChanges.value = false
 })
+
+function cloneBitmap(b: boolean[][]): boolean[][] {
+  return b.map((row) => [...row])
+}
+
+function emptyBitmap(): boolean[][] {
+  return Array.from({ length: props.height }, () => Array(props.width).fill(false))
+}
 
 function draw() {
   const canvas = canvasRef.value
@@ -82,6 +102,14 @@ function draw() {
 
   ctx.fillStyle = '#f9fafb'
   ctx.fillRect(0, 0, canvas.width, canvas.height)
+
+  if (props.varWidth) {
+    const cw = localCharWidth.value
+    if (cw < props.width) {
+      ctx.fillStyle = '#fce4ec'
+      ctx.fillRect(cw * cellSize, 0, (props.width - cw) * cellSize, props.height * cellSize)
+    }
+  }
 
   const bm = workingBitmap.value
   if (!bm) return
@@ -110,6 +138,19 @@ function draw() {
     ctx.moveTo(col * cellSize, 0)
     ctx.lineTo(col * cellSize, props.height * cellSize)
     ctx.stroke()
+  }
+
+  if (props.varWidth) {
+    const cw = localCharWidth.value
+    if (cw > 0 && cw < props.width) {
+      ctx.strokeStyle = '#ef5350'
+      ctx.lineWidth = 2
+      const x = cw * cellSize
+      ctx.beginPath()
+      ctx.moveTo(x, 0)
+      ctx.lineTo(x, props.height * cellSize)
+      ctx.stroke()
+    }
   }
 }
 
@@ -166,6 +207,12 @@ function handleApply() {
   }
 }
 
+function onCharWidthInput() {
+  const w = Math.max(1, Math.min(props.fontWidth, localCharWidth.value))
+  localCharWidth.value = w
+  emit('apply-width', w)
+}
+
 function clearAll() {
   if (!workingBitmap.value) return
   const wasEmpty = workingBitmap.value.every((row) => row.every((p) => !p))
@@ -176,5 +223,7 @@ function clearAll() {
 
 defineExpose({ clearAll })
 
-watch(() => workingBitmap.value, draw, { deep: true })
+watch(() => [workingBitmap.value, localCharWidth.value], () => {
+  draw()
+}, { deep: true })
 </script>

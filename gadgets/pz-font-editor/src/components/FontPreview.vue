@@ -44,7 +44,7 @@
 
 <script setup lang="ts">
 import { ref, onMounted, nextTick } from 'vue'
-import { getCharBitmap } from '../utils/fontParser'
+import { getCharBitmap, getCharWidth } from '../utils/fontParser'
 import { mapUnicodeToBytes, bytesToCString } from '../utils/fontMapping'
 
 const props = defineProps<{
@@ -52,6 +52,7 @@ const props = defineProps<{
   bytesPerChar: number
   width: number
   height: number
+  varWidth: boolean
 }>()
 
 const rawText = ref('')
@@ -114,8 +115,22 @@ function draw(bytes: number[]) {
     return
   }
 
-  const charW = props.width * 2 + charSpacing
-  const totalW = bytes.length > 0 ? bytes.length * charW : 128
+  let totalW = 128
+  if (bytes.length > 0) {
+    if (props.varWidth) {
+      let sum = 0
+      for (const b of bytes) {
+        if (b >= 0 && b < 256) {
+          const cw = getCharWidth(props.data, props.bytesPerChar, b)
+          sum += cw * 2 + charSpacing
+        }
+      }
+      if (sum > 0) totalW = sum
+    } else {
+      const charW = props.width * 2 + charSpacing
+      totalW = bytes.length * charW
+    }
+  }
   const totalH = props.height * 2
 
   canvas.width = totalW
@@ -123,19 +138,26 @@ function draw(bytes: number[]) {
 
   ctx.clearRect(0, 0, canvas.width, canvas.height)
 
+  let offsetX = 0
+
   for (let bi = 0; bi < bytes.length; bi++) {
     const code = bytes[bi]
     if (code < 0 || code >= 256) continue
-    const bitmap = getCharBitmap(props.data, props.bytesPerChar, code, props.width, props.height)
-    const offsetX = bi * charW
+    const bitmap = getCharBitmap(props.data, props.bytesPerChar, code, props.width, props.height, props.varWidth)
+
+    const cw = props.varWidth ? getCharWidth(props.data, props.bytesPerChar, code) : props.width
+    const renderWidth = cw * 2
+
     for (let row = 0; row < props.height; row++) {
-      for (let col = 0; col < props.width; col++) {
+      for (let col = 0; col < renderWidth / 2; col++) {
         if (bitmap[row][col]) {
           ctx.fillStyle = '#1f2937'
           ctx.fillRect(offsetX + col * 2, row * 2, 2, 2)
         }
       }
     }
+
+    offsetX += renderWidth + charSpacing
   }
 }
 

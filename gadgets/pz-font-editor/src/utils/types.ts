@@ -3,6 +3,7 @@ export interface FontConfig {
   font_name: string
   font_width: number
   font_height: number
+  var_width: boolean
 }
 
 export interface FontData {
@@ -10,4 +11,5 @@ export interface FontData {
   data: Uint8Array
   bytesPerChar: number
   charCount: number
+  charWidths?: Uint8Array
 }

@@ -241,6 +241,102 @@ export function mapUnicodeToBytes(ch: string): { bytes: number[]; error: string 
   return { bytes: [], error: `No mapping for '${ch}' (U+${charCode.toString(16).toUpperCase()})` }
 }
 
+function buildCharNames(): string[] {
+  const names: string[] = new Array(256)
+  names[0x00] = 'TERMINUS'
+  names[0x01] = 'DEGREE'
+  names[0x02] = 'RADIAN_SUP'
+  names[0x03] = 'GRADIAN_SUP'
+  names[0x04] = 'DIVIDE'
+  names[0x05] = 'MULTIPLY'
+  names[0x06] = 'MIDDLE_DOT'
+  names[0x07] = 'EMPTY_RECT'
+  names[0x08] = 'CR_INDICATOR'
+  names[0x09] = 'EXP_E'
+  names[0x0A] = 'IMAG_I'
+  names[0x0B] = 'INFINITY'
+  names[0x0C] = 'ELLIPSIS'
+  names[0x0D] = 'LDQUOTE'
+  names[0x0E] = 'RDQUOTE'
+  names[0x0F] = 'LSQUOTE'
+  names[0x10] = 'RSQUOTE'
+  names[0x11] = 'YEN'
+  names[0x12] = 'POUND'
+  names[0x13] = 'LDBOOK'
+  names[0x14] = 'RDBOOK'
+  names[0x15] = 'ARROW_UP'
+  names[0x16] = 'ARROW_DOWN'
+  names[0x17] = 'ARROW_LEFT'
+  names[0x18] = 'ARROW_RIGHT'
+  names[0x19] = 'LDCORNER'
+  names[0x1A] = 'RDCORNER'
+  names[0x1B] = 'ARROW_NW'
+  names[0x1C] = 'ARROW_SE'
+  names[0x1D] = 'ARROW_SW'
+  names[0x1E] = 'ARROW_NE'
+  names[0x1F] = 'IDEO_PERIOD'
+  names[0x20] = 'SPACE'
+  for (let i = 0x21; i <= 0x7E; i++) {
+    names[i] = String.fromCharCode(i)
+  }
+  names[0x7F] = 'GREEK_FINAL_SIGMA'
+
+  const greekUpperNames = ['ALPHA', 'BETA', 'GAMMA', 'DELTA', 'EPSILON', 'ZETA', 'ETA', 'THETA',
+    'IOTA', 'KAPPA', 'LAMBDA', 'MU', 'NU', 'XI', 'OMICRON', 'PI',
+    'RHO', 'SIGMA', 'TAU', 'UPSILON', 'PHI', 'CHI', 'PSI', 'OMEGA']
+  for (let i = 0; i < 24; i++) {
+    names[0x80 + i] = 'GREEK_' + greekUpperNames[i]
+  }
+
+  const greekLowerNames = ['alpha', 'beta', 'gamma', 'delta', 'epsilon', 'zeta', 'eta', 'theta',
+    'iota', 'kappa', 'lambda', 'mu', 'nu', 'xi', 'omicron', 'pi',
+    'rho', 'sigma', 'tau', 'upsilon', 'phi', 'chi', 'psi', 'omega']
+  for (let i = 0; i < 24; i++) {
+    names[0x98 + i] = 'GREEK_' + greekLowerNames[i]
+  }
+
+  const katakana: [number, string][] = [
+    [0xB0, 'KA_WO'], [0xB1, 'KA_a'], [0xB2, 'KA_i'], [0xB3, 'KA_u'], [0xB4, 'KA_e'], [0xB5, 'KA_o'],
+    [0xB6, 'KA_YA'], [0xB7, 'KA_YU'], [0xB8, 'KA_YO'], [0xB9, 'KA_TSU'], [0xBA, 'KA_LONG'],
+    [0xBB, 'KA_A'], [0xBC, 'KA_I'], [0xBD, 'KA_U'], [0xBE, 'KA_E'], [0xBF, 'KA_O'],
+    [0xC0, 'KA_KA'], [0xC1, 'KA_KI'], [0xC2, 'KA_KU'], [0xC3, 'KA_KE'], [0xC4, 'KA_KO'],
+    [0xC5, 'KA_SA'], [0xC6, 'KA_SI'], [0xC7, 'KA_SU'], [0xC8, 'KA_SE'], [0xC9, 'KA_SO'],
+    [0xCA, 'KA_TA'], [0xCB, 'KA_TI'], [0xCC, 'KA_TU'], [0xCD, 'KA_TE'], [0xCE, 'KA_TO'],
+    [0xCF, 'KA_NA'], [0xD0, 'KA_NI'], [0xD1, 'KA_NU'], [0xD2, 'KA_NE'], [0xD3, 'KA_NO'],
+    [0xD4, 'KA_HA'], [0xD5, 'KA_HI'], [0xD6, 'KA_HU'], [0xD7, 'KA_HE'], [0xD8, 'KA_HO'],
+    [0xD9, 'KA_MA'], [0xDA, 'KA_MI'], [0xDB, 'KA_MU'], [0xDC, 'KA_ME'], [0xDD, 'KA_MO'],
+    [0xDE, 'KA_YA'], [0xDF, 'KA_YU'], [0xE0, 'KA_YO'], [0xE1, 'KA_RA'], [0xE2, 'KA_RI'],
+    [0xE3, 'KA_RU'], [0xE4, 'KA_RE'], [0xE5, 'KA_RO'], [0xE6, 'KA_WA'], [0xE7, 'KA_N'],
+  ]
+  for (const [byte, name] of katakana) {
+    names[byte] = name
+  }
+
+  names[0xE8] = 'DAKUTEN'
+  names[0xE9] = 'HANDAKUTEN'
+  names[0xEA] = 'IDEO_COMMA'
+
+  const math: [number, string][] = [
+    [0xEB, 'SQRT'], [0xEC, 'INTEGRAL'], [0xED, 'PLUSMINUS'], [0xEE, 'NOT_EQUAL'],
+    [0xEF, 'LEQ'], [0xF0, 'GEQ'], [0xF1, 'APPROX'], [0xF2, 'PARTIAL'],
+    [0xF3, 'ANGLE'], [0xF4, 'THEREFORE'], [0xF5, 'BECAUSE'], [0xF6, 'ELEMENT_OF'],
+    [0xF7, 'FOR_ALL'], [0xF8, 'EXISTS'], [0xF9, 'UNION'], [0xFA, 'INTERSECT'],
+    [0xFB, 'SUBSET'], [0xFC, 'SUPERSET'], [0xFD, 'EMPTY_SET'], [0xFE, 'PROPORTIONAL'],
+    [0xFF, 'NABLA'],
+  ]
+  for (const [byte, name] of math) {
+    names[byte] = name
+  }
+
+  return names
+}
+
+const CHAR_NAMES = buildCharNames()
+
+export function getCharName(index: number): string {
+  return CHAR_NAMES[index] ?? 'UNKNOWN'
+}
+
 export function bytesToCString(bytes: number[]): string {
   return bytes
     .map((b) => {

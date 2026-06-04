@@ -4,14 +4,19 @@ import { useFont } from './composables/useFont'
 import MenuBar from './components/MenuBar.vue'
 import EditorCanvas from './components/EditorCanvas.vue'
 import CharacterList from './components/CharacterList.vue'
+import type { FontConfig } from './utils/types'
 
 const {
   fontData,
   config,
   bitmap,
   selectedCharIndex,
+  currentCharWidth,
+  createNewFont,
+  updateSettings,
   loadFromContent,
   applyBitmap,
+  applyCharWidth,
   swapChars,
   duplicateChar,
   duplicateRange,
@@ -22,6 +27,17 @@ const {
 const tool = ref<'brush' | 'eraser'>('brush')
 const dataVersion = ref(0)
 const editorRef = ref<InstanceType<typeof EditorCanvas>>()
+
+function handleNewFont(cfg: FontConfig) {
+  createNewFont(cfg)
+  tool.value = 'brush'
+  dataVersion.value++
+}
+
+function handleUpdateSettings(c_variable: string, var_width: boolean) {
+  updateSettings(c_variable, var_width)
+  dataVersion.value++
+}
 
 function handleLoadFile(content: string) {
   const ok = loadFromContent(content)
@@ -45,6 +61,11 @@ function handleExport() {
 
 function handleApply(newBitmap: boolean[][]) {
   applyBitmap(newBitmap)
+  dataVersion.value++
+}
+
+function handleApplyWidth(w: number) {
+  applyCharWidth(w)
   dataVersion.value++
 }
 
@@ -84,6 +105,8 @@ function handleDuplicateRange(sources: number[], dests: number[]) {
       @swap="handleSwap"
       @duplicate="handleDuplicate"
       @duplicate-range="handleDuplicateRange"
+      @new-font="handleNewFont"
+      @update-settings="handleUpdateSettings"
     />
     <div class="flex-1 w-5xl mx-auto flex overflow-hidden">
       <div class="w-1/2 flex-1 overflow-auto flex items-start justify-center pt-4 border-r border-gray-200 bg-gray-50">
@@ -94,7 +117,11 @@ function handleDuplicateRange(sources: number[], dests: number[]) {
           :height="config?.font_height ?? 0"
           :selected-index="selectedCharIndex"
           :tool="tool"
+          :var-width="config?.var_width ?? false"
+          :char-width="currentCharWidth"
+          :font-width="config?.font_width ?? 0"
           @apply="handleApply"
+          @apply-width="handleApplyWidth"
         />
       </div>
       <div class="w-1/2 flex-shrink-0 overflow-hidden">
@@ -106,6 +133,7 @@ function handleDuplicateRange(sources: number[], dests: number[]) {
           :char-count="256"
           :selected-index="selectedCharIndex"
           :data-version="dataVersion"
+          :var-width="config?.var_width ?? false"
           @select="selectCharacter"
         />
       </div>
