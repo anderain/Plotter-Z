@@ -1332,54 +1332,64 @@ int SamplesStage(void) {
 /*====================================================
  * Help Stage
  *====================================================*/
-#define HELP_PAGE_SIZE 2
+#define HELP_PAGE_SIZE 3
 int g_iHelpPage;
 
 static const char* szHelpPage0[] = {
-    "F1: Edit Expression",
-    "F2: Edit Window Settings",
-    "F3: Samples",
-    "F4: Display Help",
-    "F6: Plot graph"
+    "Arrow Key: Rotate Camera",
+    "Num 2/4/6/8: Pan Move",
+    "+/-: Zoom",
+    "\xA9/\xB9: Field of view",
+    "F-D: Animation via variable",
+    "AC: Stop Animation"
 };
 
 static const char* szHelpPage1[] = {
-    "Arrow Key  : Rotate Camera",
-    "Num 2/4/6/8: Pan Move",
-    "F2 : Continuous animation effect",
-    "F3 : Orthographic/Perspective",
-    "F4 : Reset camera",
-    "F5 : Toggle boundary box",
-    "F6 : Toggle menu",
-    "F-D: Animation via variable"
+    "F1: Go Back",
+    "F2: Continuous animation effect",
+    "F3: Orthographic/Perspective",
+    "F4: Reset camera",
+    "F5: Toggle boundary box",
+    "F6: Toggle menu"
 };
 
 void RedrawHelpPage() {
     int i, iX, iY, iNum;
-    const char** szGuides;
+    const char** szGuides = NULL;
+    const char* szTitle = NULL;
 
     Bdisp_AllClr_VRAM();
     switch (g_iHelpPage) {
         case 0:
-            DrawBitmap(18, 2, ICON_16);
-            PutText(40, 2, (const uchar *)"Plotter-Z");
-            PrintMini(40, 12, (const uchar *)"By Kuki Himekawa", 0);
-            iX = 12;
-            iY = 22;
+            iX = 2;
+            iY = 8;
             szGuides = szHelpPage0;
-            iNum = 5;
+            iNum = sizeof(szHelpPage0) / sizeof(szHelpPage0[0]);
+            szTitle = "Page 1/3 - Graph";
             break;
         case 1:
-            iX = 0;
+            iX = 2;
             iY = 8;
             szGuides = szHelpPage1;
-            iNum = 8;
-            PrintMini(50, 1, (const uchar *)"Graph", 0);
-            Bdisp_AreaReverseVRAM(0, 0, 127, 6);
+            iNum = sizeof(szHelpPage0) / sizeof(szHelpPage0[0]);
+            szTitle = "Page 2/3 - Graph";
+            break;
+        case 2:
+            DrawBitmap(56, 16, ICON_16);
+            PutText(40, 34, (const uchar *)"Plotter-Z");
+            PrintMini(32, 44, (const uchar *)"By Kuki Himekawa", 0);
+            szTitle = "Page 3/3 - About Plotter-Z";
             break;
     }
-    for (i = 0; i < iNum; ++i, iY += 6) {
-        PrintMini(iX, iY, (const uchar *)szGuides[i], 0);
+    if (szTitle) {
+        int iWidth = strlen(szTitle) * 4;
+        PrintMini((VRAM_WIDTH - iWidth) / 2, 1, (const uchar *)szTitle, 0);
+        Bdisp_AreaReverseVRAM(0, 0, 127, 6);
+    }
+    if (szGuides) {
+        for (i = 0; i < iNum; ++i, iY += 6) {
+            PrintMini(iX, iY, (const uchar *)szGuides[i], 0);
+        }
     }
     /* Draw 'next page' icon */
     DrawBitmap(107, B_MENU_TOP, MENU_NEXT);
