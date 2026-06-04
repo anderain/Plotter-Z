@@ -411,6 +411,19 @@ void PzCamera_OrthoProjectFloat(PZ_FLOAT x, PZ_FLOAT y, PZ_FLOAT z, int *ox, int
     *oy = (int)(Camera.iViewportY + scale * ny);
 }
 
+void PzCamera_OrthoProjectFixed(PZ_FIXED x, PZ_FIXED y, PZ_FIXED z, int *ox, int *oy) {
+    PZ_FIXED_LONG iZoom = iZoomLevels[Camera.iZoomLevel];
+    PZ_FIXED_LONG iScale = ((Camera.iViewportS * iZoom + PZ_FIXED_HALF) >> PZ_FIXED_SHIFT);
+    PZ_FIXED_LONG nx, ny;
+
+    nx = PZ_FIXED_MUL(y, Camera.sinB) - PZ_FIXED_MUL(x, Camera.cosB);
+    ny = PZ_FIXED_MUL(PZ_FIXED_MUL(x, Camera.sinB) + PZ_FIXED_MUL(y, Camera.cosB), Camera.sinA)
+       - PZ_FIXED_MUL(z, Camera.cosA);
+
+    *ox = Camera.iViewportX + (int)((iScale * nx + PZ_FIXED_HALF) >> PZ_FIXED_SHIFT);
+    *oy = Camera.iViewportY + (int)((iScale * ny + PZ_FIXED_HALF) >> PZ_FIXED_SHIFT);
+}
+
 void PzCamera_PerspProjectFloat(PZ_FLOAT x, PZ_FLOAT y, PZ_FLOAT z, int *ox, int *oy) {
     PZ_FLOAT y1 = y * Camera.cosA - z * Camera.sinA;
     PZ_FLOAT z1 = y * Camera.sinA + z * Camera.cosA;
@@ -427,4 +440,32 @@ void PzCamera_PerspProjectFloat(PZ_FLOAT x, PZ_FLOAT y, PZ_FLOAT z, int *ox, int
 
     *ox = projX + Camera.iViewportX;
     *oy = projY + Camera.iViewportY;
+}
+
+void PzCamera_PerspProjectFixed(PZ_FIXED x, PZ_FIXED y, PZ_FIXED z, int *ox, int *oy) {
+    PZ_FIXED y1, z1, x2, z2;
+    PZ_FIXED_LONG iZoom, iFov;
+    PZ_FIXED_LONG iFovFixed, iDiv, iScale, iCombined;
+
+    /* Rotate around X axis */
+    y1 = PZ_FIXED_MUL(y, Camera.cosA) - PZ_FIXED_MUL(z, Camera.sinA);
+    z1 = PZ_FIXED_MUL(y, Camera.sinA) + PZ_FIXED_MUL(z, Camera.cosA);
+
+    /* Rotate around Y axis */
+    x2 = PZ_FIXED_MUL(x, Camera.cosB) + PZ_FIXED_MUL(z1, Camera.sinB);
+    z2 = -PZ_FIXED_MUL(x, Camera.sinB) + PZ_FIXED_MUL(z1, Camera.cosB);
+
+    /* Perspective division: scale = (fov / z2) * viewportS * zoom */
+    iFov = Camera.iFovLevel;
+    z2 += (PZ_FIXED)((PZ_FIXED_LONG)iFov << PZ_FIXED_SHIFT);
+    if (z2 < 1) z2 = 1;
+
+    iFovFixed = (PZ_FIXED_LONG)iFov << PZ_FIXED_SHIFT;
+    iDiv = ((iFovFixed << PZ_FIXED_SHIFT) / (PZ_FIXED_LONG)z2);
+    iZoom = iZoomLevels[Camera.iZoomLevel];
+    iScale = ((Camera.iViewportS * iZoom + PZ_FIXED_HALF) >> PZ_FIXED_SHIFT);
+    iCombined = ((iScale * iDiv + PZ_FIXED_HALF) >> PZ_FIXED_SHIFT);
+
+    *ox = Camera.iViewportX + (int)((iCombined * (PZ_FIXED_LONG)x2 + PZ_FIXED_HALF) >> PZ_FIXED_SHIFT);
+    *oy = Camera.iViewportY + (int)((iCombined * (PZ_FIXED_LONG)y1 + PZ_FIXED_HALF) >> PZ_FIXED_SHIFT);
 }

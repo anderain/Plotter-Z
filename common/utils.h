@@ -52,7 +52,7 @@ char*   Utils_StringViewDump                (const StringView* pSource);
 #   endif
 #endif
 
-#define PZ_FIXED_SHIFT     12
+#define PZ_FIXED_SHIFT     11
 #define PZ_FIXED_ONE       ((PZ_FIXED_LONG)(1 << PZ_FIXED_SHIFT))
 #define PZ_FIXED_HALF      ((PZ_FIXED_LONG)(1 << (PZ_FIXED_SHIFT - 1)))
 #define PZ_FIXED_NEG_ONE   (-PZ_FIXED_ONE)
@@ -91,7 +91,7 @@ int     Utils_IsLittleEndian    ();
  *****************************************/
 
 #define FOV_LEVEL_MIN   2
-#define FOV_LEVEL_MAX   10
+#define FOV_LEVEL_MAX   9
 
 typedef struct tagPzCamera {
     int iViewportX;
@@ -116,6 +116,8 @@ extern const int        iNumZoomLevel;
 void PzCamera_Initialize            ();
 void PzCamera_Reset                 (int, int);
 void PzCamera_OrthoProjectFloat     (PZ_FLOAT, PZ_FLOAT, PZ_FLOAT, int *, int *);
+void PzCamera_OrthoProjectFixed     (PZ_FIXED, PZ_FIXED, PZ_FIXED, int *, int *);
 void PzCamera_PerspProjectFloat     (PZ_FLOAT, PZ_FLOAT, PZ_FLOAT, int *, int *);
+void PzCamera_PerspProjectFixed     (PZ_FIXED, PZ_FIXED, PZ_FIXED, int *, int *);
 
 #endif
