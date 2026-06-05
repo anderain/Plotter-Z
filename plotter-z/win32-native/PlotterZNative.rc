@@ -45,7 +45,7 @@ CAPTION "About Plotter-Z"
 FONT 8, "Tahoma"
 BEGIN
     ICON            IDI_PLOTTERZNATIVE,IDC_STATIC,44,8,21,20
-    CTEXT           "Plotter-Z CE Version 0.1",IDC_STATIC,7,33,97,8,
+    CTEXT           "Plotter-Z CE Version 0.5",IDC_STATIC,7,33,97,8,
                     SS_NOPREFIX
     CTEXT           "Copyright (C) 2026",IDC_STATIC,7,56,97,8
     CTEXT           "Kuki Himekawa",IDC_STATIC,7,46,97,8
@@ -196,7 +196,9 @@ BEGIN
         MENUITEM "&Pan Move",                   IDM_VIEW_PAN_MOVE
         MENUITEM "&Zoom",                       IDM_VIEW_ZOOM
         MENUITEM "&Formula",                    IDM_VIEW_FORMULA
+        MENUITEM "Field of &View",              IDM_VIEW_FOV
         MENUITEM SEPARATOR
+        MENUITEM "Ortho / Persp",               IDM_VIEW_ORTHO_PERSP
         MENUITEM "&Reset",                      IDM_VIEW_RESET
         MENUITEM SEPARATOR
         MENUITEM "Toggle &Footer",              IDM_VIEW_TOGGLEFOOTER

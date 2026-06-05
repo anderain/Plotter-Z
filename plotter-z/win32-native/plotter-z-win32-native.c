@@ -88,75 +88,7 @@ static int g_iBarHeight      = 0;
 #define DEFAULT_EXPR "sin(sqr(x^2+y^2))*cos(sqr(x^2+y^2))"
 char szExpr[EXPR_MAX] = DEFAULT_EXPR;
 
-static const int iZoomLevels[] = {
-    PZ_FLOAT_TO_FIXED(0.20f),
-    PZ_FLOAT_TO_FIXED(0.30f),
-    PZ_FLOAT_TO_FIXED(0.40f),
-    PZ_FLOAT_TO_FIXED(0.50f),
-    PZ_FLOAT_TO_FIXED(0.60f),
-    PZ_FLOAT_TO_FIXED(0.70f),
-    PZ_FLOAT_TO_FIXED(0.80f),
-    PZ_FLOAT_TO_FIXED(0.90f),
-    (int)PZ_FIXED_ONE,
-    PZ_FLOAT_TO_FIXED(1.25f),
-    PZ_FLOAT_TO_FIXED(1.5f),
-    (int)PZ_FIXED_ONE * 2,
-    (int)PZ_FIXED_ONE * 3,
-    (int)PZ_FIXED_ONE * 4,
-    (int)PZ_FIXED_ONE * 6,
-    (int)PZ_FIXED_ONE * 8,
-};
-
-static const char* szZoomLevelText[] = {
-    "20%",
-    "30%",
-    "40%",
-    "50%",
-    "60%",
-    "70%",
-    "80%",
-    "90%",
-    "100%",
-    "125%",
-    "150%",
-    "200%",
-    "300%",
-    "400%",
-    "600%",
-    "800%"
-};
-
-const int iNumZoomLevel = sizeof(iZoomLevels) / sizeof(iZoomLevels[0]);
-
-#define DEFAULT_VIEW_ALPHA  30
-#define DEFAULT_VIEW_BETA   30
-#define ZOOM_LEVEL_DEFAULT  8
 #define GRID_MAX            30
-
-struct CameraStruct {
-    int iViewportX;
-    int iViewportY;
-    int iViewportS;
-    int iAlphaDeg;
-    int iBetaDeg;
-    PZ_FIXED cosA;  PZ_FIXED sinA;  PZ_FIXED cosB;  PZ_FIXED sinB;
-    PZ_FLOAT xMin;  PZ_FLOAT xMax;  int xGrid;
-    PZ_FLOAT yMin;  PZ_FLOAT yMax;  int yGrid;
-    PZ_FLOAT zMin;  PZ_FLOAT zMax;
-    int iZoomLevel;
-};
-
-struct CameraStruct DefaultCamera = {
-    0, 0, 0,
-    DEFAULT_VIEW_ALPHA, DEFAULT_VIEW_BETA,
-    0, 0, 0, 0,
-    -6.0f, 6.0f, 20,
-    -6.0f, 6.0f, 20,
-    -3.0f, 3.0f,
-    ZOOM_LEVEL_DEFAULT
-};
-
-struct CameraStruct Camera;
 
 PZ_FIXED zBuf[GRID_MAX * GRID_MAX];
 PZ_FIXED xBuf[GRID_MAX];
@@ -188,6 +120,7 @@ static int      g_iStage        = STAGE_IDLE;
 #define MOUSE_MODE_PAN_MOVE    1
 #define MOUSE_MODE_ZOOM        2
 #define MOUSE_MODE_FORMULA     3
+#define MOUSE_MODE_FOV         4
 
 static int      g_iMouseMode    = MOUSE_MODE_CAMERA;
 static int      g_bShowFooter   = 1;
@@ -195,11 +128,13 @@ static int      g_bMouseDown    = 0;
 static int      g_iMousePrevX   = 0;
 static int      g_iMousePrevY   = 0;
 static int      g_iZoomAccum    = 0;
+static int      g_iFovAccum     = 0;
 static int      g_iEscTrigger   = 0;
 static int      g_bPerformanceTest = 0;
 static int      g_nPaintCount      = 0;
 static DWORD    g_dwPerfStartTime  = 0;
 #define ZOOM_DRAG_THRESHOLD     15
+#define FOV_DRAG_THRESHOLD       10
 
 /*====================================================
  * 2bpp canvas (4-level grayscale, packed pixels)
@@ -604,18 +539,14 @@ static void rzPutChar(int x, int y, unsigned char ch) {
 }
 
 /*====================================================
- * 3D projection (fixed-point)
+ * Projection
  *====================================================*/
-static void xyz2xy(PZ_FIXED x, PZ_FIXED y, PZ_FIXED z, int *ox, int *oy) {
-    int iZoom = iZoomLevels[Camera.iZoomLevel];
-    int iScale = (int)(((int)Camera.iViewportS * iZoom + PZ_FIXED_HALF) >> PZ_FIXED_SHIFT);
-    int nx, ny;
-    nx = PZ_FIXED_MUL(y, Camera.sinB) - PZ_FIXED_MUL(x, Camera.cosB);
-    ny = PZ_FIXED_MUL(PZ_FIXED_MUL(x, Camera.sinB) + PZ_FIXED_MUL(y, Camera.cosB), Camera.sinA)
-       - PZ_FIXED_MUL(z, Camera.cosA);
-    *ox = Camera.iViewportX + (int)(((int)iScale * nx + PZ_FIXED_HALF) >> PZ_FIXED_SHIFT);
-    *oy = Camera.iViewportY + (int)(((int)iScale * ny + PZ_FIXED_HALF) >> PZ_FIXED_SHIFT);
-}
+#define ORTHOGRAPHIC    0
+#define PERSPECTIVE     1
+
+void (*xyz2xy)(PZ_FIXED, PZ_FIXED, PZ_FIXED, int*, int *) = PzCamera_OrthoProjectFixed;
+int g_iProjection = ORTHOGRAPHIC;
+
 
 /*====================================================
  * Draw surface wireframe onto the 2bpp canvas
@@ -726,9 +657,12 @@ static void redrawCanvas(HWND hWnd) {
 
         /* Center: mode display */
         {
-            static const char* szWideCenterText[] = { "Camera", "Pan Move", "Zoom", "Formula" };
-            static const char* szNarrowCenterText[] = { "[C]", "[P]", "[Z]", "[F]" };
-            const char* szCenter;
+            static const char* szWideCenterText[] = { "Camera", "Pan Move", "Zoom", "Formula", "FOV" };
+            static const char* szNarrowCenterText[] = { "C", "P", "Z", "F", "V" };
+            static const char* szProjection[] = { "ORTHO", "PERSP" };
+            static const char* szNarrowProjection[] = { "O", "P" };
+            const char* szMouseMode;
+            char szCenter[30];
 
             if (bIsWideCanvas) {
                 switch (g_iMouseMode) {
@@ -736,10 +670,11 @@ static void redrawCanvas(HWND hWnd) {
                     case MOUSE_MODE_PAN_MOVE:
                     case MOUSE_MODE_ZOOM:
                     case MOUSE_MODE_FORMULA:
-                        szCenter = szWideCenterText[g_iMouseMode];
+                    case MOUSE_MODE_FOV:
+                        szMouseMode = szWideCenterText[g_iMouseMode];
                         break;
                     default:
-                        szCenter = "?";
+                        szMouseMode = "?";
                         break;
                 }
             }
@@ -749,13 +684,19 @@ static void redrawCanvas(HWND hWnd) {
                     case MOUSE_MODE_PAN_MOVE:
                     case MOUSE_MODE_ZOOM:
                     case MOUSE_MODE_FORMULA:
-                        szCenter = szNarrowCenterText[g_iMouseMode];
+                    case MOUSE_MODE_FOV:
+                        szMouseMode = szNarrowCenterText[g_iMouseMode];
                         break;
                     default:
-                        szCenter = "?";
+                        szMouseMode = "?";
                         break;
                 }
             }
+            Salvia_Format(
+                szCenter, "%s,%s",
+                szMouseMode,
+                (bIsWideCanvas ? szProjection : szNarrowProjection)[g_iProjection]
+            );
             iLen = (int)strlen(szCenter) * CURRENT_FONT_WIDTH;
             putTextCanvas((g_iCanvasW - iLen) / 2, iStartY + 2,
                 (const unsigned char*)szCenter, COLOR_WHITE);
@@ -763,10 +704,10 @@ static void redrawCanvas(HWND hWnd) {
 
         /* Right: zoom%, (viewportX, viewportY) */
         if (bIsWideCanvas) {
-            Salvia_Format(szBuf, "%s(%d,%d)", szZoomLevelText[Camera.iZoomLevel], Camera.iViewportX, Camera.iViewportY);
+            Salvia_Format(szBuf, "%s(%d,%d)", szZoomLevels[Camera.iZoomLevel], Camera.iViewportX, Camera.iViewportY);
         }
         else {
-            Salvia_Format(szBuf, "%s", szZoomLevelText[Camera.iZoomLevel]);
+            Salvia_Format(szBuf, "%s", szZoomLevels[Camera.iZoomLevel]);
         }
         iLen = (int)strlen(szBuf) * CURRENT_FONT_WIDTH;
         putTextCanvas(g_iCanvasW - iLen - 2, iStartY + 2,
@@ -863,11 +804,7 @@ static void drawErrorScreen(HWND hWnd) {
  * Reset camera and formula position to defaults
  *====================================================*/
 static void resetView(HWND hWnd) {
-    Camera.iAlphaDeg  = DEFAULT_VIEW_ALPHA;
-    Camera.iBetaDeg   = DEFAULT_VIEW_BETA;
-    Camera.iViewportX = g_iCanvasW / 2;
-    Camera.iViewportY = g_iCanvasH / 2;
-    Camera.iZoomLevel = ZOOM_LEVEL_DEFAULT;
+    PzCamera_Reset(g_iCanvasW / 2, g_iCanvasH / 2);
     g_iExprPosX = 0;
     g_iExprPosY = 0;
     g_iZoomAccum = 0;
@@ -1399,10 +1336,8 @@ static void StartDebugDialog(HWND hWnd) {
     int iRet = DialogBox(hInst, MAKEINTRESOURCE(IDD_DEBUG), hWnd, (DLGPROC)DebugDlgProc);
     if (iRet == IDC_DEBUG_PERFTEST) {
         /* Reset to defaults */
-        memcpy(&Camera, &DefaultCamera, sizeof(Camera));
+        PzCamera_Reset(g_iCanvasW / 2, g_iCanvasH / 2);
         Camera.iViewportS = (g_iCanvasH < g_iCanvasW ? g_iCanvasH : g_iCanvasW) / 2;
-        Camera.iViewportX = g_iCanvasW / 2;
-        Camera.iViewportY = g_iCanvasH / 2;
         Utils_StringCopy(szExpr, EXPR_MAX, DEFAULT_EXPR);
         g_iExprPosX = 0;
         g_iExprPosY = 0;
@@ -2000,6 +1935,23 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
                     g_iMouseMode = MOUSE_MODE_FORMULA;
                     if (g_bShowFooter) { redrawCanvas(hWnd); InvalidateRect(hWnd, NULL, FALSE); }
                     break;
+                case IDM_VIEW_FOV:
+                    g_iMouseMode = MOUSE_MODE_FOV;
+                    g_iFovAccum = 0;
+                    if (g_bShowFooter) { redrawCanvas(hWnd); InvalidateRect(hWnd, NULL, FALSE); }
+                    break;
+                case IDM_VIEW_ORTHO_PERSP:
+                    g_iProjection = !g_iProjection;
+                    if (g_iProjection == ORTHOGRAPHIC) {
+                        xyz2xy = PzCamera_OrthoProjectFixed;
+                        if (g_iMouseMode == MOUSE_MODE_FOV)
+                            g_iMouseMode = MOUSE_MODE_CAMERA;
+                    } else {
+                        xyz2xy = PzCamera_PerspProjectFixed;
+                    }
+                    redrawCanvas(hWnd);
+                    InvalidateRect(hWnd, NULL, FALSE);
+                    break;
                 case IDM_VIEW_RESET:
                     resetView(hWnd);
                     break;
@@ -2060,7 +2012,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
                     return -1;
                 }
 
-                memcpy(&Camera, &DefaultCamera, sizeof(Camera));
+                PzCamera_Initialize();
 
                 Camera.iViewportS = (g_iCanvasH < g_iCanvasW ? g_iCanvasH : g_iCanvasW) / 2;
                 Camera.iViewportX = g_iCanvasW / 2;
@@ -2091,6 +2043,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
             if (g_iStage != STAGE_READY) break;
             g_bMouseDown = 0;
             g_iZoomAccum = 0;
+            g_iFovAccum = 0;
             ReleaseCapture();
             redrawCanvas(hWnd);
             InvalidateRect(hWnd, NULL, FALSE);
@@ -2135,6 +2088,18 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
                     case MOUSE_MODE_FORMULA:
                         g_iExprPosX += iDeltaX;
                         g_iExprPosY += iDeltaY;
+                        break;
+                    case MOUSE_MODE_FOV:
+                        g_iFovAccum -= iDeltaY;
+                        if (g_iFovAccum >= FOV_DRAG_THRESHOLD) {
+                            if (Camera.iFovLevel > FOV_LEVEL_MIN)
+                                Camera.iFovLevel--;
+                            g_iFovAccum = 0;
+                        } else if (g_iFovAccum <= -FOV_DRAG_THRESHOLD) {
+                            if (Camera.iFovLevel < FOV_LEVEL_MAX)
+                                Camera.iFovLevel++;
+                            g_iFovAccum = 0;
+                        }
                         break;
                     default:
                         break;
@@ -2195,6 +2160,12 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
                         redrawCanvas(hWnd);
                         InvalidateRect(hWnd, NULL, FALSE);
                         break;
+                    case 'V':
+                        g_iMouseMode = MOUSE_MODE_FOV;
+                        g_iFovAccum = 0;
+                        redrawCanvas(hWnd);
+                        InvalidateRect(hWnd, NULL, FALSE);
+                        break;
                     case 'R':
                         resetView(hWnd);
                         return 0;
@@ -2239,6 +2210,12 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
                         if (wParam == VK_RIGHT) { g_iExprPosX += 10; bRedraw = 1; }
                         if (wParam == VK_UP)    { g_iExprPosY -= 10; bRedraw = 1; }
                         if (wParam == VK_DOWN)  { g_iExprPosY += 10; bRedraw = 1; }
+                        break;
+                    case MOUSE_MODE_FOV:
+                        if (wParam == VK_UP && Camera.iFovLevel < FOV_LEVEL_MAX)
+                            { Camera.iFovLevel++; bRedraw = 1; }
+                        if (wParam == VK_DOWN && Camera.iFovLevel > FOV_LEVEL_MIN)
+                            { Camera.iFovLevel--; bRedraw = 1; }
                         break;
                     default:
                         break;

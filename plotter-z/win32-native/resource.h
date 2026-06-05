@@ -45,6 +45,7 @@
 #define IDM_HELP_ABOUT                  40006
 #define IDM_HELP_DEBUG                  40007
 #define IDM_FILE_REFRESH_THRESHOLD      40008
+#define IDM_VIEW_FOV                    40009
 #define IDM_VIEW_CAMERA                 40010
 #define IDM_VIEW_PAN_MOVE               40011
 #define IDM_VIEW_ZOOM                   40012
@@ -52,6 +53,7 @@
 #define IDM_VIEW_RESET                  40014
 #define IDM_VIEW_TOGGLEFOOTER           40015
 #define IDM_VIEW_TOGGLEBOX              40016
+#define IDM_VIEW_ORTHO_PERSP            40017
 #define IDM_EDIT_EXPRESSION             40020
 #define IDM_EDIT_WINDOW                 40021
 
@@ -60,7 +62,7 @@
 #ifdef APSTUDIO_INVOKED
 #ifndef APSTUDIO_READONLY_SYMBOLS
 #define _APS_NEXT_RESOURCE_VALUE        105
-#define _APS_NEXT_COMMAND_VALUE         40009
+#define _APS_NEXT_COMMAND_VALUE         40018
 #define _APS_NEXT_CONTROL_VALUE         1005
 #define _APS_NEXT_SYMED_VALUE           101
 #endif
