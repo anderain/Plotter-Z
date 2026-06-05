@@ -1,6 +1,14 @@
 #ifndef _PZ_UTILS_H_
 #define _PZ_UTILS_H_
 
+/* Palm OS check */
+
+#if defined(__MWERKS__) && (defined(__MC68K__) || defined(__PALMOS_TRAPS__))
+#   ifndef PLATFORM_PALM_OS
+#       define PLATFORM_PALM_OS 1
+#   endif
+#endif
+
 #ifndef BOOL
 #   define BOOL int
 #endif
@@ -12,7 +20,6 @@
 #ifndef FALSE
 #   define FALSE 0
 #endif
-
 
 /* String View */
 
@@ -45,7 +52,7 @@ char*   Utils_StringViewDump                (const StringView* pSource);
 #endif
 
 #ifndef PZ_FIXED_LONG
-#   if defined(__MWERKS__) && (defined(__MC68K__) || defined(__PALMOS_TRAPS__))
+#   ifdef PLATFORM_PALM_OS
 #       define PZ_FIXED_LONG long
 #   else
 #       define PZ_FIXED_LONG int
@@ -53,6 +60,7 @@ char*   Utils_StringViewDump                (const StringView* pSource);
 #endif
 
 #define PZ_FIXED_SHIFT     11
+
 #define PZ_FIXED_ONE       ((PZ_FIXED_LONG)(1 << PZ_FIXED_SHIFT))
 #define PZ_FIXED_HALF      ((PZ_FIXED_LONG)(1 << (PZ_FIXED_SHIFT - 1)))
 #define PZ_FIXED_NEG_ONE   (-PZ_FIXED_ONE)
@@ -89,7 +97,6 @@ int     Utils_IsLittleEndian    ();
 /*****************************************
  * Camera
  *****************************************/
-
 #define FOV_LEVEL_MIN   2
 #define FOV_LEVEL_MAX   9
 

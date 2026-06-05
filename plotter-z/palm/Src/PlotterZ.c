@@ -39,68 +39,33 @@ static Int16 g_iFormulaY = 0;
  * Camera and surface data
  *====================================================*/
 #define GRID_MAX            25
-#define ZOOM_LEVEL_DEFAULT  6
-#define DEFAULT_VIEW_ALPHA  30
-#define DEFAULT_VIEW_BETA   30
 
-struct CameraStruct {
-    Int16   iViewportX, iViewportY, iViewportS;
-    Int16   iAlphaDeg, iBetaDeg;
-    PZ_FIXED cosA, sinA, cosB, sinB;
-    PZ_FLOAT xMin, xMax; Int16 xGrid;
-    PZ_FLOAT yMin, yMax; Int16 yGrid;
-    PZ_FLOAT zMin, zMax;
-    Int16   iZoomLevel;
-};
-
-static const int arrZoomLevels[] = {
-    PZ_FLOAT_TO_FIXED(0.33f),
-    PZ_FLOAT_TO_FIXED(0.50f),
-    PZ_FLOAT_TO_FIXED(0.60f),
-    PZ_FLOAT_TO_FIXED(0.70f),
-    PZ_FLOAT_TO_FIXED(0.80f),
-    PZ_FLOAT_TO_FIXED(0.90f),
-    (int)PZ_FIXED_ONE,
-    PZ_FLOAT_TO_FIXED(1.25f),
-    PZ_FLOAT_TO_FIXED(1.50f),
-    (int)PZ_FIXED_ONE * 2,
-	(int)PZ_FIXED_ONE * 4,
-	(int)PZ_FIXED_ONE * 6
-};
-
-static const int iNumZoomLevel = sizeof(arrZoomLevels) / sizeof(arrZoomLevels[0]);
-
-static struct CameraStruct Camera = {
-    0, 0, 0,
-    DEFAULT_VIEW_ALPHA, DEFAULT_VIEW_BETA,
-    0, 0, 0, 0,
-    -6.0f, 6.0f, 15,
-    -6.0f, 6.0f, 15,
-    -3.0f, 3.0f,
-    ZOOM_LEVEL_DEFAULT
-};
 static PZ_FIXED zBuf[GRID_MAX * GRID_MAX];
 static PZ_FIXED xBuf[GRID_MAX];
 static PZ_FIXED yBuf[GRID_MAX];
 #define Z_BUF(x,y) (zBuf[(x) + (y) * Camera.xGrid])
 
 /* DrawForm interaction */
-static Int16 g_iDrawMode = 0; /* 0=Camera, 1=Pan Move, 2=Zoom */
+static Int16 g_iDrawMode = 0; /* 0=Camera, 1=Pan Move, 2=Zoom, 3=Fov */
 static Boolean g_bDrawBox = false;
+static Boolean g_bDrawFooter = true;
 static Boolean g_bDrawPenDown = false;
 static Int16 g_iDrawPrevX, g_iDrawPrevY;
 static Int16 g_iDrawZoomAccum = 0;
-static Int16 g_iSurfaceDragThreshold = 12;   /* ticks (120 ms at 100 ticks/s) */
-static Int16 g_iFormulaDragThreshold = 6;   /* ticks (60 ms at 100 ticks/s) */
+static Int16 g_iFovAccum = 0;
+static Int16 g_iSurfaceDragThreshold = 12;
+static Int16 g_iFormulaDragThreshold = 6;
 static UInt32 g_dwLastDrawUpdate = 0;
+
+#define FOV_DRAG_THRESHOLD 15
 
 #define DRAW_ZOOM_THRESHOLD 8
 
 #define CURRENT_FONT_WIDTH  6
 #define CURRENT_FONT_HEIGHT 8
 #define CORNER_SIZE         10
-#define CORNER_TEXT_X        2
-#define CORNER_TEXT_Y        1
+#define CORNER_TEXT_X      	2
+#define CORNER_TEXT_Y      	1
 
 /*********************************************************************
  * Internal Constants
@@ -109,7 +74,6 @@ static UInt32 g_dwLastDrawUpdate = 0;
 /* Define the minimum OS version we support */
 #define ourMinVersion    sysMakeROMVersion(3,0,0,sysROMStageDevelopment,0)
 #define kPalmOS20Version sysMakeROMVersion(2,0,0,sysROMStageDevelopment,0)
-
 
 static void * GetObjectPtr(UInt16 objectID) {
 	FormType * frmP;
@@ -270,18 +234,13 @@ static void renderFormula(void) {
 }
 
 /*====================================================
- * 3D projection (fixed-point)
+ * Projection
  *====================================================*/
-static void xyz2xy(PZ_FIXED x, PZ_FIXED y, PZ_FIXED z, Int16 *ox, Int16 *oy) {
-    long iZoom = arrZoomLevels[Camera.iZoomLevel];
-    long iScale = (long)(((long)Camera.iViewportS * iZoom + PZ_FIXED_HALF) >> PZ_FIXED_SHIFT);
-    long nx, ny;
-    nx = PZ_FIXED_MUL(x, Camera.cosB) - PZ_FIXED_MUL(y, Camera.sinB);
-    ny = PZ_FIXED_MUL(PZ_FIXED_MUL(x, Camera.sinB) + PZ_FIXED_MUL(y, Camera.cosB), Camera.sinA)
-       - PZ_FIXED_MUL(z, Camera.cosA);
-    *ox = (Int16)(Camera.iViewportX + (long)(((long)iScale * nx + PZ_FIXED_HALF) >> PZ_FIXED_SHIFT));
-    *oy = (Int16)(Camera.iViewportY + (long)(((long)iScale * ny + PZ_FIXED_HALF) >> PZ_FIXED_SHIFT));
-}
+#define ORTHOGRAPHIC    0
+#define PERSPECTIVE     1
+
+void (*xyz2xy)(PZ_FIXED, PZ_FIXED, PZ_FIXED, int*, int *) = PzCamera_OrthoProjectFixed;
+int g_iProjection = ORTHOGRAPHIC;
 
 /*====================================================
  * Recalculate surface geometry
@@ -380,9 +339,9 @@ static Boolean recalcSurface(void) {
  * Redraw wireframe on canvas
  *====================================================*/
 static void redrawCanvas(BmpBuffer* pBuf) {
-    Int16 ix, iy;
+    int ix, iy;
     PZ_FIXED z0, z1;
-    Int16 x0, y0, x1, y1;
+    int x0, y0, x1, y1;
 
     BmpBuffer_AllClear(pBuf);
 
@@ -686,40 +645,60 @@ static Boolean MainFormDoCommand(UInt16 command) {
  * Draw UI indicators on canvas
  *====================================================*/
 static void drawDrawUI(BmpBuffer* pBuf) {
-    Int16 iW, iH;
-    UInt8 chMode, chBox;
+    Int16 iW, iH, iBarY;
 
     iW = pBuf->iW;
     iH = pBuf->iH;
+    iBarY = (Int16)(iH - CURRENT_FONT_HEIGHT);
 
     /* Top-left: back icon */
     BmpBuffer_FillRect(pBuf, 0, 0, CORNER_SIZE, CORNER_SIZE, 1);
     BmpBuffer_PutChar(pBuf, CORNER_TEXT_X, CORNER_TEXT_Y, '\x17', 0);
 
-    /* Top-right: mode letter */
-    BmpBuffer_FillRect(pBuf, (Int16)(iW - CORNER_SIZE), 0,
-        CORNER_SIZE, CORNER_SIZE, 1);
-    switch (g_iDrawMode) {
-        case 0: chMode = 'C'; break;
-        case 1: chMode = 'P'; break;
-        case 2: chMode = 'Z'; break;
-        default: chMode = '?'; break;
+    if (!g_bDrawFooter) {
+        /* Footer hidden - show only H at bottom-right to re-show */
+        BmpBuffer_FillRect(pBuf, (Int16)(iW - CORNER_SIZE),
+            (Int16)(iH - CORNER_SIZE), CORNER_SIZE, CORNER_SIZE, 1);
+        BmpBuffer_PutChar(pBuf, (Int16)(iW - CORNER_SIZE + CORNER_TEXT_X),
+            (Int16)(iH - CORNER_SIZE + CORNER_TEXT_Y), 'H', 0);
+        return;
     }
-    BmpBuffer_PutChar(pBuf, (Int16)(iW - CORNER_SIZE + CORNER_TEXT_X),
-        CORNER_TEXT_Y, chMode, 0);
 
-    /* Bottom-left: bounding box toggle */
-    chBox = g_bDrawBox ? 'B' : 'b';
-    BmpBuffer_FillRect(pBuf, 0, (Int16)(iH - CORNER_SIZE),
-        CORNER_SIZE, CORNER_SIZE, 1);
-    BmpBuffer_PutChar(pBuf, CORNER_TEXT_X,
-        (Int16)(iH - CORNER_SIZE + CORNER_TEXT_Y), chBox, 0);
+    /* Clear footer area */
+    BmpBuffer_FillRect(pBuf, 0, iBarY, iW, CURRENT_FONT_HEIGHT, 0);
 
-    /* Bottom-right: reset */
-    BmpBuffer_FillRect(pBuf, (Int16)(iW - CORNER_SIZE),
-        (Int16)(iH - CORNER_SIZE), CORNER_SIZE, CORNER_SIZE, 1);
-    BmpBuffer_PutChar(pBuf, (Int16)(iW - CORNER_SIZE + CORNER_TEXT_X),
-        (Int16)(iH - CORNER_SIZE + CORNER_TEXT_Y), 'R', 0);
+    /* Bottom bar: draw text in color 1, then reverse bar */
+    {
+        /* Mode letters: C P Z [F] */
+        BmpBuffer_PutChar(pBuf, 3,  iBarY, 'C', 1);
+        BmpBuffer_PutChar(pBuf, 13, iBarY, 'P', 1);
+        BmpBuffer_PutChar(pBuf, 23, iBarY, 'Z', 1);
+        if (g_iProjection == PERSPECTIVE)
+            BmpBuffer_PutChar(pBuf, 33, iBarY, 'F', 1);
+
+        /* Middle: ORTHO/PERSP */
+        {
+            const char* szProj = (g_iProjection == ORTHOGRAPHIC) ? "ORTHO" : "PERSP";
+            Int16 iLen = (Int16)(5 * CURRENT_FONT_WIDTH);
+            BmpBuffer_PutText(pBuf, (Int16)((iW - iLen) / 2), iBarY,
+                (const UInt8*)szProj, 1);
+        }
+
+        /* Right: R B H */
+        BmpBuffer_PutChar(pBuf, (Int16)(iW - 30), iBarY, 'R', 1);
+        BmpBuffer_PutChar(pBuf, (Int16)(iW - 20), iBarY,
+            g_bDrawBox ? 'B' : 'b', 1);
+        BmpBuffer_PutChar(pBuf, (Int16)(iW - 10), iBarY, 'H', 1);
+    }
+
+    /* Invert entire bar */
+    BmpBuffer_InvertRect(pBuf, 0, iBarY, iW, CURRENT_FONT_HEIGHT);
+
+    /* Highlight selected mode */
+    {
+        Int16 iX = (Int16)(2 + g_iDrawMode * 10);
+        BmpBuffer_InvertRect(pBuf, iX, iBarY, 8, CURRENT_FONT_HEIGHT);
+    }
 }
 
 static Boolean DrawFormHandleEvent(EventType * eventP) {
@@ -731,9 +710,9 @@ static Boolean DrawFormHandleEvent(EventType * eventP) {
 		{
 			frmP = FrmGetActiveForm();
 			FrmDrawForm(frmP);
-			Camera.iViewportS = 80;
-			Camera.iViewportX = 80;
-			Camera.iViewportY = 80;
+			Camera.iViewportS = g_pBmpCanvas->iH / 2;
+			Camera.iViewportX = g_pBmpCanvas->iW / 2;
+			Camera.iViewportY = g_pBmpCanvas->iH / 2;
 
 			if (recalcSurface()) {
 				redrawCanvas(g_pBmpCanvas);
@@ -748,6 +727,7 @@ static Boolean DrawFormHandleEvent(EventType * eventP) {
 		{
 			Int16 iTapX = eventP->screenX;
 			Int16 iTapY = eventP->screenY;
+			Int16 iBarY = (Int16)(g_pBmpCanvas->iH - CURRENT_FONT_HEIGHT);
 
 			/* Top-left corner (back icon) */
 			if (iTapX >= 0 && iTapX < CORNER_SIZE
@@ -757,11 +737,83 @@ static Boolean DrawFormHandleEvent(EventType * eventP) {
 				break;
 			}
 
-			/* Top-right corner (mode switch) */
-			if (iTapX >= g_pBmpCanvas->iW - CORNER_SIZE
-			    && iTapX < g_pBmpCanvas->iW
-			    && iTapY >= 0 && iTapY < CORNER_SIZE) {
-				g_iDrawMode = (Int16)((g_iDrawMode + 1) % 3);
+			/* Bottom bar interaction */
+			if (g_bDrawFooter && iTapY >= iBarY) {
+				/* Left mode buttons: C P Z [F] */
+				if (iTapX < 42) {
+					Int16 iMode;
+					iMode = iTapX / 10;
+					if (iMode >= 0 && iMode < 3) {
+						g_iDrawMode = iMode;
+					} else if (iMode == 3 && g_iProjection == PERSPECTIVE) {
+						g_iDrawMode = 3;
+					} else {
+						handled = true;
+						break;
+					}
+					redrawCanvas(g_pBmpCanvas);
+					drawDrawUI(g_pBmpCanvas);
+					WinDrawBitmap(g_pBmpCanvas->pBmp, 0, 0);
+					handled = true;
+					break;
+				}
+
+				/* Middle: ORTHO/PERSP toggle */
+				if (iTapX >= 55 && iTapX <= 105) {
+					g_iProjection = !g_iProjection;
+					if (g_iProjection == ORTHOGRAPHIC) {
+						xyz2xy = PzCamera_OrthoProjectFixed;
+						if (g_iDrawMode == 3) g_iDrawMode = 0;
+					} else {
+						xyz2xy = PzCamera_PerspProjectFixed;
+					}
+					redrawCanvas(g_pBmpCanvas);
+					drawDrawUI(g_pBmpCanvas);
+					WinDrawBitmap(g_pBmpCanvas->pBmp, 0, 0);
+					handled = true;
+					break;
+				}
+
+				/* Right buttons: R B H */
+				{
+					Int16 iRightX = (Int16)(g_pBmpCanvas->iW - 30);
+					if (iTapX >= iRightX && iTapX < iRightX + 10) {
+						/* Reset */
+						PzCamera_Reset(g_pBmpCanvas->iW / 2, g_pBmpCanvas->iH / 2);
+						redrawCanvas(g_pBmpCanvas);
+						drawDrawUI(g_pBmpCanvas);
+						WinDrawBitmap(g_pBmpCanvas->pBmp, 0, 0);
+						handled = true;
+						break;
+					}
+					if (iTapX >= iRightX + 10 && iTapX < iRightX + 20) {
+						/* Toggle bounding box */
+						g_bDrawBox = !g_bDrawBox;
+						redrawCanvas(g_pBmpCanvas);
+						drawDrawUI(g_pBmpCanvas);
+						WinDrawBitmap(g_pBmpCanvas->pBmp, 0, 0);
+						handled = true;
+						break;
+					}
+					if (iTapX >= iRightX + 20 && iTapX < iRightX + 30) {
+						/* Toggle footer */
+						g_bDrawFooter = !g_bDrawFooter;
+						redrawCanvas(g_pBmpCanvas);
+						drawDrawUI(g_pBmpCanvas);
+						WinDrawBitmap(g_pBmpCanvas->pBmp, 0, 0);
+						handled = true;
+						break;
+					}
+				}
+				handled = true;
+				break;
+			}
+
+			/* Footer hidden: tap bottom-right to re-show */
+			if (!g_bDrawFooter
+			    && iTapX >= g_pBmpCanvas->iW - CORNER_SIZE
+			    && iTapY >= g_pBmpCanvas->iH - CORNER_SIZE) {
+				g_bDrawFooter = true;
 				redrawCanvas(g_pBmpCanvas);
 				drawDrawUI(g_pBmpCanvas);
 				WinDrawBitmap(g_pBmpCanvas->pBmp, 0, 0);
@@ -769,40 +821,12 @@ static Boolean DrawFormHandleEvent(EventType * eventP) {
 				break;
 			}
 
-			/* Bottom-left corner (bounding box toggle) */
-			if (iTapX >= 0 && iTapX < CORNER_SIZE
-			    && iTapY >= g_pBmpCanvas->iH - CORNER_SIZE
-			    && iTapY < g_pBmpCanvas->iH) {
-				g_bDrawBox = !g_bDrawBox;
-				redrawCanvas(g_pBmpCanvas);
-				drawDrawUI(g_pBmpCanvas);
-				WinDrawBitmap(g_pBmpCanvas->pBmp, 0, 0);
-				handled = true;
-				break;
-			}
-
-			/* Bottom-right corner (reset view) */
-			if (iTapX >= g_pBmpCanvas->iW - CORNER_SIZE
-			    && iTapX < g_pBmpCanvas->iW
-			    && iTapY >= g_pBmpCanvas->iH - CORNER_SIZE
-			    && iTapY < g_pBmpCanvas->iH) {
-				Camera.iAlphaDeg  = DEFAULT_VIEW_ALPHA;
-				Camera.iBetaDeg   = DEFAULT_VIEW_BETA;
-				Camera.iViewportX = (Int16)(g_pBmpCanvas->iW / 2);
-				Camera.iViewportY = (Int16)(g_pBmpCanvas->iH / 2);
-				Camera.iViewportS = (Int16)(g_pBmpCanvas->iH / 2);
-				Camera.iZoomLevel = ZOOM_LEVEL_DEFAULT;
-				redrawCanvas(g_pBmpCanvas);
-				drawDrawUI(g_pBmpCanvas);
-				WinDrawBitmap(g_pBmpCanvas->pBmp, 0, 0);
-				handled = true;
-				break;
-			}
-
+			/* Canvas drag (no footer interference) */
 			g_bDrawPenDown = true;
 			g_iDrawPrevX = iTapX;
 			g_iDrawPrevY = iTapY;
 			g_iDrawZoomAccum = 0;
+			g_iFovAccum = 0;
 			handled = true;
 			break;
 		}
@@ -849,6 +873,20 @@ static Boolean DrawFormHandleEvent(EventType * eventP) {
 							bChanged = true;
 						}
 						break;
+					case 3: /* Fov */
+						g_iFovAccum = (Int16)(g_iFovAccum - iDeltaY);
+						if (g_iFovAccum >= FOV_DRAG_THRESHOLD) {
+							if (Camera.iFovLevel > FOV_LEVEL_MIN)
+								Camera.iFovLevel--;
+							g_iFovAccum = 0;
+							bChanged = true;
+						} else if (g_iFovAccum <= -FOV_DRAG_THRESHOLD) {
+							if (Camera.iFovLevel < FOV_LEVEL_MAX)
+								Camera.iFovLevel++;
+							g_iFovAccum = 0;
+							bChanged = true;
+						}
+						break;
 				}
 
 				if (bChanged) {
@@ -874,6 +912,7 @@ static Boolean DrawFormHandleEvent(EventType * eventP) {
 			}
 			g_bDrawPenDown = false;
 			g_iDrawZoomAccum = 0;
+			g_iFovAccum = 0;
 			g_dwLastDrawUpdate = 0;
 			handled = true;
 			break;
@@ -1096,13 +1135,7 @@ static Err AppStart(void) {
 	g_RenderConfig.sInterfaces.putChar  = rzPutChar;
 
 	/* Initialize Camera defaults */
-	MemSet(&Camera, sizeof(Camera), 0);
-	Camera.iAlphaDeg  = DEFAULT_VIEW_ALPHA;
-	Camera.iBetaDeg   = DEFAULT_VIEW_BETA;
-	Camera.xMin = -6.0f;  Camera.xMax = 6.0f;   Camera.xGrid = 20;
-	Camera.yMin = -6.0f;  Camera.yMax = 6.0f;   Camera.yGrid = 20;
-	Camera.zMin = -3.0f;  Camera.zMax = 3.0f;
-	Camera.iZoomLevel = ZOOM_LEVEL_DEFAULT;
+	PzCamera_Initialize();
 
 	/* Read saved preferences */
 	prefsSize = sizeof(g_prefs);
