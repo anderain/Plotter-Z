@@ -245,6 +245,61 @@ int g_iProjection = ORTHOGRAPHIC;
 /*====================================================
  * Recalculate surface geometry
  *====================================================*/
+
+static void redrawRecalc(Int16 iPct) {
+	char szBuf[32];
+	Int16 iLen, iBarW, iBarH, iBarX, iBarY, iFillW;
+	Int16 iTextX, iTextY, iLabelY;
+	Int16 iCW, iCH;
+
+	iCW = g_pBmpCanvas->iW;
+	iCH = g_pBmpCanvas->iH;
+	iBarW = iCW * 2 / 3;
+	iBarH = CURRENT_FONT_HEIGHT * 2;
+	iBarX = (iCW - iBarW) / 2;
+	iBarY = (iCH - iBarH) / 2;
+
+	BmpBuffer_AllClear(g_pBmpCanvas);
+
+	/* "Recalc ..." label above bar */
+	iLen = (Int16)(StrLen("Recalc ...") * CURRENT_FONT_WIDTH);
+	iLabelY = iBarY - CURRENT_FONT_HEIGHT - 2;
+	if (iLabelY < 0) iLabelY = 0;
+	BmpBuffer_PutText(g_pBmpCanvas, (iCW - iLen) / 2,
+		iLabelY, (UInt8*)"Recalc ...", 1);
+
+	/* Progress bar fill */
+	BmpBuffer_FillRect(g_pBmpCanvas, iBarX, iBarY, iBarW, iBarH, 0);
+
+	/* Progress bar border */
+	BmpBuffer_PlotLine(g_pBmpCanvas,
+		iBarX, iBarY, (Int16)(iBarX + iBarW - 1), iBarY, 1);
+	BmpBuffer_PlotLine(g_pBmpCanvas,
+		iBarX, (Int16)(iBarY + iBarH - 1),
+		(Int16)(iBarX + iBarW - 1), (Int16)(iBarY + iBarH - 1), 1);
+	BmpBuffer_PlotLine(g_pBmpCanvas,
+		iBarX, iBarY, iBarX, (Int16)(iBarY + iBarH - 1), 1);
+	BmpBuffer_PlotLine(g_pBmpCanvas,
+		(Int16)(iBarX + iBarW - 1), iBarY,
+		(Int16)(iBarX + iBarW - 1), (Int16)(iBarY + iBarH - 1), 1);
+
+	/* Percentage text */
+	StrPrintF(szBuf, "%d%%", iPct);
+	iLen = (Int16)(StrLen(szBuf) * CURRENT_FONT_WIDTH);
+	iTextX = iBarX + (iBarW - iLen) / 2;
+	iTextY = iBarY + (iBarH - CURRENT_FONT_HEIGHT) / 2;
+	BmpBuffer_PutText(g_pBmpCanvas, iTextX, iTextY, (UInt8*)szBuf, 1);
+
+	/* Filled portion invert */
+	iFillW = iBarW * iPct / 100;
+	if (iFillW > iBarW) iFillW = iBarW;
+	if (iFillW > 0)
+		BmpBuffer_InvertRect(g_pBmpCanvas, iBarX + 1, iBarY + 1,
+			(Int16)(iFillW - 2), (Int16)(iBarH - 2));
+
+	WinDrawBitmap(g_pBmpCanvas->pBmp, 0, 0);
+}
+
 static Boolean recalcSurface(void) {
     Int16 ix, iy;
     PZ_FLOAT fXbuf[GRID_MAX], fYbuf[GRID_MAX];
@@ -258,6 +313,8 @@ static Boolean recalcSurface(void) {
     Int16 iLastPct = -1;
 
     if (g_pVm == NULL) return false;
+
+	redrawRecalc(0);
 
     for (ix = 0; ix < Camera.xGrid; ++ix)
         fXbuf[ix] = Camera.xMin + (Camera.xMax - Camera.xMin) * ix / (PZ_FLOAT)(Camera.xGrid - 1);
@@ -278,58 +335,8 @@ static Boolean recalcSurface(void) {
         }
         iPct = (Int16)((ix + 1) * 100 / Camera.xGrid);
         if (iPct != iLastPct) {
-            char szBuf[32];
-            Int16 iLen, iBarW, iBarH, iBarX, iBarY, iFillW;
-            Int16 iTextX, iTextY, iLabelY;
-            Int16 iCW, iCH;
-
-            iCW = g_pBmpCanvas->iW;
-            iCH = g_pBmpCanvas->iH;
-            iBarW = iCW * 2 / 3;
-            iBarH = CURRENT_FONT_HEIGHT * 2;
-            iBarX = (iCW - iBarW) / 2;
-            iBarY = (iCH - iBarH) / 2;
-
-            BmpBuffer_AllClear(g_pBmpCanvas);
-
-            /* "Recalc ..." label above bar */
-            iLen = (Int16)(StrLen("Recalc ...") * CURRENT_FONT_WIDTH);
-            iLabelY = iBarY - CURRENT_FONT_HEIGHT - 2;
-            if (iLabelY < 0) iLabelY = 0;
-            BmpBuffer_PutText(g_pBmpCanvas, (iCW - iLen) / 2,
-                iLabelY, (UInt8*)"Recalc ...", 1);
-
-            /* Progress bar fill */
-            BmpBuffer_FillRect(g_pBmpCanvas, iBarX, iBarY, iBarW, iBarH, 0);
-
-            /* Progress bar border */
-            BmpBuffer_PlotLine(g_pBmpCanvas,
-                iBarX, iBarY, (Int16)(iBarX + iBarW - 1), iBarY, 1);
-            BmpBuffer_PlotLine(g_pBmpCanvas,
-                iBarX, (Int16)(iBarY + iBarH - 1),
-                (Int16)(iBarX + iBarW - 1), (Int16)(iBarY + iBarH - 1), 1);
-            BmpBuffer_PlotLine(g_pBmpCanvas,
-                iBarX, iBarY, iBarX, (Int16)(iBarY + iBarH - 1), 1);
-            BmpBuffer_PlotLine(g_pBmpCanvas,
-                (Int16)(iBarX + iBarW - 1), iBarY,
-                (Int16)(iBarX + iBarW - 1), (Int16)(iBarY + iBarH - 1), 1);
-
-            /* Percentage text */
-            StrPrintF(szBuf, "%d%%", iPct);
-            iLen = (Int16)(StrLen(szBuf) * CURRENT_FONT_WIDTH);
-            iTextX = iBarX + (iBarW - iLen) / 2;
-            iTextY = iBarY + (iBarH - CURRENT_FONT_HEIGHT) / 2;
-            BmpBuffer_PutText(g_pBmpCanvas, iTextX, iTextY, (UInt8*)szBuf, 1);
-
-            /* Filled portion invert */
-            iFillW = iBarW * iPct / 100;
-            if (iFillW > iBarW) iFillW = iBarW;
-            if (iFillW > 0)
-                BmpBuffer_InvertRect(g_pBmpCanvas, iBarX + 1, iBarY + 1,
-                    (Int16)(iFillW - 2), (Int16)(iBarH - 2));
-
-            WinDrawBitmap(g_pBmpCanvas->pBmp, 0, 0);
-            iLastPct = iPct;
+			redrawRecalc(iPct);
+			iLastPct = iPct;
         }
     }
     return true;
