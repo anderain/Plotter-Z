@@ -78,7 +78,7 @@ BEGIN
 	    AUTOID AT (CENTER 23)
 	    FONT 7
 	LABEL 
-		"v 0.2"
+		"v 0.5"
 		AUTOID AT (67 39)
 	FIELD ID AboutVersionField AT (50 100 60 12)
 	    NONEDITABLE
