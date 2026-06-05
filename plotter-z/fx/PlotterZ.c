@@ -1336,59 +1336,55 @@ int SamplesStage(void) {
 int g_iHelpPage;
 
 static const char* szHelpPage0[] = {
-    "Arrow Key: Rotate Camera",
+    "Arrow: Rotate Camera",
     "Num 2/4/6/8: Pan Move",
     "+/-: Zoom",
-    "\xA9/\xB9: Field of view",
-    "F-D: Animation via variable",
+    "\x04/\x05: Field of view",
+    "F-D: Next Frame",
     "AC: Stop Animation"
 };
 
 static const char* szHelpPage1[] = {
     "F1: Go Back",
-    "F2: Continuous animation effect",
-    "F3: Orthographic/Perspective",
+    "F2: Play animation",
+    "F3: Ortho \x17\x18 Persp",
     "F4: Reset camera",
-    "F5: Toggle boundary box",
+    "F5: Boundary box",
     "F6: Toggle menu"
 };
 
-void RedrawHelpPage() {
-    int i, iX, iY, iNum;
+void DrawHelpPage() {
+    int i, iX = 0, iY = 8, iNum;
     const char** szGuides = NULL;
     const char* szTitle = NULL;
 
     Bdisp_AllClr_VRAM();
     switch (g_iHelpPage) {
         case 0:
-            iX = 2;
-            iY = 8;
             szGuides = szHelpPage0;
             iNum = sizeof(szHelpPage0) / sizeof(szHelpPage0[0]);
             szTitle = "Page 1/3 - Graph";
             break;
         case 1:
-            iX = 2;
-            iY = 8;
             szGuides = szHelpPage1;
             iNum = sizeof(szHelpPage0) / sizeof(szHelpPage0[0]);
             szTitle = "Page 2/3 - Graph";
             break;
         case 2:
             DrawBitmap(56, 16, ICON_16);
-            PutText(40, 34, (const uchar *)"Plotter-Z");
+            PutText(38, 34, (const uchar *)"Plotter-Z");
             PrintMini(32, 44, (const uchar *)"By Kuki Himekawa", 0);
-            szTitle = "Page 3/3 - About Plotter-Z";
+            szTitle = "Page 3/3 - About";
             break;
     }
     if (szTitle) {
-        int iWidth = strlen(szTitle) * 4;
-        PrintMini((VRAM_WIDTH - iWidth) / 2, 1, (const uchar *)szTitle, 0);
-        Bdisp_AreaReverseVRAM(0, 0, 127, 6);
+        int iWidth = strlen(szTitle) * 6;
+        PutText((VRAM_WIDTH - iWidth) / 2, 0, (const uchar *)szTitle);
+        Bdisp_AreaReverseVRAM(0, 0, 127, 7);
     }
     if (szGuides) {
-        for (i = 0; i < iNum; ++i, iY += 6) {
-            PrintMini(iX, iY, (const uchar *)szGuides[i], 0);
+        for (i = 0; i < iNum; ++i, iY += 8) {
+            PutText(iX, iY, (const uchar *)szGuides[i]);
         }
     }
     /* Draw 'next page' icon */
@@ -1399,7 +1395,7 @@ void HelpStage() {
     uint uKey;
     g_iHelpPage = 0;
     while (1) {
-        RedrawHelpPage();
+        DrawHelpPage();
         GetKey(&uKey);
         if (uKey == KEY_CTRL_EXIT || uKey == KEY_CTRL_EXE) {
             return;
@@ -1594,7 +1590,7 @@ int AddIn_main(int isAppli, unsigned short OptionNum) {
     Camera.iViewportX = VRAM_WIDTH / 2;
     Camera.iViewportY = VRAM_HEIGHT / 2;
     WinEdit_ApplyDefault();
-
+    
     /* Set up renderer-Z callback interfaces */
     RenderConfig_GetDefaultStyle(&g_RenderConfig);
     RenderConfig_CalculateBigSymbolPoints(&g_RenderConfig);
