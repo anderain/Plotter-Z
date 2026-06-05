@@ -121,310 +121,352 @@ void RenderNode_Destroy(RenderNode* pNode) {
     free(pNode);
 }
 
+static void transform(RenderNode* pParentHorz, const FzAstNode* pAstNode);
+
+static void transformUnaryOperator(RenderNode* pParentHorz, const FzAstNode* pAstNode) {
+    RenderNode* pTextOperator = createRenderNode(RN_TEXT);
+    pTextOperator->uData.sText.szText = Utils_StringDump(FzOperator_GetSymbolById(pAstNode->uData.sUnaryOperator.iOperatorId));
+    vlPushBack(pParentHorz->uData.sHorizontal.pList, pTextOperator);
+    transform(pParentHorz, pAstNode->uData.sUnaryOperator.pAstOperand);
+}
+
+static void transformBinaryOperator(RenderNode* pParentHorz, const FzAstNode* pAstNode) {
+    FzOperatorId iOprId = pAstNode->uData.sBinaryOperator.iOperatorId;
+    FzAstNode* pAstLeft;
+    FzAstNode* pAstRight;
+    RenderNode* pRenderNode;
+
+    if (iOprId == OPR_DIV) {
+        pRenderNode = createRenderNode(RN_STACK);
+
+        pAstLeft = pAstNode->uData.sBinaryOperator.pAstLeftOperand;
+        pAstRight = pAstNode->uData.sBinaryOperator.pAstRightOperand;
+
+        pRenderNode->uData.sStack.pTop = createRenderNode(RN_HORIZONTAL);
+        pRenderNode->uData.sStack.pBottom = createRenderNode(RN_HORIZONTAL);
+
+        if (pAstLeft->iType == AST_PAREN) pAstLeft = pAstLeft->uData.sParen.pAstExpr;
+        if (pAstRight->iType == AST_PAREN) pAstRight = pAstRight->uData.sParen.pAstExpr;
+
+        transform(pRenderNode->uData.sStack.pTop, pAstLeft);
+        transform(pRenderNode->uData.sStack.pBottom, pAstRight);
+
+        vlPushBack(pParentHorz->uData.sHorizontal.pList, pRenderNode);
+    }
+    else if (iOprId == OPR_POW) {
+        FzAstNode* pAstLeft = pAstNode->uData.sBinaryOperator.pAstLeftOperand;
+        FzAstNode* pAstRight = pAstNode->uData.sBinaryOperator.pAstRightOperand;
+
+        RenderNode* pRenderNode = createRenderNode(RN_SUPERSCRIPT);
+
+        pRenderNode->uData.sSuperscript.pBody = createRenderNode(RN_HORIZONTAL);
+        pRenderNode->uData.sSuperscript.pScript = createRenderNode(RN_HORIZONTAL);
+
+        transform(pRenderNode->uData.sSuperscript.pBody, pAstLeft);
+        transform(pRenderNode->uData.sSuperscript.pScript, pAstRight);
+
+        vlPushBack(pParentHorz->uData.sHorizontal.pList, pRenderNode);
+    }
+    else if (iOprId == OPR_MUL) {
+        pRenderNode = createRenderNode(RN_SPECIAL_CHAR);
+        pRenderNode->uData.sSpecialChar.c = PZ_AE_MIDDLE_DOT;
+        transform(pParentHorz, pAstNode->uData.sBinaryOperator.pAstLeftOperand);
+        vlPushBack(pParentHorz->uData.sHorizontal.pList, pRenderNode);
+        transform(pParentHorz, pAstNode->uData.sBinaryOperator.pAstRightOperand);
+    }
+    else {
+        if (iOprId == OPR_GTEQ) {
+            pRenderNode = createRenderNode(RN_SPECIAL_CHAR);
+            pRenderNode->uData.sSpecialChar.c = PZ_AE_GEQ;
+        }
+        else if (iOprId == OPR_LTEQ) {
+            pRenderNode = createRenderNode(RN_SPECIAL_CHAR);
+            pRenderNode->uData.sSpecialChar.c = PZ_AE_LEQ;
+        }
+        else {
+            pRenderNode = createRenderNode(RN_TEXT);
+            pRenderNode->uData.sText.szText = Utils_StringDump(FzOperator_GetSymbolById(iOprId));
+        }
+        transform(pParentHorz, pAstNode->uData.sBinaryOperator.pAstLeftOperand);
+        vlPushBack(pParentHorz->uData.sHorizontal.pList, pRenderNode);
+        transform(pParentHorz, pAstNode->uData.sBinaryOperator.pAstRightOperand);
+    }
+}
+
+static void transformVariable(RenderNode* pParentHorz, const FzAstNode* pAstNode) {
+    unsigned char ucSpecialChar = 0;
+    int i;
+    RenderNode* pRenderNode;
+
+    for (i = 0; SpecialCharMapping[i].szToken != NULL; ++i) {
+        if (Utils_StringViewEqual(&pAstNode->uData.sVariable.svName, SpecialCharMapping[i].szToken)) {
+            ucSpecialChar = SpecialCharMapping[i].ucSpecial;
+        }
+    }
+    if (ucSpecialChar > 0) {
+        pRenderNode = createRenderNode(RN_SPECIAL_CHAR);
+        pRenderNode->uData.sSpecialChar.c = ucSpecialChar;
+        vlPushBack(pParentHorz->uData.sHorizontal.pList, pRenderNode);
+    }
+    else {
+        pRenderNode = createRenderNode(RN_TEXT);
+        pRenderNode->uData.sText.szText = Utils_StringViewDump(&pAstNode->uData.sVariable.svName);
+        vlPushBack(pParentHorz->uData.sHorizontal.pList, pRenderNode);
+    }
+}
+
+static void transformBigSymbol(RenderNode* pParentHorz, const FzAstNode* pAstNode, const StringView* psvFuncName) {
+    RenderNode* pOverunder = createRenderNode(RN_OVERUNDER);
+    RenderNode* pOver = createRenderNode(RN_HORIZONTAL);
+    RenderNode* pSymbol = createRenderNode(RN_BIG_SYMBOL);
+    RenderNode* pEqual = createRenderNode(RN_SPECIAL_CHAR);
+    RenderNode* pUnder = createRenderNode(RN_HORIZONTAL);
+    RenderNode* pRemaining = createRenderNode(RN_ENCLOSURE);
+    VlistNode* pArg1st = pAstNode->uData.sFunctionCall.pListArguments->pHead;
+    VlistNode* pArg2nd = pArg1st->pNext;
+    VlistNode* pArg3rd = pArg2nd->pNext;
+    VlistNode* pArg4th = pArg3rd->pNext;
+
+    switch (psvFuncName->pBegin[0]) {
+        case 's': pSymbol->uData.sBigSymbol.iType = ST_SUM; break;
+        case 'p': pSymbol->uData.sBigSymbol.iType = ST_PRD; break;
+        default: pSymbol->uData.sBigSymbol.iType = ST_NONE;
+    }
+
+    /* Under part: [var] [=] [expr] */
+    transform(pUnder, (const FzAstNode *)pArg1st->pData);
+    pEqual->uData.sSpecialChar.c = '=';
+    vlPushBack(pUnder->uData.sHorizontal.pList, pEqual);
+    transform(pUnder, (const FzAstNode *)pArg2nd->pData);
+
+    /* Over part: [expr] */
+    transform(pOver, (const FzAstNode *)pArg3rd->pData);
+
+    pOverunder->uData.sOverunder.pBase = pSymbol;
+    pOverunder->uData.sOverunder.pOver = pOver;
+    pOverunder->uData.sOverunder.pUnder = pUnder;
+
+    vlPushBack(pParentHorz->uData.sHorizontal.pList, pOverunder);
+
+    /* 4th argument as remaining */
+    pRemaining->uData.sEnclosure.pContent = createRenderNode(RN_HORIZONTAL);
+    transform(pRemaining->uData.sEnclosure.pContent, (const FzAstNode *)pArg4th->pData);
+    vlPushBack(pParentHorz->uData.sHorizontal.pList, pRemaining);
+}
+
+static void transformDefiniteIntegral(RenderNode* pParentHorz, const FzAstNode* pAstNode) {
+    RenderNode* pOverunder = createRenderNode(RN_OVERUNDER);
+    RenderNode* pOver = createRenderNode(RN_HORIZONTAL);
+    RenderNode* pSymbol = createRenderNode(RN_BIG_SYMBOL);
+    RenderNode* pUnder = createRenderNode(RN_HORIZONTAL);
+    RenderNode* pRemaining = createRenderNode(RN_HORIZONTAL);
+    RenderNode* pAppended = createRenderNode(RN_HORIZONTAL);
+    RenderNode* pCharD = createRenderNode(RN_SPECIAL_CHAR);
+
+    VlistNode* pArg1st = pAstNode->uData.sFunctionCall.pListArguments->pHead;
+    VlistNode* pArg2nd = pArg1st->pNext;
+    VlistNode* pArg3rd = pArg2nd->pNext;
+    VlistNode* pArg4th = pArg3rd->pNext;
+
+    pSymbol->uData.sBigSymbol.iType = ST_INT;
+
+    /* Under part */
+    transform(pUnder, (const FzAstNode *)pArg2nd->pData);
+
+    /* Over part: [expr] */
+    transform(pOver, (const FzAstNode *)pArg3rd->pData);
+
+    pOverunder->uData.sOverunder.pBase = pSymbol;
+    pOverunder->uData.sOverunder.pOver = pOver;
+    pOverunder->uData.sOverunder.pUnder = pUnder;
+
+    vlPushBack(pParentHorz->uData.sHorizontal.pList, pOverunder);
+
+    /* 4th argument as remaining */
+    transform(pRemaining, (const FzAstNode *)pArg4th->pData);
+    vlPushBack(pParentHorz->uData.sHorizontal.pList, pRemaining);
+
+    /* [d][var] */
+    pCharD->uData.sSpecialChar.c = 'd';
+    vlPushBack(pAppended->uData.sHorizontal.pList, pCharD);
+    transform(pAppended, (const FzAstNode *)pArg1st->pData);
+    vlPushBack(pParentHorz->uData.sHorizontal.pList, pAppended);
+}
+
+static void transformIndefiniteIntegral(RenderNode* pParentHorz, const FzAstNode* pAstNode) {
+    RenderNode* pOverunder = createRenderNode(RN_OVERUNDER);
+    RenderNode* pSymbol = createRenderNode(RN_BIG_SYMBOL);
+    RenderNode* pRemaining = createRenderNode(RN_HORIZONTAL);
+    RenderNode* pAppended = createRenderNode(RN_HORIZONTAL);
+    RenderNode* pCharD = createRenderNode(RN_SPECIAL_CHAR);
+
+    VlistNode* pArg1st = pAstNode->uData.sFunctionCall.pListArguments->pHead;
+    VlistNode* pArg2nd = pArg1st->pNext;
+
+    pSymbol->uData.sBigSymbol.iType = ST_INT;
+
+    pOverunder->uData.sOverunder.pBase = pSymbol;
+    pOverunder->uData.sOverunder.pOver = NULL;
+    pOverunder->uData.sOverunder.pUnder = NULL;
+
+    vlPushBack(pParentHorz->uData.sHorizontal.pList, pOverunder);
+
+    /* 4th argument as remaining */
+    transform(pRemaining, (const FzAstNode *)pArg2nd->pData);
+    vlPushBack(pParentHorz->uData.sHorizontal.pList, pRemaining);
+
+    /* [d][var] */
+    pCharD->uData.sSpecialChar.c = 'd';
+    vlPushBack(pAppended->uData.sHorizontal.pList, pCharD);
+    transform(pAppended, (const FzAstNode *)pArg1st->pData);
+    vlPushBack(pParentHorz->uData.sHorizontal.pList, pAppended);
+}
+
+static void transformLimitLike(RenderNode* pParentHorz, const FzAstNode* pAstNode, const StringView* psvFuncName) {
+    RenderNode* pOverunder = createRenderNode(RN_OVERUNDER);
+    RenderNode* pLimitText = createRenderNode(RN_TEXT);
+    RenderNode* pArrow = createRenderNode(RN_SPECIAL_CHAR);
+    RenderNode* pUnder = createRenderNode(RN_HORIZONTAL);
+    RenderNode* pRemaining = createRenderNode(RN_ENCLOSURE);
+
+    VlistNode* pArg1st = pAstNode->uData.sFunctionCall.pListArguments->pHead;
+    VlistNode* pArg2nd = pArg1st->pNext;
+    VlistNode* pArg3rd = pArg2nd->pNext;
+    
+    pLimitText->uData.sText.szText = Utils_StringViewDump(psvFuncName);
+
+    /* Under part: [var] [->] [expr] */
+    transform(pUnder, (const FzAstNode *)pArg1st->pData);
+    pArrow->uData.sSpecialChar.c = PZ_AE_ARROW_RIGHT;
+    vlPushBack(pUnder->uData.sHorizontal.pList, pArrow);
+    transform(pUnder, (const FzAstNode *)pArg2nd->pData);
+
+    pOverunder->uData.sOverunder.pBase = pLimitText;
+    pOverunder->uData.sOverunder.pOver = NULL;
+    pOverunder->uData.sOverunder.pUnder = pUnder;
+
+    vlPushBack(pParentHorz->uData.sHorizontal.pList, pOverunder);
+
+    /* 4th argument as remaining */
+    pRemaining->uData.sEnclosure.pContent = createRenderNode(RN_HORIZONTAL);
+    transform(pRemaining->uData.sEnclosure.pContent, (const FzAstNode *)pArg3rd->pData);
+    vlPushBack(pParentHorz->uData.sHorizontal.pList, pRemaining);
+}
+
+static void transformPlainFunction(RenderNode* pParentHorz, const FzAstNode* pAstNode) {
+    VlistNode* pParam = NULL;
+    RenderNode* pFuncName = createRenderNode(RN_TEXT);
+    RenderNode* pEnclosureNode = createRenderNode(RN_ENCLOSURE);
+    RenderNode* pChildHorz = createRenderNode(RN_HORIZONTAL);
+
+    pFuncName->uData.sText.szText = Utils_StringViewDump(&pAstNode->uData.sFunctionCall.svFunction);
+    vlPushBack(pParentHorz->uData.sHorizontal.pList, pFuncName);
+
+    pEnclosureNode->uData.sEnclosure.pContent = pChildHorz;
+    for (
+        pParam = pAstNode->uData.sFunctionCall.pListArguments->pHead;
+        pParam != NULL;
+        pParam = pParam->pNext
+    ) {
+        transform(pChildHorz, (const FzAstNode *)pParam->pData);
+        if (pParam->pNext != NULL) { /* Not last parameter */
+            RenderNode* pSpecialCharNode = createRenderNode(RN_SPECIAL_CHAR);
+            pSpecialCharNode->uData.sSpecialChar.c = ',';
+            vlPushBack(pChildHorz->uData.sHorizontal.pList, pSpecialCharNode);
+        }
+    }
+    vlPushBack(pParentHorz->uData.sHorizontal.pList, pEnclosureNode);
+}
+
+static void transformFunctionCall(RenderNode* pParentHorz, const FzAstNode* pAstNode) {
+    const StringView* psvFuncName = &pAstNode->uData.sFunctionCall.svFunction;
+    int iNumArg = pAstNode->uData.sFunctionCall.pListArguments->iSize;
+    RenderNode* pRenderNode;
+    const FzAstNode* pAstFirstArg;
+
+    if (iNumArg == 1) {
+        pAstFirstArg = (const FzAstNode *)pAstNode->uData.sFunctionCall.pListArguments->pHead->pData;
+    }
+
+    if (Utils_StringViewEqual(psvFuncName, "sqr") && iNumArg == 1) {
+        pRenderNode = createRenderNode(RN_ROOT);
+        pRenderNode->uData.sRoot.pContent = createRenderNode(RN_HORIZONTAL);
+        transform(pRenderNode->uData.sRoot.pContent, pAstFirstArg);
+
+        vlPushBack(pParentHorz->uData.sHorizontal.pList, pRenderNode);
+    }
+    else if (Utils_StringViewEqual(psvFuncName, "exp") && iNumArg == 1) {
+        pRenderNode = createRenderNode(RN_SUPERSCRIPT);
+
+        pRenderNode->uData.sSuperscript.pBody = createRenderNode(RN_SPECIAL_CHAR);
+        pRenderNode->uData.sSuperscript.pScript = createRenderNode(RN_HORIZONTAL);
+
+        pRenderNode->uData.sSuperscript.pBody->uData.sSpecialChar.c = PZ_AE_EXP_E;
+        transform(pRenderNode->uData.sSuperscript.pScript, pAstFirstArg);
+
+        vlPushBack(pParentHorz->uData.sHorizontal.pList, pRenderNode);
+    }
+    else if (Utils_StringViewEqual(psvFuncName, "abs") && iNumArg == 1) {
+        pRenderNode = createRenderNode(RN_ENCLOSURE);
+
+        pRenderNode->uData.sEnclosure.pContent = createRenderNode(RN_HORIZONTAL);
+        transform(pRenderNode->uData.sEnclosure.pContent, pAstFirstArg);
+
+        pRenderNode->uData.sEnclosure.bCurve = 0;
+        vlPushBack(pParentHorz->uData.sHorizontal.pList, pRenderNode);
+    }
+    else if ((
+        Utils_StringViewEqual(psvFuncName, "sum") ||
+        Utils_StringViewEqual(psvFuncName, "prd")
+    ) && iNumArg == 4) {
+        transformBigSymbol(pParentHorz, pAstNode, psvFuncName);
+    }
+    else if (Utils_StringViewEqual(psvFuncName, "int") && iNumArg == 4) {
+        transformDefiniteIntegral(pParentHorz, pAstNode);
+    }
+    else if (Utils_StringViewEqual(psvFuncName, "int") && iNumArg == 2) {
+        transformIndefiniteIntegral(pParentHorz, pAstNode);
+        
+    }
+    else if (Utils_StringViewEqual(psvFuncName, "lim") && iNumArg == 3) {
+        transformLimitLike(pParentHorz, pAstNode, psvFuncName);
+    }
+    else {
+        transformPlainFunction(pParentHorz, pAstNode);
+    }
+}
+
 static void transform(RenderNode* pParentHorz, const FzAstNode* pAstNode) {
+    RenderNode* pRenderNode;
+
     switch (pAstNode->iType){
         case AST_UNARY_OPERATOR: {
-            RenderNode* pTextOperator = createRenderNode(RN_TEXT);
-            pTextOperator->uData.sText.szText = Utils_StringDump(FzOperator_GetSymbolById(pAstNode->uData.sUnaryOperator.iOperatorId));
-            vlPushBack(pParentHorz->uData.sHorizontal.pList, pTextOperator);
-            transform(pParentHorz, pAstNode->uData.sUnaryOperator.pAstOperand);
+            transformUnaryOperator(pParentHorz, pAstNode);
             break;
         }
         case AST_BINARY_OPERATOR: {
-            FzOperatorId iOprId = pAstNode->uData.sBinaryOperator.iOperatorId;
-            if (iOprId == OPR_DIV) {
-                RenderNode* pStackNode = createRenderNode(RN_STACK);
-                RenderNode* pTop = createRenderNode(RN_HORIZONTAL);
-                RenderNode* pBottom = createRenderNode(RN_HORIZONTAL);
-                FzAstNode* pAstLeft = pAstNode->uData.sBinaryOperator.pAstLeftOperand;
-                FzAstNode* pAstRight = pAstNode->uData.sBinaryOperator.pAstRightOperand;
-
-                pStackNode->uData.sStack.pTop = pTop;
-                pStackNode->uData.sStack.pBottom = pBottom;
-
-                if (pAstLeft->iType == AST_PAREN) pAstLeft = pAstLeft->uData.sParen.pAstExpr;
-                if (pAstRight->iType == AST_PAREN) pAstRight = pAstRight->uData.sParen.pAstExpr;
-
-                transform(pTop, pAstLeft);
-                transform(pBottom, pAstRight);
-
-                vlPushBack(pParentHorz->uData.sHorizontal.pList, pStackNode);
-            }
-            else if (iOprId == OPR_POW) {
-                RenderNode* pSuperscriptNode = createRenderNode(RN_SUPERSCRIPT);
-                RenderNode* pBody = createRenderNode(RN_HORIZONTAL);
-                RenderNode* pScript = createRenderNode(RN_HORIZONTAL);
-                FzAstNode* pAstLeft = pAstNode->uData.sBinaryOperator.pAstLeftOperand;
-                FzAstNode* pAstRight = pAstNode->uData.sBinaryOperator.pAstRightOperand;
-
-                pSuperscriptNode->uData.sSuperscript.pBody = pBody;
-                pSuperscriptNode->uData.sSuperscript.pScript = pScript;
-
-                transform(pBody, pAstLeft);
-                transform(pScript, pAstRight);
-
-                vlPushBack(pParentHorz->uData.sHorizontal.pList, pSuperscriptNode);
-            }
-            else if (iOprId == OPR_MUL) {
-                RenderNode* pMul = createRenderNode(RN_SPECIAL_CHAR);
-                pMul->uData.sSpecialChar.c = PZ_AE_MIDDLE_DOT;
-                transform(pParentHorz, pAstNode->uData.sBinaryOperator.pAstLeftOperand);
-                vlPushBack(pParentHorz->uData.sHorizontal.pList, pMul);
-                transform(pParentHorz, pAstNode->uData.sBinaryOperator.pAstRightOperand);
-            }
-            else {
-                RenderNode* pTextOperator;
-                if (iOprId == OPR_GTEQ) {
-                    pTextOperator = createRenderNode(RN_SPECIAL_CHAR);
-                    pTextOperator->uData.sSpecialChar.c = PZ_AE_GEQ;
-                }
-                else if (iOprId == OPR_LTEQ) {
-                    pTextOperator = createRenderNode(RN_SPECIAL_CHAR);
-                    pTextOperator->uData.sSpecialChar.c = PZ_AE_LEQ;
-                }
-                else {
-                    pTextOperator = createRenderNode(RN_TEXT);
-                    pTextOperator->uData.sText.szText = Utils_StringDump(FzOperator_GetSymbolById(iOprId));
-                }
-                transform(pParentHorz, pAstNode->uData.sBinaryOperator.pAstLeftOperand);
-                vlPushBack(pParentHorz->uData.sHorizontal.pList, pTextOperator);
-                transform(pParentHorz, pAstNode->uData.sBinaryOperator.pAstRightOperand);
-            }
+            transformBinaryOperator(pParentHorz, pAstNode);
             break;
         }
         case AST_PAREN: {
-            RenderNode* pEnclosureNode = createRenderNode(RN_ENCLOSURE);
-            RenderNode* pChildHorz = createRenderNode(RN_HORIZONTAL);
-            pEnclosureNode->uData.sEnclosure.pContent = pChildHorz;
-            transform(pChildHorz, pAstNode->uData.sParen.pAstExpr);
-            vlPushBack(pParentHorz->uData.sHorizontal.pList, pEnclosureNode);
+            pRenderNode = createRenderNode(RN_ENCLOSURE);
+            pRenderNode->uData.sEnclosure.pContent = createRenderNode(RN_HORIZONTAL);
+            transform(pRenderNode->uData.sEnclosure.pContent, pAstNode->uData.sParen.pAstExpr);
+            vlPushBack(pParentHorz->uData.sHorizontal.pList, pRenderNode);
             break;
         }
         case AST_LITERAL_NUMERIC: {
-            RenderNode* pText = createRenderNode(RN_TEXT);
-            pText->uData.sText.szText = Utils_StringViewDump(&pAstNode->uData.sLiteralNumeric.svNumber);
-            vlPushBack(pParentHorz->uData.sHorizontal.pList, pText);
+            pRenderNode = createRenderNode(RN_TEXT);
+            pRenderNode->uData.sText.szText = Utils_StringViewDump(&pAstNode->uData.sLiteralNumeric.svNumber);
+            vlPushBack(pParentHorz->uData.sHorizontal.pList, pRenderNode);
             break;
         }
         case AST_VARIABLE: {
-            unsigned char ucSpecialChar = 0;
-            int i;
-            for (i = 0; SpecialCharMapping[i].szToken != NULL; ++i) {
-                if (Utils_StringViewEqual(&pAstNode->uData.sVariable.svName, SpecialCharMapping[i].szToken)) {
-                    ucSpecialChar = SpecialCharMapping[i].ucSpecial;
-                }
-            }
-            if (ucSpecialChar > 0) {
-                RenderNode* pSpecial = createRenderNode(RN_SPECIAL_CHAR);
-                pSpecial->uData.sSpecialChar.c = ucSpecialChar;
-                vlPushBack(pParentHorz->uData.sHorizontal.pList, pSpecial);
-            }
-            else {
-                RenderNode* pText = createRenderNode(RN_TEXT);
-                pText->uData.sText.szText = Utils_StringViewDump(&pAstNode->uData.sVariable.svName);
-                vlPushBack(pParentHorz->uData.sHorizontal.pList, pText);
-            }
+            transformVariable(pParentHorz, pAstNode);
             break;
         }
         case AST_FUNCTION_CALL: {
-            const StringView* psvFuncName = &pAstNode->uData.sFunctionCall.svFunction;
-            int iNumArg = pAstNode->uData.sFunctionCall.pListArguments->iSize;
-            if (Utils_StringViewEqual(psvFuncName, "sqr") && iNumArg == 1) {
-                RenderNode* pRoot = createRenderNode(RN_ROOT);
-                RenderNode* pChildHorz = createRenderNode(RN_HORIZONTAL);
-                const FzAstNode* pAstContent = (const FzAstNode *)pAstNode->uData.sFunctionCall.pListArguments->pHead->pData;
-                
-                pRoot->uData.sRoot.pContent = pChildHorz;
-                transform(pChildHorz, pAstContent);
-
-                vlPushBack(pParentHorz->uData.sHorizontal.pList, pRoot);
-            }
-            else if (Utils_StringViewEqual(psvFuncName, "exp") && iNumArg == 1) {
-                RenderNode* pSuperscriptNode = createRenderNode(RN_SUPERSCRIPT);
-                RenderNode* pBody = createRenderNode(RN_SPECIAL_CHAR);
-                RenderNode* pScript = createRenderNode(RN_HORIZONTAL);
-                const FzAstNode* pAstContent = (const FzAstNode *)pAstNode->uData.sFunctionCall.pListArguments->pHead->pData;
-
-                pSuperscriptNode->uData.sSuperscript.pBody = pBody;
-                pSuperscriptNode->uData.sSuperscript.pScript = pScript;
-
-                pBody->uData.sSpecialChar.c = PZ_AE_EXP_E;
-                transform(pScript, pAstContent);
-
-                vlPushBack(pParentHorz->uData.sHorizontal.pList, pSuperscriptNode);
-            }
-            else if (Utils_StringViewEqual(psvFuncName, "abs") && iNumArg == 1) {
-                RenderNode* pEnclosureNode = createRenderNode(RN_ENCLOSURE);
-                RenderNode* pChildHorz = createRenderNode(RN_HORIZONTAL);
-                const FzAstNode* pAstContent = (const FzAstNode *)pAstNode->uData.sFunctionCall.pListArguments->pHead->pData;
-
-                pEnclosureNode->uData.sEnclosure.pContent = pChildHorz;
-                transform(pChildHorz, pAstContent);
-
-                pEnclosureNode->uData.sEnclosure.bCurve = 0;
-                vlPushBack(pParentHorz->uData.sHorizontal.pList, pEnclosureNode);
-            }
-            else if ((
-                Utils_StringViewEqual(psvFuncName, "sum") ||
-                Utils_StringViewEqual(psvFuncName, "prd")
-            ) && iNumArg == 4) {
-                RenderNode* pOverunder = createRenderNode(RN_OVERUNDER);
-                RenderNode* pOver = createRenderNode(RN_HORIZONTAL);
-                RenderNode* pSymbol = createRenderNode(RN_BIG_SYMBOL);
-                RenderNode* pEqual = createRenderNode(RN_SPECIAL_CHAR);
-                RenderNode* pUnder = createRenderNode(RN_HORIZONTAL);
-                RenderNode* pRemaining = createRenderNode(RN_ENCLOSURE);
-                VlistNode* pArg1st = pAstNode->uData.sFunctionCall.pListArguments->pHead;
-                VlistNode* pArg2nd = pArg1st->pNext;
-                VlistNode* pArg3rd = pArg2nd->pNext;
-                VlistNode* pArg4th = pArg3rd->pNext;
-
-                switch (psvFuncName->pBegin[0]) {
-                    case 's': pSymbol->uData.sBigSymbol.iType = ST_SUM; break;
-                    case 'p': pSymbol->uData.sBigSymbol.iType = ST_PRD; break;
-                    default: pSymbol->uData.sBigSymbol.iType = ST_NONE;
-                }
-
-                /* Under part: [var] [=] [expr] */
-                transform(pUnder, (const FzAstNode *)pArg1st->pData);
-                pEqual->uData.sSpecialChar.c = '=';
-                vlPushBack(pUnder->uData.sHorizontal.pList, pEqual);
-                transform(pUnder, (const FzAstNode *)pArg2nd->pData);
-
-                /* Over part: [expr] */
-                transform(pOver, (const FzAstNode *)pArg3rd->pData);
-
-                pOverunder->uData.sOverunder.pBase = pSymbol;
-                pOverunder->uData.sOverunder.pOver = pOver;
-                pOverunder->uData.sOverunder.pUnder = pUnder;
-
-                vlPushBack(pParentHorz->uData.sHorizontal.pList, pOverunder);
-
-                /* 4th argument as remaining */
-                pRemaining->uData.sEnclosure.pContent = createRenderNode(RN_HORIZONTAL);
-                transform(pRemaining->uData.sEnclosure.pContent, (const FzAstNode *)pArg4th->pData);
-                vlPushBack(pParentHorz->uData.sHorizontal.pList, pRemaining);
-            }
-            else if (Utils_StringViewEqual(psvFuncName, "int") && iNumArg == 4) {
-                RenderNode* pOverunder = createRenderNode(RN_OVERUNDER);
-                RenderNode* pOver = createRenderNode(RN_HORIZONTAL);
-                RenderNode* pSymbol = createRenderNode(RN_BIG_SYMBOL);
-                RenderNode* pUnder = createRenderNode(RN_HORIZONTAL);
-                RenderNode* pRemaining = createRenderNode(RN_HORIZONTAL);
-                RenderNode* pAppended = createRenderNode(RN_HORIZONTAL);
-                RenderNode* pCharD = createRenderNode(RN_SPECIAL_CHAR);
-
-                VlistNode* pArg1st = pAstNode->uData.sFunctionCall.pListArguments->pHead;
-                VlistNode* pArg2nd = pArg1st->pNext;
-                VlistNode* pArg3rd = pArg2nd->pNext;
-                VlistNode* pArg4th = pArg3rd->pNext;
-
-                pSymbol->uData.sBigSymbol.iType = ST_INT;
-   
-                /* Under part */
-                transform(pUnder, (const FzAstNode *)pArg2nd->pData);
-
-                /* Over part: [expr] */
-                transform(pOver, (const FzAstNode *)pArg3rd->pData);
-
-                pOverunder->uData.sOverunder.pBase = pSymbol;
-                pOverunder->uData.sOverunder.pOver = pOver;
-                pOverunder->uData.sOverunder.pUnder = pUnder;
-
-                vlPushBack(pParentHorz->uData.sHorizontal.pList, pOverunder);
-
-                /* 4th argument as remaining */
-                transform(pRemaining, (const FzAstNode *)pArg4th->pData);
-                vlPushBack(pParentHorz->uData.sHorizontal.pList, pRemaining);
-
-                /* [d][var] */
-                pCharD->uData.sSpecialChar.c = 'd';
-                vlPushBack(pAppended->uData.sHorizontal.pList, pCharD);
-                transform(pAppended, (const FzAstNode *)pArg1st->pData);
-                vlPushBack(pParentHorz->uData.sHorizontal.pList, pAppended);
-            }
-            else if (Utils_StringViewEqual(psvFuncName, "int") && iNumArg == 2) {
-                RenderNode* pOverunder = createRenderNode(RN_OVERUNDER);
-                RenderNode* pSymbol = createRenderNode(RN_BIG_SYMBOL);
-                RenderNode* pRemaining = createRenderNode(RN_HORIZONTAL);
-                RenderNode* pAppended = createRenderNode(RN_HORIZONTAL);
-                RenderNode* pCharD = createRenderNode(RN_SPECIAL_CHAR);
-
-                VlistNode* pArg1st = pAstNode->uData.sFunctionCall.pListArguments->pHead;
-                VlistNode* pArg2nd = pArg1st->pNext;
-
-                pSymbol->uData.sBigSymbol.iType = ST_INT;
-
-                pOverunder->uData.sOverunder.pBase = pSymbol;
-                pOverunder->uData.sOverunder.pOver = NULL;
-                pOverunder->uData.sOverunder.pUnder = NULL;
-
-                vlPushBack(pParentHorz->uData.sHorizontal.pList, pOverunder);
-
-                /* 4th argument as remaining */
-                transform(pRemaining, (const FzAstNode *)pArg2nd->pData);
-                vlPushBack(pParentHorz->uData.sHorizontal.pList, pRemaining);
-
-                /* [d][var] */
-                pCharD->uData.sSpecialChar.c = 'd';
-                vlPushBack(pAppended->uData.sHorizontal.pList, pCharD);
-                transform(pAppended, (const FzAstNode *)pArg1st->pData);
-                vlPushBack(pParentHorz->uData.sHorizontal.pList, pAppended);
-            }
-            else if (Utils_StringViewEqual(psvFuncName, "lim") && iNumArg == 3) {
-                RenderNode* pOverunder = createRenderNode(RN_OVERUNDER);
-                RenderNode* pLimitText = createRenderNode(RN_TEXT);
-                RenderNode* pArrow = createRenderNode(RN_SPECIAL_CHAR);
-                RenderNode* pUnder = createRenderNode(RN_HORIZONTAL);
-                RenderNode* pRemaining = createRenderNode(RN_ENCLOSURE);
-
-                VlistNode* pArg1st = pAstNode->uData.sFunctionCall.pListArguments->pHead;
-                VlistNode* pArg2nd = pArg1st->pNext;
-                VlistNode* pArg3rd = pArg2nd->pNext;
-                
-                pLimitText->uData.sText.szText = Utils_StringViewDump(psvFuncName);
-   
-                /* Under part: [var] [->] [expr] */
-                transform(pUnder, (const FzAstNode *)pArg1st->pData);
-                pArrow->uData.sSpecialChar.c = PZ_AE_ARROW_RIGHT;
-                vlPushBack(pUnder->uData.sHorizontal.pList, pArrow);
-                transform(pUnder, (const FzAstNode *)pArg2nd->pData);
-
-                pOverunder->uData.sOverunder.pBase = pLimitText;
-                pOverunder->uData.sOverunder.pOver = NULL;
-                pOverunder->uData.sOverunder.pUnder = pUnder;
-
-                vlPushBack(pParentHorz->uData.sHorizontal.pList, pOverunder);
-
-                /* 4th argument as remaining */
-                pRemaining->uData.sEnclosure.pContent = createRenderNode(RN_HORIZONTAL);
-                transform(pRemaining->uData.sEnclosure.pContent, (const FzAstNode *)pArg3rd->pData);
-                vlPushBack(pParentHorz->uData.sHorizontal.pList, pRemaining);
-            }
-            else {
-                VlistNode* pParam = NULL;
-                RenderNode* pFuncName = createRenderNode(RN_TEXT);
-                RenderNode* pEnclosureNode = createRenderNode(RN_ENCLOSURE);
-                RenderNode* pChildHorz = createRenderNode(RN_HORIZONTAL);
-
-                pFuncName->uData.sText.szText = Utils_StringViewDump(&pAstNode->uData.sFunctionCall.svFunction);
-                vlPushBack(pParentHorz->uData.sHorizontal.pList, pFuncName);
-
-                pEnclosureNode->uData.sEnclosure.pContent = pChildHorz;
-                for (
-                    pParam = pAstNode->uData.sFunctionCall.pListArguments->pHead;
-                    pParam != NULL;
-                    pParam = pParam->pNext
-                ) {
-                    transform(pChildHorz, (const FzAstNode *)pParam->pData);
-                    if (pParam->pNext != NULL) { /* Not last parameter */
-                        RenderNode* pSpecialCharNode = createRenderNode(RN_SPECIAL_CHAR);
-                        pSpecialCharNode->uData.sSpecialChar.c = ',';
-                        vlPushBack(pChildHorz->uData.sHorizontal.pList, pSpecialCharNode);
-                    }
-                }
-                vlPushBack(pParentHorz->uData.sHorizontal.pList, pEnclosureNode);
-            }
+            transformFunctionCall(pParentHorz, pAstNode);
             break;
         }
         default:
