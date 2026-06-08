@@ -727,7 +727,7 @@ static void MainFormBitmapRedraw(void) {
 static void MainFormInit(FormType *frmP) {
 	MainFormBitmapRedraw();
 	/* Plot button starts disabled */
-	{
+	if (!g_bParseSuccess) {
 		ControlType *ctlDraw;
 		ctlDraw = (ControlType*)FrmGetObjectPtr(frmP,
 			FrmGetObjectIndex(frmP, MainDrawButton));
@@ -756,6 +756,74 @@ static void MainFormStartParse(void) {
 	FrmUpdateForm(MainForm, frmRedrawUpdateCode);
 }
 
+static void WinEditorSetText(FieldType* fieldP, const char* szText) {
+    MemHandle newHandle;
+    MemHandle oldHandle;
+    Char* pText;
+    UInt16 iTextLen;
+
+	if (fieldP == NULL) return;
+
+    iTextLen = StrLen(szText) + 1;
+
+    newHandle = MemHandleNew(iTextLen);
+    if (newHandle == NULL) {
+        return; 
+    }
+
+    pText = (Char*)MemHandleLock(newHandle);
+    StrCopy(pText, szText);
+    
+    MemHandleUnlock(newHandle);
+
+    oldHandle = FldGetTextHandle(fieldP);
+
+    FldSetTextHandle(fieldP, newHandle);
+
+    if (oldHandle != NULL) {
+        MemHandleFree(oldHandle);
+    }
+}
+
+static void WinEditorSetFloatValue(FormType * frmP, UInt16 id, double fValue) {
+	FieldType* fieldP = (FieldType*)FrmGetObjectPtr(frmP, FrmGetObjectIndex(frmP, id));
+	char szBuf[50];
+	Utils_Ftoa((double)fValue, szBuf, 4);
+	WinEditorSetText(fieldP, szBuf);
+}
+
+static void WinEditorSetIntValue(FormType * frmP, UInt16 id, int iValue) {
+	FieldType* fieldP = (FieldType*)FrmGetObjectPtr(frmP, FrmGetObjectIndex(frmP, id));
+	char szBuf[50];
+	StrIToA(szBuf, iValue);
+	WinEditorSetText(fieldP, szBuf);
+}
+
+static char* WinEditorGetText(FieldType* fieldP, char* szBuf) {
+	MemHandle handle;
+	MemPtr text;
+	handle = FldGetTextHandle(fieldP);
+	text = MemHandleLock(handle);
+	StrCopy(szBuf, (const char*)text);
+	MemHandleUnlock(handle);
+	return szBuf;
+}
+
+static PZ_FLOAT WinEditorGetFloatValue(FormType * frmP, UInt16 id) {
+	FieldType* fieldP = (FieldType*)FrmGetObjectPtr(frmP, FrmGetObjectIndex(frmP, id));
+	char szBuf[50];
+	return Utils_Atof(WinEditorGetText(fieldP, szBuf));
+}
+
+static PZ_FLOAT WinEditorGetIntValue(FormType * frmP, UInt16 id, int iMin, int iMax) {
+	FieldType* fieldP = (FieldType*)FrmGetObjectPtr(frmP, FrmGetObjectIndex(frmP, id));
+	char szBuf[50];
+	int iVal = Utils_Atoi(WinEditorGetText(fieldP, szBuf));
+	if (iVal < iMin) return iMin;
+	if (iVal > iMax) return iMax;
+	return iVal;
+}
+
 static Boolean MainFormDoCommand(UInt16 command) {
 	Boolean handled = false;
 
@@ -775,7 +843,6 @@ static Boolean MainFormDoCommand(UInt16 command) {
 		case OptionsWinEditor: {
 			FormType * frmP;
 			UInt16 controlID;
-			Int16 iGrid;
 
 			MenuEraseStatus(0);
 
@@ -783,89 +850,39 @@ static Boolean MainFormDoCommand(UInt16 command) {
 
 			/* Populate fields from Camera */
 			{
-				char szBuf[16];
-#define WE_FIELD(id) ((FieldType*)FrmGetObjectPtr(frmP, FrmGetObjectIndex(frmP, id)))
-				Utils_Ftoa((double)Camera.xMin, szBuf, 2);
-				FldInsert(WE_FIELD(WinEditorFieldXmin), szBuf, StrLen(szBuf));
-				Utils_Ftoa((double)Camera.xMax, szBuf, 2);
-				FldInsert(WE_FIELD(WinEditorFieldXmax), szBuf, StrLen(szBuf));
-				StrIToA(szBuf, Camera.xGrid);
-				FldInsert(WE_FIELD(WinEditorFieldXgrid), szBuf, StrLen(szBuf));
-
-				Utils_Ftoa((double)Camera.yMin, szBuf, 2);
-				FldInsert(WE_FIELD(WinEditorFieldYmin), szBuf, StrLen(szBuf));
-				Utils_Ftoa((double)Camera.yMax, szBuf, 2);
-				FldInsert(WE_FIELD(WinEditorFieldYmax), szBuf, StrLen(szBuf));
-				StrIToA(szBuf, Camera.yGrid);
-				FldInsert(WE_FIELD(WinEditorFieldYgrid), szBuf, StrLen(szBuf));
-
-				Utils_Ftoa((double)Camera.zMin, szBuf, 2);
-				FldInsert(WE_FIELD(WinEditorFieldZmin), szBuf, StrLen(szBuf));
-				Utils_Ftoa((double)Camera.zMax, szBuf, 2);
-				FldInsert(WE_FIELD(WinEditorFieldZmax), szBuf, StrLen(szBuf));
+				WinEditorSetFloatValue(frmP, WinEditorFieldXmin, (double)Camera.xMin);
+				WinEditorSetFloatValue(frmP, WinEditorFieldXmax, (double)Camera.xMax);
+				WinEditorSetIntValue(frmP, WinEditorFieldXgrid, Camera.xGrid);
+				WinEditorSetFloatValue(frmP, WinEditorFieldYmin, (double)Camera.yMin);
+				WinEditorSetFloatValue(frmP, WinEditorFieldYmax, (double)Camera.yMax);
+				WinEditorSetIntValue(frmP, WinEditorFieldYgrid, Camera.yGrid);
+				WinEditorSetFloatValue(frmP, WinEditorFieldZmin, (double)Camera.zMin);
+				WinEditorSetFloatValue(frmP, WinEditorFieldZmax, (double)Camera.zMax);
+				WinEditorSetFloatValue(frmP, WinEditorFieldUmin, (double)Camera.uMin);
+				WinEditorSetFloatValue(frmP, WinEditorFieldUmax, (double)Camera.uMax);
+				WinEditorSetIntValue(frmP, WinEditorFieldUgrid, Camera.uGrid);
+				WinEditorSetFloatValue(frmP, WinEditorFieldVmin, (double)Camera.vMin);
+				WinEditorSetFloatValue(frmP, WinEditorFieldVmax, (double)Camera.vMax);
+				WinEditorSetIntValue(frmP, WinEditorFieldVgrid, Camera.vGrid);
 			}
 
 			controlID = FrmDoDialog(frmP);
 
 			if (controlID == WinEditorOKButton) {
-				char szBuf[16];
-				MemHandle handle;
-				MemPtr text;
-
-				/* Read X values */
-				handle = FldGetTextHandle(WE_FIELD(WinEditorFieldXmin));
-				if (handle) { text = MemHandleLock(handle); StrCopy(szBuf, (const char*)text); MemHandleUnlock(handle);
-					Camera.xMin = (PZ_FLOAT)Utils_Atof(szBuf); }
-				handle = FldGetTextHandle(WE_FIELD(WinEditorFieldXmax));
-				if (handle) { text = MemHandleLock(handle); StrCopy(szBuf, (const char*)text); MemHandleUnlock(handle);
-					Camera.xMax = (PZ_FLOAT)Utils_Atof(szBuf); }
-				handle = FldGetTextHandle(WE_FIELD(WinEditorFieldXgrid));
-				if (handle) {
-					text = MemHandleLock(handle);
-					StrCopy(szBuf, (const char*)text);
-					MemHandleUnlock(handle);
-					iGrid = (Int16)Utils_Atoi(szBuf);
-					if (iGrid < 5) iGrid = 5;
-					if (iGrid > X_GRID_MAX) iGrid = X_GRID_MAX;
-					Camera.xGrid = iGrid;
-				}
-				handle = FldGetTextHandle(WE_FIELD(WinEditorFieldYmin));
-				if (handle) {
-					text = MemHandleLock(handle);
-					StrCopy(szBuf, (const char*)text);
-					MemHandleUnlock(handle);
-					Camera.yMin = (PZ_FLOAT)Utils_Atof(szBuf);
-				}
-				handle = FldGetTextHandle(WE_FIELD(WinEditorFieldYmax));
-				if (handle) {
-					text = MemHandleLock(handle);
-					StrCopy(szBuf, (const char*)text); MemHandleUnlock(handle);
-					Camera.yMax = (PZ_FLOAT)Utils_Atof(szBuf);
-				}
-				handle = FldGetTextHandle(WE_FIELD(WinEditorFieldYgrid));
-				if (handle) {
-					text = MemHandleLock(handle);
-					StrCopy(szBuf, (const char*)text);
-					MemHandleUnlock(handle);
-					iGrid = (Int16)Utils_Atoi(szBuf);
-					if (iGrid < 5) iGrid = 5;
-					if (iGrid > Y_GRID_MAX) iGrid = Y_GRID_MAX;
-					Camera.yGrid = iGrid;
-				}
-				handle = FldGetTextHandle(WE_FIELD(WinEditorFieldZmin));
-				if (handle) {
-					text = MemHandleLock(handle);
-					StrCopy(szBuf, (const char*)text);
-					MemHandleUnlock(handle);
-					Camera.zMin = (PZ_FLOAT)Utils_Atof(szBuf);
-				}
-				handle = FldGetTextHandle(WE_FIELD(WinEditorFieldZmax));
-				if (handle) {
-					text = MemHandleLock(handle);
-					StrCopy(szBuf, (const char*)text);
-					MemHandleUnlock(handle);
-					Camera.zMax = (PZ_FLOAT)Utils_Atof(szBuf);
-				}
+				Camera.xMin = WinEditorGetFloatValue(frmP, WinEditorFieldXmin);
+				Camera.xMax = WinEditorGetFloatValue(frmP, WinEditorFieldXmax);
+				Camera.xGrid = WinEditorGetIntValue(frmP, WinEditorFieldXgrid, 5, X_GRID_MAX);
+				Camera.yMin = WinEditorGetFloatValue(frmP, WinEditorFieldYmin);
+				Camera.yMax = WinEditorGetFloatValue(frmP, WinEditorFieldYmax);
+				Camera.yGrid = WinEditorGetIntValue(frmP, WinEditorFieldYgrid, 5, Y_GRID_MAX);
+				Camera.zMin = WinEditorGetFloatValue(frmP, WinEditorFieldZmin);
+				Camera.zMax = WinEditorGetFloatValue(frmP, WinEditorFieldZmax);
+				Camera.uMin = WinEditorGetFloatValue(frmP, WinEditorFieldUmin);
+				Camera.uMax = WinEditorGetFloatValue(frmP, WinEditorFieldUmax);
+				Camera.uGrid = WinEditorGetIntValue(frmP, WinEditorFieldUgrid, 5, U_GRID_MAX);
+				Camera.vMin = WinEditorGetFloatValue(frmP, WinEditorFieldVmin);
+				Camera.vMax = WinEditorGetFloatValue(frmP, WinEditorFieldVmax);
+				Camera.vGrid = WinEditorGetIntValue(frmP, WinEditorFieldVgrid, 5, V_GRID_MAX);
 			}
 
 			FrmDeleteForm(frmP);
@@ -873,7 +890,7 @@ static Boolean MainFormDoCommand(UInt16 command) {
 			handled = true;
 			break;
 		}
-#undef WE_FIELD
+
 		case OptionsSamples: {
 			FormType * frmP;
 			UInt16 controlID;
@@ -1475,8 +1492,8 @@ static Err AppStart(void) {
 
 	/* Initialize Camera defaults */
 	PzCamera_Initialize();
-	Camera.uGrid = 15;
-	Camera.vGrid = 15;
+	Camera.uGrid = U_GRID_MAX;
+	Camera.vGrid = V_GRID_MAX;
 
 	/* Read saved preferences */
 	prefsSize = sizeof(g_prefs);
