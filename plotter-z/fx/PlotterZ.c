@@ -14,6 +14,9 @@
 typedef unsigned int uint;
 typedef unsigned char uchar;
 
+#define ORTHOGRAPHIC    0
+#define PERSPECTIVE     1
+
 #define CURRENT_FONT_WIDTH  6
 #define CURRENT_FONT_HEIGHT 8
 #define VRAM_WIDTH          128
@@ -38,22 +41,56 @@ static const DISPBOX BoxMenuArea = { 0, 56, VRAM_WIDTH - 1, 63 };
 static const DISPBOX BoxTopArea = { 0, 0, VRAM_WIDTH - 1, 7 };
 static const DISPBOX BoxEditArea = { 0, 8, VRAM_WIDTH - 1, 55 };
 
+#define USE_FIXED_POINT
+
+#ifdef USE_FIXED_POINT
+#   define NUMERIC          PZ_FIXED
+#   define NUM_VAL(v)       (PZ_FLOAT_TO_FIXED(v))
+#   define TO_FLOAT(v)      (PZ_FIXED_TO_FLOAT(v))
+#   define OrthoProject     PzCamera_OrthoProjectFixed
+#   define PerspProject     PzCamera_PerspProjectFixed
+#else
+#   define NUMERIC          PZ_FLOAT
+#   define NUM_VAL(v)       (v)
+#   define TO_FLOAT(v)      (v)
+#   define OrthoProject     PzCamera_OrthoProjectFloat
+#   define PerspProject     PzCamera_PerspProjectFloat
+#endif
+
+
 /*====================================================
  * Global Variables
  *====================================================*/
 
-char    g_szExpr[300] = "sin(sqr(x^2+y^2)+t/5)*cos(sqr(x^2+y^2)+t/5)";
-char    g_szErrorBuf[EZ_ERROR_CONTENT_LENGTH];
-EzError g_iCompileErr = EZERR_NONE;
+#define CART_EXPR_LENGTH 80
+#define PARM_EXPR_LENGTH 80
 
-FzAstNode*      g_pAstExpr      = NULL;
-EzMachine*      g_pVm           = NULL;
+char    g_szCartExpr[CART_EXPR_LENGTH] = "sin(sqr(x^2+y^2)+t/5)*cos(sqr(x^2+y^2)+t/5)";
+char    g_szParmExpr[3][PARM_EXPR_LENGTH] = { "(5+sin(t/5))*sin(u)*cos(v)", "(5+sin(t/5))*sin(u)*sin(v)", "5/2*cos(u)+cos(t/5)" };
+
+char    g_szErrMsgLine1[EZ_ERROR_CONTENT_LENGTH] = "";
+char    g_szErrMsgLine2[EZ_ERROR_CONTENT_LENGTH] = "";
+
+int             g_iFuncType     = FUNC_TYPE_CARTESIAN;
+FzAstNode*      g_pAstCartZ     = NULL;
+EzMachine*      g_pVmCartZ      = NULL;
+
+FzAstNode*      g_pAstParm[]    = { NULL, NULL, NULL };
+EzMachine*      g_pVmParm[]     = { NULL, NULL, NULL };
+
 RenderNode*     g_pRenderNode   = NULL;
-RenderConfig    g_RenderConfig;
+RenderConfig    g_rzConfig;
+
+int             g_iProjection = ORTHOGRAPHIC;
+
+static const char* szFuncTypeLabel[] = { "CARTESIAN", "PARAMETRIC" };
 
 /*====================================================
  * Camera and surface data
  *====================================================*/
+typedef struct { NUMERIC x, y, z; } Vertex;
+typedef struct { int i0, i1; } Edge;
+
 #define GRID_MAX            30
 
 #define CAM_INIT_XMIN   -6.0f
@@ -65,10 +102,30 @@ RenderConfig    g_RenderConfig;
 #define CAM_INIT_ZMIN   -3.0f
 #define CAM_INIT_ZMAX   3.0f
 
-static PZ_FIXED xBuf[GRID_MAX];
-static PZ_FIXED yBuf[GRID_MAX];
-static PZ_FIXED zBuf[GRID_MAX * GRID_MAX];
-#define Z_BUF(x,y) (zBuf[(x) + (y) * Camera.xGrid])
+#define X_GRID_MAX      30
+#define Y_GRID_MAX      30
+#define U_GRID_MAX      20
+#define V_GRID_MAX      20
+#define BUFFER_MAX(a,b) ((a) > (b) ? (a) : (b))
+#define VERTEX_BUFFER_SIZE  BUFFER_MAX(X_GRID_MAX + Y_GRID_MAX + X_GRID_MAX * Y_GRID_MAX, U_GRID_MAX * V_GRID_MAX * 3)
+
+NUMERIC g_fVertexBuf[VERTEX_BUFFER_SIZE];
+
+/* Cartesian */
+NUMERIC *g_fCartXBuf = g_fVertexBuf;
+NUMERIC *g_fCartYBuf = g_fVertexBuf + X_GRID_MAX;
+NUMERIC *g_fCartZBuf = g_fVertexBuf + X_GRID_MAX + Y_GRID_MAX;
+
+#define CART_Z_BUF(x,y) (g_fCartZBuf[(x) + (y) * Camera.xGrid])
+
+/* Parametric */
+NUMERIC *g_fParmXBuf = g_fVertexBuf;
+NUMERIC *g_fParmYBuf = g_fVertexBuf + U_GRID_MAX * V_GRID_MAX;
+NUMERIC *g_fParmZBuf = g_fVertexBuf + U_GRID_MAX * V_GRID_MAX * 2;
+
+#define PARM_X_BUF(iu,iv) (g_fParmXBuf[(iu) + (iv) * Camera.uGrid])
+#define PARM_Y_BUF(iu,iv) (g_fParmYBuf[(iu) + (iv) * Camera.uGrid])
+#define PARM_Z_BUF(iu,iv) (g_fParmZBuf[(iu) + (iv) * Camera.uGrid])
 
 int g_iFormulaX = 0;
 int g_iFormulaY = 0;
@@ -188,6 +245,7 @@ void PutText(int iDestX, int iDestY, const uchar* szText) {
 
 static int g_iCursor  = 0;
 static int g_iScroll  = 0;
+static const char* g_szEditTopText = NULL;
 
 /* Convert cursor position to screen (x,y) relative to edit area.
  * Returns true if cursor is on screen, false if scrolled out. */
@@ -260,12 +318,11 @@ void DrawExprStage(const char* szBuf) {
         }
     }
     /* Top Banner */
-    {
-        static const char szTopText[] = "Edit Expression";
-        static const int iLeft = (VRAM_WIDTH - (sizeof(szTopText) - 1) * CURRENT_FONT_WIDTH) / 2;
-        PutText(iLeft, 0, (const uchar *)szTopText);
-        Bdisp_AreaReverseVRAM(0, 0, VRAM_WIDTH - 1, 7);
+    if (g_szEditTopText) {
+        const int iLeft = (VRAM_WIDTH - strlen(g_szEditTopText) * CURRENT_FONT_WIDTH) / 2;
+        PutText(iLeft, 0, (const uchar *)g_szEditTopText);
     }
+    Bdisp_AreaReverseVRAM(0, 0, VRAM_WIDTH - 1, 7);
 }
 
 /* Get row where cursor currently is */
@@ -310,12 +367,14 @@ static int MoveToRow(const char* szBuf, int iCur, int iTargetRow) {
     return iLen;
 }
 
-int ExprStage(void) {
+int ExprStage(const int iEditMax, char* szOrigin, const char* szTitle) {
     uint uKey;
-    char szBuf[sizeof(g_szExpr)];
+    char szBuf[300];
     int iLen;
 
-    strcpy(szBuf, g_szExpr);
+    g_szEditTopText = szTitle;
+
+    strcpy(szBuf, szOrigin);
     g_iCursor = (int)strlen(szBuf);
     g_iScroll = 0;
 
@@ -345,7 +404,7 @@ int ExprStage(void) {
 
             case KEY_CTRL_F6:
             case KEY_CTRL_EXE:
-                strcpy(g_szExpr, szBuf);
+                strcpy(szOrigin, szBuf);
                 return 1;
 
             case KEY_CTRL_DEL:
@@ -401,7 +460,7 @@ int ExprStage(void) {
             }
 
             default:
-                if (iLen < (int)(sizeof(szBuf) - 1)) {
+                if (iLen < iEditMax) {
                     char ch = 0;
 
                     if (uKey >= KEY_CHAR_0  && uKey <= KEY_CHAR_9)  ch = (char)uKey;
@@ -447,47 +506,145 @@ static void RzPutChar(int x, int y, unsigned char ch) {
 /*====================================================
  * Parse and render formula to VRAM
  *====================================================*/
+
+void HandleParseError(
+    int bIsSyntaxError,
+    int iCompileError,
+    const char* szErrorBuf,
+    int bIsParm,
+    int iParamIndex
+) {
+    static const char* szParmLabel[] = { "x", "y", "z" };
+
+    g_szErrMsgLine1[0] = 0;
+    g_szErrMsgLine2[0] = 0;
+
+    if (bIsSyntaxError) {
+        if (bIsParm) {
+            sprintf(g_szErrMsgLine1, "Failed to parse \"%s=\":", szParmLabel[iParamIndex]);
+        } else {
+            strcpy(g_szErrMsgLine1, "Failed to parse:");
+        }
+        strcpy(g_szErrMsgLine2, "Syntax error.");
+    }
+    else {
+        switch (iCompileError) {
+            case EZERR_VARIABLE_UNDEFINED:
+                strcpy(g_szErrMsgLine1, "Undefined variable:");
+                sprintf(g_szErrMsgLine2, "\"%s\"", szErrorBuf);
+                break;
+            case EZERR_FUNCTION_UNDEFINED:
+                strcpy(g_szErrMsgLine1, "Undefined function:");
+                sprintf(g_szErrMsgLine2, "\"%s\"", szErrorBuf);
+                break;
+            case EZERR_FUNCTION_PARAM_MISMATCH:
+                strcpy(g_szErrMsgLine1, "Function parameter mismatch");
+                sprintf(g_szErrMsgLine2, "\"%s\"", szErrorBuf);
+                break;
+        }
+    }
+}
+
 int ParseAndRenderExpr(void) {
-    int iW = VRAM_WIDTH, iH = VRAM_HEIGHT - 16;
+    int iW = VRAM_WIDTH, iH = VRAM_HEIGHT - 16, i;
+    char szErrorBuf[EZ_ERROR_CONTENT_LENGTH];
+    int iCompileError;
 
-    /* Destroy previous state */
-    if (g_pRenderNode != NULL) { RenderNode_Destroy(g_pRenderNode); g_pRenderNode = NULL; }
-    if (g_pAstExpr != NULL) { FzAstNode_Destroy(g_pAstExpr); g_pAstExpr = NULL; }
-
-    /* Parse */
-    g_pAstExpr = FzParser_ParseExpression(g_szExpr);
-    if (g_pAstExpr == NULL) return 0;
-
-    /* Create VM singleton */
-    if (g_pVm == NULL) {
-        g_pVm = EzMachine_Create();
-        if (g_pVm != NULL) {
-            EzMachine_DeclareVariable(g_pVm, "x");
-            EzMachine_DeclareVariable(g_pVm, "y");
-            EzMachine_DeclareVariable(g_pVm, "pi");
-            EzMachine_DeclareVariable(g_pVm, "t");
-            EzMachine_AllocateVariables(g_pVm);
-            EzMachine_SetVariableByIndex(g_pVm, 2, PZ_PI);
+    /* Destroy previous AST, RenderNode */
+    if (g_pRenderNode != NULL) {
+        RenderNode_Destroy(g_pRenderNode);
+        g_pRenderNode = NULL;
+    }
+    if (g_pAstCartZ != NULL) {
+        FzAstNode_Destroy(g_pAstCartZ);
+        g_pAstCartZ = NULL;
+    }
+    for (i = 0; i < 3; ++i) {
+        if (g_pAstParm[i] != NULL) {
+            FzAstNode_Destroy(g_pAstParm[i]);
+            g_pAstParm[i] = NULL;
         }
     }
 
-    /* Compile */
-    if (g_pVm != NULL) {
-        g_iCompileErr = EzMachine_Compile(g_pVm, g_pAstExpr, g_szErrorBuf);
-        if (g_iCompileErr != EZERR_NONE) return 0;
+    if (g_iFuncType == FUNC_TYPE_CARTESIAN) {
+        /* Parse */
+        g_pAstCartZ = FzParser_ParseExpression(g_szCartExpr);
+        if (g_pAstCartZ == NULL) {
+            HandleParseError(1, EZERR_NONE, NULL, 0, 0);
+            return 0;
+        }
+
+        /* Create VM singleton */
+        if (g_pVmCartZ == NULL) {
+            g_pVmCartZ = EzMachine_Create();
+            if (g_pVmCartZ != NULL) {
+                EzMachine_DeclareVariable(g_pVmCartZ, "x");
+                EzMachine_DeclareVariable(g_pVmCartZ, "y");
+                EzMachine_DeclareVariable(g_pVmCartZ, "pi");
+                EzMachine_DeclareVariable(g_pVmCartZ, "t");
+                EzMachine_AllocateVariables(g_pVmCartZ);
+                EzMachine_SetVariableByIndex(g_pVmCartZ, 2, PZ_PI);
+            }
+        }
+
+        /* Compile */
+        if (g_pVmCartZ != NULL) {
+            iCompileError = EzMachine_Compile(g_pVmCartZ, g_pAstCartZ, szErrorBuf);
+            if (iCompileError != EZERR_NONE) {
+                HandleParseError(0, iCompileError, szErrorBuf, 0, 0);
+            }
+        }
+
+        /* Build render tree */
+        g_pRenderNode = Render_Transform(g_pAstCartZ, "z=");
+    }
+    else if (g_iFuncType == FUNC_TYPE_PARAMETRIC) {
+        const char *szPrefix[] = { "x=", "y=", "z=" };
+        /* Parse */
+        for (i = 0; i < 3; ++i) {
+            g_pAstParm[i] = FzParser_ParseExpression(g_szParmExpr[i]);
+            if (g_pAstParm[i] == NULL) {
+                HandleParseError(1, EZERR_NONE, NULL, 1, i);
+                return 0;
+            }
+        }
+
+        /* Build render tree */
+        g_pRenderNode = RenderNode_Create(RN_VERTICAL);
+        for (i = 0; i < 3; ++i) {
+            vlPushBack(g_pRenderNode->uData.sVertical.pList, Render_Transform(g_pAstParm[i], szPrefix[i]));
+        }
+
+        /* Compile */
+        for (i = 0; i < 3; ++i) {
+            /* Create VM singleton */
+            if (g_pVmParm[i] == NULL) {
+                g_pVmParm[i] = EzMachine_Create();
+                EzMachine_DeclareVariable(g_pVmParm[i], "u");
+                EzMachine_DeclareVariable(g_pVmParm[i], "v");
+                EzMachine_DeclareVariable(g_pVmParm[i], "pi");
+                EzMachine_DeclareVariable(g_pVmParm[i], "t");
+                EzMachine_AllocateVariables(g_pVmParm[i]);
+                EzMachine_SetVariableByIndex(g_pVmParm[i], 2, PZ_PI);
+            }
+            /* Compile expression to VM */
+            if (g_pVmParm[i] != NULL) {
+                iCompileError = EzMachine_Compile(g_pVmParm[i], g_pAstParm[i], szErrorBuf);
+                if (iCompileError != EZERR_NONE) {
+                    HandleParseError(0, iCompileError, szErrorBuf, 1, i);
+                }
+            }
+        }
     }
 
-    /* Build render tree */
-    g_pRenderNode = Render_Transform(g_pAstExpr);
     if (g_pRenderNode == NULL) return 0;
 
-    RenderNode_CalculateSize(g_pRenderNode, &g_RenderConfig);
+    RenderNode_CalculateSize(g_pRenderNode, &g_rzConfig);
 
     /* Center formula */
     g_iFormulaX = (iW - g_pRenderNode->sLayout.iWidth) / 2;
     if (g_iFormulaX < 0) g_iFormulaX = 0;
     g_iFormulaY = (VRAM_HEIGHT - g_pRenderNode->sLayout.iAscent - g_pRenderNode->sLayout.iDescent) / 2 + g_pRenderNode->sLayout.iAscent;
-	if (g_iFormulaY < 0) g_iFormulaY = 0;
 
     g_iFormulaOrigX = g_iFormulaX;
     g_iFormulaOrigY = g_iFormulaY;
@@ -497,33 +654,24 @@ int ParseAndRenderExpr(void) {
 
 /* Draw formula centered in edit area */
 void DrawFormula(void) {
-    if (g_pRenderNode == NULL || g_pAstExpr == NULL) {EzError g_iCompileErr;
-        const char* szMsg = "Syntax Error";
-        int iLeft = (VRAM_WIDTH - (int)strlen(szMsg) * CURRENT_FONT_WIDTH) / 2;
-        PutText(iLeft, 8 + 20, (const uchar*)szMsg);
+    int iX;
+    if (g_pRenderNode == NULL) {
         return;
     }
 
     /* Formula */
-    RenderNode_Draw(g_pRenderNode, &g_RenderConfig, g_iFormulaX, g_iFormulaY);
+    RenderNode_Draw(g_pRenderNode, &g_rzConfig, g_iFormulaX, g_iFormulaY);
 
     /* f(x,y)= banner */
-    {
-        Bdisp_AreaClr_VRAM(&BoxTopArea);
-        PutText(0, 0, (const uchar*)"f(x,y)=");
-        Bdisp_AreaReverseVRAM(0, 0, VRAM_WIDTH - 1, CURRENT_FONT_HEIGHT - 1);
-    }
+    Bdisp_AreaClr_VRAM(&BoxTopArea);
+    iX = (VRAM_WIDTH - CURRENT_FONT_WIDTH * strlen(szFuncTypeLabel[g_iFuncType])) / 2;
+    PutText(iX, 0, (const uchar*)szFuncTypeLabel[g_iFuncType]);
+    Bdisp_AreaReverseVRAM(0, 0, VRAM_WIDTH - 1, CURRENT_FONT_HEIGHT - 1);
 }
 
 /*====================================================
  * 3D Projection & Recalc
  *====================================================*/
-#define ORTHOGRAPHIC    0
-#define PERSPECTIVE     1
-
-void (*xyz2xy)(PZ_FIXED, PZ_FIXED, PZ_FIXED, int*, int *) = PzCamera_OrthoProjectFixed;
-int g_iProjection = ORTHOGRAPHIC;
-
 #define BAR_WIDTH   10
 #define BAR_HEIGHT  1
 #define BAR_BORDER  1
@@ -622,78 +770,148 @@ static void RecalcInitFullscreen(void) {
 #undef BAR_X
 #undef BAR_Y
 
+static void RecalcCartesian(void (*pfnRedraw)(int iPct)) {
+    int iX, iY;
+    PZ_FLOAT fX[X_GRID_MAX];
+    PZ_FLOAT fY[Y_GRID_MAX];
+    PZ_FLOAT fZ;
+
+    /* Compute actual x, y sample positions and store in buffers */
+    for (iX = 0; iX < Camera.xGrid; ++iX) {
+        fX[iX] = Camera.xMin + (Camera.xMax - Camera.xMin) * iX / (Camera.xGrid - 1);
+    }
+    for (iY = 0; iY < Camera.yGrid; ++iY) {
+        fY[iY] = Camera.yMin + (Camera.yMax - Camera.yMin) * iY / (Camera.yGrid - 1);
+    }
+
+    /* Evaluate z = f(x, y) for every grid point */
+    for (iX = 0; iX < Camera.xGrid; ++iX) {
+        for (iY = 0; iY < Camera.yGrid; ++iY) {
+            EzMachine_SetVariableByIndex(g_pVmCartZ, 0, fX[iX]);
+            EzMachine_SetVariableByIndex(g_pVmCartZ, 1, fY[iY]);
+            /* Evaluate the z value */
+            fZ = EzMachine_Eval(g_pVmCartZ);
+            /* Normalize z into [-1, 1] based on the z-axis bounds */
+            CART_Z_BUF(iX, iY) = NUM_VAL(2.0f * (fZ - (Camera.zMax + Camera.zMin) / 2.0f) / (Camera.zMax - Camera.zMin));
+        }
+        if (pfnRedraw) pfnRedraw((iX + 1) * 100 / Camera.xGrid);
+    }
+
+    /* Normalize x and y grid coordinates into [-1, 1] */
+    for (iX = 0; iX < Camera.xGrid; ++iX) {
+        g_fCartXBuf[iX] = NUM_VAL(2.0f * (fX[iX] - (Camera.xMax + Camera.xMin) / 2.0f) / (Camera.xMax - Camera.xMin));
+    }
+    for (iY = 0; iY < Camera.yGrid; ++iY) {
+        g_fCartYBuf[iY] = NUM_VAL(2.0f * (fY[iY] - (Camera.yMax + Camera.yMin) / 2.0f) / (Camera.yMax - Camera.yMin));
+    }
+}
+
+void RecalcParametric(void (*pfnRedraw)(int iPct)) {
+    int iU, iV, i;
+    PZ_FLOAT fU, fV;
+    PZ_FLOAT fPoint[3];
+
+    if (!g_pVmParm[0] || !g_pVmParm[1] || !g_pVmParm[2]) {
+        return;
+    }
+
+    for (iU = 0; iU < Camera.uGrid; ++iU) {
+        fU = Camera.uMin + (Camera.uMax - Camera.uMin) * iU / (Camera.uGrid - 1);
+        for (iV = 0; iV < Camera.vGrid; ++iV) {
+            fV = Camera.vMin + (Camera.vMax - Camera.vMin) * iV / (Camera.vGrid - 1);
+            /* Evaluate x */
+            for (i = 0; i < 3; ++i) {
+                EzMachine_SetVariableByIndex(g_pVmParm[i], 0, fU);
+                EzMachine_SetVariableByIndex(g_pVmParm[i], 1, fV);
+                fPoint[i] = EzMachine_Eval(g_pVmParm[i]);
+            }
+            /* Normalize */
+            PARM_X_BUF(iU, iV) = NUM_VAL(2.0f * (fPoint[0] - (Camera.xMax + Camera.xMin) / 2.0f) / (Camera.xMax - Camera.xMin));
+            PARM_Y_BUF(iU, iV) = NUM_VAL(2.0f * (fPoint[1] - (Camera.yMax + Camera.yMin) / 2.0f) / (Camera.yMax - Camera.yMin));
+            PARM_Z_BUF(iU, iV) = NUM_VAL(2.0f * (fPoint[2] - (Camera.zMax + Camera.zMin) / 2.0f) / (Camera.zMax - Camera.zMin));
+        }
+        if (pfnRedraw) pfnRedraw((iU + 1) * 100 / Camera.uGrid);
+    }
+}
+
 static int RecalcSurface(
-    void (*pfnInit)(void),
+    void (*pfnDrawFirstFrame)(void),
     void (*pfnRedraw)(int iPct)
 ) {
-    int ix, iy;
-    PZ_FLOAT fXbuf[GRID_MAX], fYbuf[GRID_MAX];
-    PZ_FLOAT fzMid   = (Camera.zMax + Camera.zMin) * 0.5f;
-    PZ_FLOAT fzRange = (Camera.zMax - Camera.zMin);
-    PZ_FLOAT fxMid   = (Camera.xMax + Camera.xMin) * 0.5f;
-    PZ_FLOAT fxRange = (Camera.xMax - Camera.xMin);
-    PZ_FLOAT fyMid   = (Camera.yMax + Camera.yMin) * 0.5f;
-    PZ_FLOAT fyRange = (Camera.yMax - Camera.yMin);
-    int iLastPct = -1;
-
-    if (g_pVm == NULL) return 0;
-
-    if (pfnInit) pfnInit();
-
-    for (ix = 0; ix < Camera.xGrid; ++ix)
-        fXbuf[ix] = Camera.xMin + (Camera.xMax - Camera.xMin) * ix / (PZ_FLOAT)(Camera.xGrid - 1);
-    for (iy = 0; iy < Camera.yGrid; ++iy)
-        fYbuf[iy] = Camera.yMin + (Camera.yMax - Camera.yMin) * iy / (PZ_FLOAT)(Camera.yGrid - 1);
-
-    for (ix = 0; ix < Camera.xGrid; ++ix) {
-        PZ_FLOAT fx = fXbuf[ix];
-        int iPct;
-        for (iy = 0; iy < Camera.yGrid; ++iy) {
-            PZ_FLOAT fy = fYbuf[iy];
-            EzMachine_SetVariableByIndex(g_pVm, 0, fx);
-            EzMachine_SetVariableByIndex(g_pVm, 1, fy);
-            Z_BUF(ix, iy) = PZ_FLOAT_TO_FIXED(2.0f * (EzMachine_Eval(g_pVm) - fzMid) / fzRange);
-        }
-        xBuf[ix] = PZ_FLOAT_TO_FIXED(2.0f * (fx - fxMid) / fxRange);
-        iPct = (ix + 1) * 100 / Camera.xGrid;
-        if (iPct != iLastPct) {
-            if (pfnRedraw) pfnRedraw(iPct);
-            iLastPct = iPct;
-        }
+    if (pfnDrawFirstFrame) pfnDrawFirstFrame();
+    if (pfnRedraw) pfnRedraw(0);
+    
+    switch (g_iFuncType) {
+        case FUNC_TYPE_CARTESIAN:
+            RecalcCartesian(pfnRedraw);
+            break;
+        case FUNC_TYPE_PARAMETRIC:
+            RecalcParametric(pfnRedraw);
+            break;
     }
-    for (iy = 0; iy < Camera.yGrid; ++iy)
-        yBuf[iy] = PZ_FLOAT_TO_FIXED(2.0f * (fYbuf[iy] - fyMid) / fyRange);
     return 1;
 }
 
 /*====================================================
  * Draw wireframe to VRAM
  *====================================================*/
-static void redrawCanvas(void) {
-    int ix, iy;
-    int x0, y0, x1, y1;
-    PZ_FIXED z0, z1;
+static void DrawCartSurfaceWireframe(void (*xyz2xy)(NUMERIC, NUMERIC, NUMERIC, int*, int *)) {
+    int iX, iY, x0, y0, x1, y1;
+    NUMERIC z0, z1;
 
-    for (ix = 0; ix < Camera.xGrid; ++ix) {
-        iy = 0;
-        xyz2xy(xBuf[ix], yBuf[iy], z0 = Z_BUF(ix, iy), &x0, &y0);
-        for (iy = 0; iy < Camera.yGrid; ++iy) {
-            xyz2xy(xBuf[ix], yBuf[iy], z1 = Z_BUF(ix, iy), &x1, &y1);
-            if (z0 <= PZ_FIXED_ONE && z0 >= PZ_FIXED_NEG_ONE
-                && z1 <= PZ_FIXED_ONE && z1 >= PZ_FIXED_NEG_ONE)
+    for (iX = 0; iX < Camera.xGrid; ++iX) {
+        iY = 0;
+        xyz2xy(g_fCartXBuf[iX], g_fCartYBuf[iY], z0 = CART_Z_BUF(iX, iY), &x0, &y0); 
+        for (iY = 0; iY < Camera.yGrid; ++iY) {
+            xyz2xy(g_fCartXBuf[iX], g_fCartYBuf[iY], z1 = CART_Z_BUF(iX, iY), &x1, &y1); 
+            if (
+                z0 <= NUM_VAL(1.0f) &&
+                z0 >= NUM_VAL(-1.0f) &&
+                z1 <= NUM_VAL(1.0f) &&
+                z1 >= NUM_VAL(-1.0f)
+            ) {
                 Bdisp_DrawLineVRAM(x0, y0, x1, y1);
-            x0 = x1; y0 = y1; z0 = z1;
+            }
+            x0 = x1, y0 = y1, z0 = z1;
         }
     }
-    for (iy = 0; iy < Camera.yGrid; ++iy) {
-        ix = 0;
-        xyz2xy(xBuf[ix], yBuf[iy], z0 = Z_BUF(ix, iy), &x0, &y0);
-        for (ix = 0; ix < Camera.xGrid; ++ix) {
-            xyz2xy(xBuf[ix], yBuf[iy], z1 = Z_BUF(ix, iy), &x1, &y1);
-            if (z0 <= PZ_FIXED_ONE && z0 >= PZ_FIXED_NEG_ONE
-                && z1 <= PZ_FIXED_ONE && z1 >= PZ_FIXED_NEG_ONE)
+
+    for (iY = 0; iY < Camera.yGrid; ++iY) {
+        iX = 0;
+        xyz2xy(g_fCartXBuf[iX], g_fCartYBuf[iY], z0 = CART_Z_BUF(iX, iY), &x0, &y0); 
+        for (iX = 0; iX < Camera.xGrid; ++iX) {
+            xyz2xy(g_fCartXBuf[iX], g_fCartYBuf[iY], z1 = CART_Z_BUF(iX, iY), &x1, &y1); 
+            if (
+                z0 <= NUM_VAL(1.0f) &&
+                z0 >= NUM_VAL(-1.0f) &&
+                z1 <= NUM_VAL(1.0f) &&
+                z1 >= NUM_VAL(-1.0f)
+            ) {
                 Bdisp_DrawLineVRAM(x0, y0, x1, y1);
-            x0 = x1; y0 = y1; z0 = z1;
+            }
+            x0 = x1, y0 = y1, z0 = z1;
+        }
+    }
+}
+
+static void DrawParmSurfaceWireframe(void (*xyz2xy)(NUMERIC, NUMERIC, NUMERIC, int*, int *)) {
+    int iU, iV, x0, y0, x1, y1;
+    for (iV = 0; iV < Camera.vGrid; ++iV) {
+        iU = 0;
+        xyz2xy(PARM_X_BUF(iU, iV), PARM_Y_BUF(iU, iV), PARM_Z_BUF(iU, iV), &x0, &y0); 
+        for (iU = 0; iU < Camera.uGrid; ++iU) {
+            xyz2xy(PARM_X_BUF(iU, iV), PARM_Y_BUF(iU, iV), PARM_Z_BUF(iU, iV), &x1, &y1);
+            Bdisp_DrawLineVRAM(x0, y0, x1, y1);
+            x0 = x1, y0 = y1;
+        }
+    }
+    for (iU = 0; iU < Camera.uGrid; ++iU) {
+        iV = 0;
+        xyz2xy(PARM_X_BUF(iU, iV), PARM_Y_BUF(iU, iV), PARM_Z_BUF(iU, iV), &x0, &y0); 
+        for (iV = 0; iV < Camera.vGrid; ++iV) {
+            xyz2xy(PARM_X_BUF(iU, iV), PARM_Y_BUF(iU, iV), PARM_Z_BUF(iU, iV), &x1, &y1); 
+            Bdisp_DrawLineVRAM(x0, y0, x1, y1);
+            x0 = x1, y0 = y1;
         }
     }
 }
@@ -706,52 +924,143 @@ static void redrawCanvas(void) {
 
 int g_bGraphMenuVisible = 1;
 int g_bDrawBox = 0;
+int g_bDrawAxes = 0;
 int g_bPlaying = 0;
 int g_iPlayKeyTicks = 0;
 
+static void RefreshCameraTrigBuf(void) {
+#ifdef USE_FIXED_POINT
+    Camera.uTrigBuf.sFixed.sinA = PZ_FLOAT_TO_FIXED(sin(Camera.iAlphaDeg * PZ_PI / 180));
+    Camera.uTrigBuf.sFixed.cosA = PZ_FLOAT_TO_FIXED(cos(Camera.iAlphaDeg * PZ_PI / 180));
+    Camera.uTrigBuf.sFixed.sinB = PZ_FLOAT_TO_FIXED(sin(Camera.iBetaDeg * PZ_PI / 180));
+    Camera.uTrigBuf.sFixed.cosB = PZ_FLOAT_TO_FIXED(cos(Camera.iBetaDeg * PZ_PI / 180));
+#else
+    Camera.uTrigBuf.sFloat.sinA = (PZ_FLOAT)sin(Camera.iAlphaDeg * PZ_PI / 180);
+    Camera.uTrigBuf.sFloat.cosA = (PZ_FLOAT)cos(Camera.iAlphaDeg * PZ_PI / 180);
+    Camera.uTrigBuf.sFloat.sinB = (PZ_FLOAT)sin(Camera.iBetaDeg * PZ_PI / 180);
+    Camera.uTrigBuf.sFloat.cosB = (PZ_FLOAT)cos(Camera.iBetaDeg * PZ_PI / 180);
+#endif
+}
+
+static void DrawBoxEdges(void (*xyz2xy)(NUMERIC, NUMERIC, NUMERIC, int*, int *)) {
+    static const Vertex BoxVertices[] = {
+        { NUM_VAL(1.0f),    NUM_VAL(1.0f),  NUM_VAL(1.0f)   },
+        { NUM_VAL(-1.0f),   NUM_VAL(1.0f),  NUM_VAL(1.0f)   },
+        { NUM_VAL(-1.0f),   NUM_VAL(-1.0f), NUM_VAL(1.0f)   },
+        { NUM_VAL(1.0f),    NUM_VAL(-1.0f), NUM_VAL(1.0f)   },
+        { NUM_VAL(1.0f),    NUM_VAL(1.0f),  NUM_VAL(-1.0f)  },
+        { NUM_VAL(-1.0f),   NUM_VAL(1.0f),  NUM_VAL(-1.0f)  },
+        { NUM_VAL(-1.0f),   NUM_VAL(-1.0f), NUM_VAL(-1.0f)  },
+        { NUM_VAL(1.0f),    NUM_VAL(-1.0f), NUM_VAL(-1.0f)  },
+    };
+
+    static const Edge BoxEdges[] = {
+        { 0, 1 }, { 1, 2 }, { 2, 3 }, { 3, 0 },
+        { 4, 5 }, { 5, 6 }, { 6, 7 }, { 7, 4 },
+        { 0, 4 }, { 1, 5 }, { 2, 6 }, { 3, 7 }
+    };
+
+    static const int numEdges = sizeof(BoxEdges) / sizeof(BoxEdges[0]);
+    int i;
+
+    for (i = 0; i < numEdges; ++i) {
+        const Edge* e = BoxEdges + i;
+        const Vertex* v0 = BoxVertices + e->i0;
+        const Vertex* v1 = BoxVertices + e->i1;
+        int x0, y0, x1, y1;
+
+        xyz2xy(v0->x, v0->y, v0->z, &x0, &y0); 
+        xyz2xy(v1->x, v1->y, v1->z, &x1, &y1); 
+        Bdisp_DrawLineVRAM(x0, y0, x1, y1);
+    }
+}
+
+#define AXES_ARROW_SIZE (0.05f)
+
+static void DrawAxes(void (*xyz2xy)(NUMERIC, NUMERIC, NUMERIC, int*, int *)) {
+    static const Vertex AxesVertices[] = {
+        /* [0] Origin */
+        { NUM_VAL(0), NUM_VAL(0),  NUM_VAL(0) },
+        /* [1] X-axis direction */
+        { NUM_VAL(1), NUM_VAL(0),  NUM_VAL(0) },
+        /* [2] X-axis arrow line (upper) */
+        { NUM_VAL(1 - AXES_ARROW_SIZE), NUM_VAL(AXES_ARROW_SIZE),  NUM_VAL(0) },
+        /* [3] X-axis arrow line (lower) */
+        { NUM_VAL(1 - AXES_ARROW_SIZE), NUM_VAL(-AXES_ARROW_SIZE),  NUM_VAL(0) },
+        /* [4] Y-axis direction */
+        { NUM_VAL(0), NUM_VAL(1),  NUM_VAL(0) },
+        /* [5] Y-axis arrow line (upper) */
+        { NUM_VAL(AXES_ARROW_SIZE), NUM_VAL(1 - AXES_ARROW_SIZE),  NUM_VAL(0) },
+        /* [6] Y-axis arrow line (lower) */
+        { NUM_VAL(-AXES_ARROW_SIZE), NUM_VAL(1 - AXES_ARROW_SIZE),  NUM_VAL(0) },
+        /* [7] Z-axis direction */
+        { NUM_VAL(0), NUM_VAL(0),  NUM_VAL(1) },
+        /* [8] Z-axis arrow line (upper) */
+        { NUM_VAL(AXES_ARROW_SIZE), NUM_VAL(0),  NUM_VAL(1 - AXES_ARROW_SIZE ) },
+        /* [9] Z-axis arrow line (lower) */
+        { NUM_VAL(-AXES_ARROW_SIZE), NUM_VAL(-0),  NUM_VAL(1 - AXES_ARROW_SIZE) },
+    };
+
+    static const Edge AxesEdges[] = {
+        { 0, 1 }, { 1, 2 }, { 1, 3 },   /* X-axis */
+        { 0, 4 }, { 4, 5 }, { 4, 6 },   /* Y-axis */
+        { 0, 7 }, { 7, 8 }, { 7, 9 }    /* Z-axis */
+    };
+
+    static const int numEdges = sizeof(AxesEdges) / sizeof(AxesEdges[0]);
+    int i;
+
+    for (i = 0; i < numEdges; ++i) {
+        const Edge* e = AxesEdges + i;
+        const Vertex* v0 = AxesVertices + e->i0;
+        const Vertex* v1 = AxesVertices + e->i1;
+        int x0, y0, x1, y1;
+
+        xyz2xy(v0->x, v0->y, v0->z, &x0, &y0); 
+        xyz2xy(v1->x, v1->y, v1->z, &x1, &y1); 
+        Bdisp_DrawLineVRAM(x0, y0, x1, y1);
+    }
+}
+
 void DrawGraphStage(void) {
+    void (*xyz2xy)(NUMERIC, NUMERIC, NUMERIC, int*, int *) = NULL;
+
+    switch (g_iProjection) {
+        case PERSPECTIVE:
+            xyz2xy = PerspProject;
+            break;
+        case ORTHOGRAPHIC:
+        default:
+            xyz2xy = OrthoProject;
+            break;
+    }
+
     Bdisp_AllClr_VRAM();
-    Camera.sinA = PZ_FLOAT_TO_FIXED(sin(Camera.iAlphaDeg * PZ_PI / 180));
-    Camera.cosA = PZ_FLOAT_TO_FIXED(cos(Camera.iAlphaDeg * PZ_PI / 180));
-    Camera.sinB = PZ_FLOAT_TO_FIXED(sin(Camera.iBetaDeg * PZ_PI / 180));
-    Camera.cosB = PZ_FLOAT_TO_FIXED(cos(Camera.iBetaDeg * PZ_PI / 180));
+    RefreshCameraTrigBuf();
     /* Box */
     if (g_bDrawBox) {
-        int ei, x0, y0, x1, y1;
-        static const PZ_FIXED bvX[8] = {
-             PZ_FIXED_ONE, PZ_FIXED_NEG_ONE, PZ_FIXED_NEG_ONE,  PZ_FIXED_ONE,
-             PZ_FIXED_ONE, PZ_FIXED_NEG_ONE, PZ_FIXED_NEG_ONE,  PZ_FIXED_ONE
-        };
-        static const PZ_FIXED bvY[8] = {
-             PZ_FIXED_ONE,  PZ_FIXED_ONE, PZ_FIXED_NEG_ONE, PZ_FIXED_NEG_ONE,
-             PZ_FIXED_ONE,  PZ_FIXED_ONE, PZ_FIXED_NEG_ONE, PZ_FIXED_NEG_ONE
-        };
-        static const PZ_FIXED bvZ[8] = {
-            PZ_FIXED_ONE,     PZ_FIXED_ONE,     PZ_FIXED_ONE,     PZ_FIXED_ONE,
-            PZ_FIXED_NEG_ONE, PZ_FIXED_NEG_ONE, PZ_FIXED_NEG_ONE, PZ_FIXED_NEG_ONE
-        };
-        static const int edges[12][2] = {
-            {0,1},{1,2},{2,3},{3,0},
-            {4,5},{5,6},{6,7},{7,4},
-            {0,4},{1,5},{2,6},{3,7}
-        };
-        for (ei = 0; ei < 12; ++ei) {
-            int v0, v1;
-            v0 = edges[ei][0]; v1 = edges[ei][1];
-            xyz2xy(bvX[v0], bvY[v0], bvZ[v0], &x0, &y0);
-            xyz2xy(bvX[v1], bvY[v1], bvZ[v1], &x1, &y1);
-            Bdisp_DrawLineVRAM(x0, y0, x1, y1);
-        }
+        DrawBoxEdges(xyz2xy);
     }
-    /* Canvas */
-    redrawCanvas();
+    /* Aexs */
+    if (g_bDrawAxes) {
+        DrawAxes(xyz2xy);
+    }
+    /* Surface */
+    switch (g_iFuncType) {
+        case FUNC_TYPE_CARTESIAN:
+            DrawCartSurfaceWireframe(xyz2xy);
+            break;
+        case FUNC_TYPE_PARAMETRIC:
+            DrawParmSurfaceWireframe(xyz2xy);
+            break;
+    }
     /* Busy Indicator*/
     if (g_bPlaying) {
         DrawBitmap(VRAM_WIDTH - 8, 0, SPRITE_BUSY);
     }
     /* Bottom Menu */
     if (g_bGraphMenuVisible) {
-        const uchar* pMenuBitmap[B_MENU_ITEM_NUM] = { MENU_BACK, MENU_PLAY, MENU_O_P_SWITCH, MENU_RESET, MENU_BOX, MENU_HIDE };
+        const uchar* pMenuBitmap[B_MENU_ITEM_NUM] = { MENU_RESET, MENU_PLAY, MENU_O_P_SWITCH, MENU_AXES, MENU_BOX, MENU_HIDE };
         int i;
         Bdisp_AreaClr_VRAM(&BoxMenuArea);
         if (g_bPlaying) {
@@ -766,8 +1075,39 @@ void DrawGraphStage(void) {
     }
 }
 
+void GraphAnimationUpdateFrame(
+    void (*pfnDrawFirstFrame)(void),
+    void (*pfnRedraw)(int iPct)
+) {
+    switch (g_iFuncType) {
+        case FUNC_TYPE_CARTESIAN:
+            EzMachine_SetVariableByIndex(
+                g_pVmCartZ,
+                VM_VAR_T_INDEX,
+                VM_VAR_T_STEP + EzMachine_GetVariableByIndex(g_pVmCartZ, VM_VAR_T_INDEX)
+            );
+            break;
+        case FUNC_TYPE_PARAMETRIC: {
+            int i;
+            for (i = 0; i < 3; ++i) {
+                EzMachine_SetVariableByIndex(
+                    g_pVmParm[i],
+                    VM_VAR_T_INDEX,
+                    VM_VAR_T_STEP + EzMachine_GetVariableByIndex(g_pVmParm[i], VM_VAR_T_INDEX)
+                );
+            }
+        }
+    }
+    RecalcSurface(pfnDrawFirstFrame, pfnRedraw);
+}
+
 void GraphStageHandleKey(uint uKey) {
     switch (uKey) {
+        case KEY_CTRL_F1:
+        case KEY_CTRL_OPTN:
+            PzCamera_Reset(VRAM_WIDTH / 2, VRAM_HEIGHT / 2);
+            break;
+
         case KEY_CTRL_F2:
             g_bPlaying = 1;
             g_iPlayKeyTicks = RTC_GetTicks();
@@ -775,18 +1115,10 @@ void GraphStageHandleKey(uint uKey) {
 
         case KEY_CTRL_F3:
             g_iProjection = !g_iProjection;
-            switch (g_iProjection) {
-                case ORTHOGRAPHIC:
-                    xyz2xy = PzCamera_OrthoProjectFixed;
-                    break;
-                case PERSPECTIVE:
-                    xyz2xy = PzCamera_PerspProjectFixed;
-                    break;
-            }
             break;
 
         case KEY_CTRL_F4:
-            PzCamera_Reset(VRAM_WIDTH / 2, VRAM_HEIGHT / 2);
+            g_bDrawAxes = !g_bDrawAxes;
             break;
 
         case KEY_CTRL_F5:
@@ -851,8 +1183,7 @@ void GraphStageHandleKey(uint uKey) {
 
         case KEY_CTRL_FD: {
             if (!g_bPlaying) {
-                EzMachine_SetVariableByIndex(g_pVm, VM_VAR_T_INDEX, VM_VAR_T_STEP + EzMachine_GetVariableByIndex(g_pVm, VM_VAR_T_INDEX));
-                RecalcSurface(RecalcInitTopRight, RecalcRedrawTopRight);
+                GraphAnimationUpdateFrame(RecalcInitTopRight, RecalcRedrawTopRight);
             }
             break;
         }
@@ -887,6 +1218,7 @@ int GraphStage(void) {
                 }
                 g_iPlayKeyTicks = RTC_GetTicks();
                 switch(nKey) {
+                    case NKEY_F1: GraphStageHandleKey(KEY_CTRL_F1); break;
                     case NKEY_F2: GraphStageHandleKey(KEY_CTRL_F2); break;
                     case NKEY_F3: GraphStageHandleKey(KEY_CTRL_F3); break;
                     case NKEY_F4: GraphStageHandleKey(KEY_CTRL_F4); break;
@@ -905,17 +1237,16 @@ int GraphStage(void) {
                     case NKEY_LEFT: GraphStageHandleKey(KEY_CTRL_LEFT); break;
                     case NKEY_RIGHT: GraphStageHandleKey(KEY_CTRL_RIGHT); break;
                     case NKEY_FD: GraphStageHandleKey(KEY_CTRL_FD); break;
+                    case NKEY_OPTN: GraphStageHandleKey(KEY_CTRL_OPTN); break;
                     default: break;
                 }
             }
             Bdisp_PutDisp_DD();
-            EzMachine_SetVariableByIndex(g_pVm, VM_VAR_T_INDEX, VM_VAR_T_STEP + EzMachine_GetVariableByIndex(g_pVm, VM_VAR_T_INDEX));
-            RecalcSurface(NULL, NULL);
+            GraphAnimationUpdateFrame(NULL, NULL);
             continue;
         }
         GetKey(&uKey);
         switch (uKey) {
-            case KEY_CTRL_F1:
             case KEY_CTRL_EXIT:
                 return 0;
             default:
@@ -1274,12 +1605,10 @@ void DrawSamplesStage(void) {
     /* Bottom Menu */
     {
         static const uchar* pMenuBitmap[B_MENU_ITEM_NUM] = { MENU_BACK, 0, 0, 0, 0, MENU_OK };
-        int bMenuItemVisible[B_MENU_ITEM_NUM];
         int i;
         Bdisp_AreaClr_VRAM(&BoxMenuArea);
-        memset(bMenuItemVisible, 1, sizeof(bMenuItemVisible));
         for (i = 0; i < B_MENU_ITEM_NUM; ++i) {
-            if (pMenuBitmap[i] && bMenuItemVisible[i]) {
+            if (pMenuBitmap[i]) {
                 DrawBitmap(B_MENU_LEFT + B_MENU_ITEM_WIDTH * i, B_MENU_TOP, pMenuBitmap[i]);
             }
         }
@@ -1410,6 +1739,71 @@ void HelpStage() {
 }
 
 /*====================================================
+ * Parametric Stage
+ *====================================================*/
+
+static void DrawParametricStage() {
+    int iX, iY = 8, i;
+    const char* szTitle = "Edit Parametric";
+    const char* szExprLabel[] = { "x(u,v)=", "y(u,v)=", "z(u,v)=" };
+    Bdisp_AllClr_VRAM();
+
+    /* Title */
+    iX = (VRAM_WIDTH - strlen(szTitle) * CURRENT_FONT_WIDTH) / 2;
+    PutText(iX, 0, (const uchar *)szTitle);
+    Bdisp_AreaReverseVRAM(0, 0, 127, 7);
+
+    /* Expr */
+    for (i = 0; i < 3; ++i) {
+        PutText(0, iY, szExprLabel[i]);
+        iY += CURRENT_FONT_HEIGHT;
+        PutText(12, iY, g_szParmExpr[i]);
+        iY += CURRENT_FONT_HEIGHT;
+    }
+
+    /* Bottom Menu */
+    {
+        static const uchar* pMenuBitmap[B_MENU_ITEM_NUM] = { MENU_BACK, MENU_X_EQ, MENU_Y_EQ, MENU_Z_EQ, 0, MENU_OK };
+        int i;
+        Bdisp_AreaClr_VRAM(&BoxMenuArea);
+        for (i = 0; i < B_MENU_ITEM_NUM; ++i) {
+            if (pMenuBitmap[i]) {
+                DrawBitmap(B_MENU_LEFT + B_MENU_ITEM_WIDTH * i, B_MENU_TOP, pMenuBitmap[i]);
+            }
+        }
+    }
+}
+
+static int ParametricStage() {
+    uint uKey;
+    while (1) {
+        DrawParametricStage();
+        GetKey(&uKey);
+        switch (uKey) {
+            case KEY_CTRL_F1:
+                return 0;
+    
+            case KEY_CTRL_F2:
+                ExprStage(PARM_EXPR_LENGTH, g_szParmExpr[0], "Edit x(u,v)=");
+                break;
+            
+            case KEY_CTRL_F3:
+                ExprStage(PARM_EXPR_LENGTH, g_szParmExpr[1], "Edit y(u,v)=");
+                break;
+
+            case KEY_CTRL_F4:
+                ExprStage(PARM_EXPR_LENGTH, g_szParmExpr[2], "Edit z(u,v)=");
+                break;
+
+            case KEY_CTRL_EXE:
+            case KEY_CTRL_F6:
+                return 1;
+        }
+    }
+    return 0;
+}
+
+/*====================================================
  * Main Stage: Ready, Error, Formula
  *====================================================*/
 
@@ -1436,44 +1830,18 @@ static void DrawIdleScreen(void) {
 }
 
 static void DrawErrorScreen(void) {
-    const char* szErrType;
-    const char* szDetail;
-    int iLen;
+    int iW;
+    static const char* szTitle = "Error";
 
-    Bdisp_AllClr_VRAM();
+    iW = strlen(szTitle) * CURRENT_FONT_WIDTH;
+    PutText((VRAM_WIDTH - iW) / 2, 0, (const uchar *)szTitle);
+    Bdisp_AreaReverseVRAM(0, 0, 127, 7);
+    
+    iW = strlen(g_szErrMsgLine1) * CURRENT_FONT_WIDTH;
+    PutText((VRAM_WIDTH - iW) / 2, 24, (const uchar *)g_szErrMsgLine1);
 
-    if (g_pAstExpr == NULL) {
-        szErrType = "Syntax Error";
-        szDetail = NULL;
-    } else {
-        switch (g_iCompileErr) {
-            case EZERR_VARIABLE_UNDEFINED:
-                szErrType = "Undefined Variable:"; break;
-            case EZERR_FUNCTION_UNDEFINED:
-                szErrType = "Undefined Function:"; break;
-            case EZERR_FUNCTION_PARAM_MISMATCH:
-                szErrType = "Parameters mismatch:"; break;
-            default:
-                szErrType = "Compile Error:"; break;
-        }
-        szDetail = g_szErrorBuf;
-    }
-
-    iLen = (int)strlen(szErrType) * CURRENT_FONT_WIDTH;
-    PutText((VRAM_WIDTH - iLen) / 2, 8 + 12, (const uchar*)szErrType);
-
-    if (szDetail != NULL && szDetail[0] != '\0') {
-        iLen = (int)strlen(szDetail) * CURRENT_FONT_WIDTH;
-        PutText((VRAM_WIDTH - iLen) / 2, 8 + 22, (const uchar*)szDetail);
-    }
-
-    iLen = (int)strlen(szErrType) * CURRENT_FONT_WIDTH;
-    PutText((VRAM_WIDTH - iLen) / 2, 8 + 12, (const uchar*)szErrType);
-
-    if (szDetail != NULL && szDetail[0] != '\0') {
-        iLen = (int)strlen(szDetail) * CURRENT_FONT_WIDTH;
-        PutText((VRAM_WIDTH - iLen) / 2, 8 + 22, (const uchar*)szDetail);
-    }
+    iW = strlen(g_szErrMsgLine2) * CURRENT_FONT_WIDTH;
+    PutText((VRAM_WIDTH - iW) / 2, 32, (const uchar *)g_szErrMsgLine2);
 }
 
 void DrawMainStage(void) {
@@ -1491,7 +1859,7 @@ void DrawMainStage(void) {
     }
     /* Draw bttom menu */
     {
-        static const uchar* pMenuBitmap[B_MENU_ITEM_NUM] = { MENU_EXPR, MENU_WIN, MENU_SAMPLE, MENU_HELP, 0, MENU_PLOT };
+        static const uchar* pMenuBitmap[B_MENU_ITEM_NUM] = { MENU_CART, MENU_PARM, MENU_WIN, MENU_SAMPLE, MENU_HELP, MENU_PLOT };
         int bMenuItemVisible[B_MENU_ITEM_NUM];
         int i;
         Bdisp_AreaClr_VRAM(&BoxMenuArea);
@@ -1513,18 +1881,29 @@ int MainStage(void) {
         GetKey(&uKey);
         switch (uKey) {
             case KEY_CTRL_F1:
-                iRet = ExprStage();
+                iRet = ExprStage(sizeof(g_szCartExpr), g_szCartExpr, "Edit z(x,y)=");
                 if (iRet) {
-                    if (ParseAndRenderExpr())
+                    g_iFuncType = FUNC_TYPE_CARTESIAN;
+                    if (ParseAndRenderExpr()) 
                         g_iMainState = STATE_READY;
                     else
                         g_iMainState = STATE_ERROR;
                 }
                 break;
             case KEY_CTRL_F2:
-                WindowEditorStage();
+                iRet = ParametricStage();
+                if (iRet) {
+                    g_iFuncType = FUNC_TYPE_PARAMETRIC;
+                    if (ParseAndRenderExpr()) 
+                        g_iMainState = STATE_READY;
+                    else
+                        g_iMainState = STATE_ERROR;
+                }
                 break;
             case KEY_CTRL_F3:
+                WindowEditorStage();
+                break;
+            case KEY_CTRL_F4:
                 iRet = SamplesStage();
                 if (iRet) {
                     const PzSample* p = &PlotterZSamples[g_iSampleIndex];
@@ -1536,7 +1915,7 @@ int MainStage(void) {
                     Camera.zMax = p->zMax;
                     Camera.xGrid = 15;
                     Camera.yGrid = 15;
-                    Utils_StringCopy(g_szExpr, sizeof(g_szExpr), p->szExpr);
+                    Utils_StringCopy(g_szCartExpr, sizeof(g_szCartExpr), p->szExpr);
                     if (ParseAndRenderExpr())
                         g_iMainState = STATE_READY;
                     else
@@ -1544,13 +1923,24 @@ int MainStage(void) {
                 }
                 break;
             
-            case KEY_CTRL_F4:
+            case KEY_CTRL_F5:
                 HelpStage();
                 break;
     
             case KEY_CTRL_F6:
                 if (g_iMainState == STATE_READY) {
-                    EzMachine_SetVariableByIndex(g_pVm, VM_VAR_T_INDEX, 0);
+                    switch (g_iFuncType) {
+                        case FUNC_TYPE_CARTESIAN:
+                            EzMachine_SetVariableByIndex(g_pVmCartZ, VM_VAR_T_INDEX, 0);
+                            break;
+                        case FUNC_TYPE_PARAMETRIC: {
+                            int i;
+                            for (i = 0; i < 3; ++i) {
+                                EzMachine_SetVariableByIndex(g_pVmParm[i], VM_VAR_T_INDEX, 0);
+                            }
+                            break;
+                        }
+                    }
                     if (RecalcSurface(RecalcInitFullscreen, RecalcRedrawFullscreen)) {
                         GraphStage();
                     }
@@ -1592,11 +1982,11 @@ int AddIn_main(int isAppli, unsigned short OptionNum) {
     WinEdit_ApplyDefault();
     
     /* Set up renderer-Z callback interfaces */
-    RenderConfig_GetDefaultStyle(&g_RenderConfig);
-    RenderConfig_CalculateBigSymbolPoints(&g_RenderConfig);
-    g_RenderConfig.sInterfaces.setPixel = RzSetPixel;
-    g_RenderConfig.sInterfaces.plotLine = Bdisp_DrawLineVRAM;
-    g_RenderConfig.sInterfaces.putChar  = RzPutChar;
+    RenderConfig_GetDefaultStyle(&g_rzConfig);
+    RenderConfig_CalculateBigSymbolPoints(&g_rzConfig);
+    g_rzConfig.sInterfaces.setPixel = RzSetPixel;
+    g_rzConfig.sInterfaces.plotLine = Bdisp_DrawLineVRAM;
+    g_rzConfig.sInterfaces.putChar  = RzPutChar;
 
     MainStage();
     return 1;

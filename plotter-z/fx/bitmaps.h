@@ -11,16 +11,35 @@
 
 /*
  {
-   "variable_name": "MENU_EXPR",
+   "variable_name": "MENU_CART",
    "width": 19,
    "height": 8
  }
 */
 
-static const unsigned char MENU_EXPR[] = {
+static const unsigned char MENU_CART[] = {
 	/* width */ 19, /* height */ 8,
-	/* bitmap (0, 0) */ 255, 138, 186, 141, 186, 186, 138, 255,
-	/* bitmap (1, 0) */ 255, 153, 170, 153, 186, 186, 186, 255,
+	/* bitmap (0, 0) */ 255, 205, 186, 184, 186, 186, 202, 255,
+	/* bitmap (1, 0) */ 255, 152, 173, 157, 173, 173, 173, 255,
+	/* bitmap (2, 0) */ 224, 224, 224, 224, 224, 192, 128, 0
+};
+
+/* #BITMAP_END */
+
+/* #BITMAP_START */
+
+/*
+ {
+   "variable_name": "MENU_PARM",
+   "width": 19,
+   "height": 8
+ }
+*/
+
+static const unsigned char MENU_PARM[] = {
+	/* width */ 19, /* height */ 8,
+	/* bitmap (0, 0) */ 255, 140, 181, 140, 189, 189, 189, 255,
+	/* bitmap (1, 0) */ 255, 110, 164, 106, 110, 174, 174, 255,
 	/* bitmap (2, 0) */ 224, 224, 224, 224, 224, 192, 128, 0
 };
 
@@ -171,8 +190,8 @@ static const unsigned char MENU_EDIT[] = {
 
 static const unsigned char MENU_CLEAR[] = {
 	/* width */ 19, /* height */ 8,
-	/* bitmap (0, 0) */ 255, 128, 134, 136, 136, 136, 136, 134,
-	/* bitmap (1, 0) */ 255, 0, 140, 138, 140, 138, 138, 234,
+	/* bitmap (0, 0) */ 255, 128, 157, 161, 161, 161, 161, 157,
+	/* bitmap (1, 0) */ 255, 0, 14, 9, 14, 9, 9, 233,
 	/* bitmap (2, 0) */ 224, 0, 0, 0, 0, 0, 0, 0
 };
 
@@ -190,9 +209,28 @@ static const unsigned char MENU_CLEAR[] = {
 
 static const unsigned char MENU_BOX[] = {
 	/* width */ 19, /* height */ 8,
-	/* bitmap (0, 0) */ 255, 128, 140, 138, 140, 138, 138, 140,
-	/* bitmap (1, 0) */ 255, 0, 74, 170, 164, 170, 170, 74,
-	/* bitmap (2, 0) */ 224, 0, 0, 0, 0, 0, 0, 0
+	/* bitmap (0, 0) */ 255, 128, 184, 165, 185, 165, 165, 184,
+	/* bitmap (1, 0) */ 255, 0, 200, 37, 34, 37, 40, 200,
+	/* bitmap (2, 0) */ 224, 0, 128, 0, 0, 0, 128, 128
+};
+
+/* #BITMAP_END */
+
+/* #BITMAP_START */
+
+/*
+ {
+   "variable_name": "MENU_AXES",
+   "width": 19,
+   "height": 8
+ }
+*/
+
+static const unsigned char MENU_AXES[] = {
+	/* width */ 19, /* height */ 8,
+	/* bitmap (0, 0) */ 255, 128, 146, 170, 185, 170, 170, 170,
+	/* bitmap (1, 0) */ 255, 0, 185, 162, 57, 160, 160, 187,
+	/* bitmap (2, 0) */ 224, 0, 128, 0, 0, 128, 128, 0
 };
 
 /* #BITMAP_END */
@@ -228,9 +266,9 @@ static const unsigned char MENU_HIDE[] = {
 
 static const unsigned char MENU_RESET[] = {
 	/* width */ 19, /* height */ 8,
-	/* bitmap (0, 0) */ 255, 128, 140, 138, 140, 138, 138, 138,
-	/* bitmap (1, 0) */ 255, 0, 110, 132, 68, 36, 36, 196,
-	/* bitmap (2, 0) */ 224, 0, 0, 0, 0, 0, 0, 0
+	/* bitmap (0, 0) */ 255, 128, 184, 165, 184, 164, 164, 165,
+	/* bitmap (1, 0) */ 255, 0, 239, 2, 194, 34, 34, 194,
+	/* bitmap (2, 0) */ 224, 0, 128, 0, 0, 0, 0, 0
 };
 
 /* #BITMAP_END */
@@ -328,6 +366,63 @@ static const unsigned char MENU_STOP[] = {
 	/* bitmap (2, 0) */ 255, 0, 193, 26, 25, 0, 24, 219,
 	/* bitmap (3, 0) */ 255, 0, 185, 18, 18, 146, 146, 17,
 	/* bitmap (4, 0) */ 255, 0, 48, 168, 176, 160, 160, 32
+};
+
+/* #BITMAP_END */
+
+/* #BITMAP_START */
+
+/*
+ {
+   "variable_name": "MENU_X_EQ",
+   "width": 19,
+   "height": 8
+ }
+*/
+
+static const unsigned char MENU_X_EQ[] = {
+	/* width */ 19, /* height */ 8,
+	/* bitmap (0, 0) */ 255, 221, 235, 247, 235, 221, 221, 255,
+	/* bitmap (1, 0) */ 255, 255, 135, 255, 255, 135, 255, 255,
+	/* bitmap (2, 0) */ 224, 224, 224, 224, 224, 192, 128, 0
+};
+
+/* #BITMAP_END */
+
+/* #BITMAP_START */
+
+/*
+ {
+   "variable_name": "MENU_Y_EQ",
+   "width": 19,
+   "height": 8
+ }
+*/
+
+static const unsigned char MENU_Y_EQ[] = {
+	/* width */ 19, /* height */ 8,
+	/* bitmap (0, 0) */ 255, 221, 235, 247, 247, 247, 247, 255,
+	/* bitmap (1, 0) */ 255, 255, 135, 255, 255, 135, 255, 255,
+	/* bitmap (2, 0) */ 224, 224, 224, 224, 224, 192, 128, 0
+};
+
+/* #BITMAP_END */
+
+/* #BITMAP_START */
+
+/*
+ {
+   "variable_name": "MENU_Z_EQ",
+   "width": 19,
+   "height": 8
+ }
+*/
+
+static const unsigned char MENU_Z_EQ[] = {
+	/* width */ 19, /* height */ 8,
+	/* bitmap (0, 0) */ 255, 193, 251, 247, 239, 223, 193, 255,
+	/* bitmap (1, 0) */ 255, 255, 135, 255, 255, 135, 255, 255,
+	/* bitmap (2, 0) */ 224, 224, 224, 224, 224, 192, 128, 0
 };
 
 /* #BITMAP_END */
