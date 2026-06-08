@@ -1,5 +1,15 @@
 /* pilrc generated file.  Do not edit!*/
-#define DrawForm 1039
+#define ParmOKButton 1053
+#define ParmExprField3 1052
+#define ParmExprField2 1050
+#define ParmExprField1 1048
+#define ParmCancelButton 1046
+#define ParametricForm 1045
+#define CartesianOKButton 1044
+#define CartesianExprField 1043
+#define CartesianCancelButton 1041
+#define CartesianForm 1040
+#define GraphForm 1039
 #define SamplesOKButton 1038
 #define SamplesListID 1037
 #define SamplesCancelButton 1036
@@ -18,9 +28,9 @@
 #define AboutVersionField 1017
 #define AboutOKButton 1014
 #define AboutForm 1013
-#define MainDrawButton 1012
-#define MainParseButton 1011
-#define MainFormulaField 1010
+#define MainParametricButton 1012
+#define MainDrawButton 1011
+#define MainCartesianButton 1010
 #define MainForm 1009
 #define RomIncompatibleAlert 1008
 #define EditOnlyMenuBar 1006

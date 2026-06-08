@@ -16,6 +16,19 @@
 #include "BitmapBuffer.h"
 #include "../../plotter-z/utils/samples.h"
 
+#define FOV_DRAG_THRESHOLD 15
+#define DRAW_ZOOM_THRESHOLD 8
+#define CURRENT_FONT_WIDTH  6
+#define CURRENT_FONT_HEIGHT 8
+#define CORNER_SIZE         10
+#define CORNER_TEXT_X      	2
+#define CORNER_TEXT_Y      	1
+#define ORTHOGRAPHIC    	0
+#define PERSPECTIVE     	1
+#define MAIN_FORM_IDLE		0
+#define MAIN_FORM_ERROR		1
+#define MAIN_FORM_READY		2
+
 /*********************************************************************
  * Global variables
  *********************************************************************/
@@ -23,49 +36,97 @@ PlotterZPreferenceType g_prefs;
 BmpBuffer*             g_pBmpBufFormula;
 BmpBuffer*             g_pBmpCanvas;
 
-FzAstNode*  g_pAstExpr      = NULL;
-EzMachine*  g_pVm           = NULL;
-RenderNode* g_pRenderNode   = NULL;
-RenderConfig g_RenderConfig;
+/*====================================================
+ * Numeric
+ *====================================================*/
+#define USE_FIXED_POINT
 
-static char g_szExpr[256] = "sin(sqr(x^2+y^2))*cos(sqr(x^2+y^2))";
-static char g_szErrorBuf[EZ_ERROR_CONTENT_LENGTH];
-EzError g_iCompileErr;
-static Boolean g_bParseOk = false;
-static Int16 g_iFormulaX = 0;
-static Int16 g_iFormulaY = 0;
+#ifdef USE_FIXED_POINT
+#   define NUMERIC          PZ_FIXED
+#   define NUM_VAL(v)       (PZ_FLOAT_TO_FIXED(v))
+#   define TO_FLOAT(v)      (PZ_FIXED_TO_FLOAT(v))
+#   define OrthoProject     PzCamera_OrthoProjectFixed
+#   define PerspProject     PzCamera_PerspProjectFixed
+#else
+#   define NUMERIC          PZ_FLOAT
+#   define NUM_VAL(v)       (v)
+#   define TO_FLOAT(v)      (v)
+#   define OrthoProject     PzCamera_OrthoProjectFloat
+#   define PerspProject     PzCamera_PerspProjectFloat
+#endif
 
 /*====================================================
  * Camera and surface data
  *====================================================*/
-#define GRID_MAX            25
+typedef struct { NUMERIC x, y, z; } Vertex;
+typedef struct { int i0, i1; } Edge;
 
-static PZ_FIXED zBuf[GRID_MAX * GRID_MAX];
-static PZ_FIXED xBuf[GRID_MAX];
-static PZ_FIXED yBuf[GRID_MAX];
-#define Z_BUF(x,y) (zBuf[(x) + (y) * Camera.xGrid])
+#define CART_EXPR_LENGTH	150
+#define PARM_EXPR_LENGTH	80
 
-/* DrawForm interaction */
-static Int16 g_iDrawMode = 0; /* 0=Camera, 1=Pan Move, 2=Zoom, 3=Fov */
-static Boolean g_bDrawBox = false;
-static Boolean g_bDrawFooter = true;
-static Boolean g_bDrawPenDown = false;
-static Int16 g_iDrawPrevX, g_iDrawPrevY;
-static Int16 g_iDrawZoomAccum = 0;
-static Int16 g_iFovAccum = 0;
-static Int16 g_iSurfaceDragThreshold = 12;
-static Int16 g_iFormulaDragThreshold = 6;
-static UInt32 g_dwLastDrawUpdate = 0;
+#define X_GRID_MAX      25
+#define Y_GRID_MAX      25
+#define U_GRID_MAX      15
+#define V_GRID_MAX      15
+#define BUFFER_MAX(a,b) ((a) > (b) ? (a) : (b))
+#define VERTEX_BUFFER_SIZE  BUFFER_MAX(X_GRID_MAX + Y_GRID_MAX + X_GRID_MAX * Y_GRID_MAX, U_GRID_MAX * V_GRID_MAX * 3)
 
-#define FOV_DRAG_THRESHOLD 15
+char    g_szCartExpr[CART_EXPR_LENGTH] = "sin(sqr(x^2+y^2))*cos(sqr(x^2+y^2))";
+char    g_szParmExpr[3][PARM_EXPR_LENGTH] = { "5*sin(u)*cos(v)", "5*sin(u)*sin(v)", "5/2*cos(u)" };
+char    g_szErrMsgLine1[EZ_ERROR_CONTENT_LENGTH] = "";
+char    g_szErrMsgLine2[EZ_ERROR_CONTENT_LENGTH] = "";
 
-#define DRAW_ZOOM_THRESHOLD 8
+int             g_iFuncType     = FUNC_TYPE_CARTESIAN;
+FzAstNode*      g_pAstCartZ     = NULL;
+EzMachine*      g_pVmCartZ      = NULL;
 
-#define CURRENT_FONT_WIDTH  6
-#define CURRENT_FONT_HEIGHT 8
-#define CORNER_SIZE         10
-#define CORNER_TEXT_X      	2
-#define CORNER_TEXT_Y      	1
+FzAstNode*      g_pAstParm[]    = { NULL, NULL, NULL };
+EzMachine*      g_pVmParm[]     = { NULL, NULL, NULL };
+
+RenderNode*     g_pRenderNode   = NULL;
+RenderConfig    g_rzConfig;
+
+int             g_iProjection = ORTHOGRAPHIC;
+
+static const char* szFuncTypeLabel[] = { "CARTESIAN", "PARAMETRIC" };
+
+/* Vertex Buffer */
+NUMERIC g_fVertexBuf[VERTEX_BUFFER_SIZE];
+
+/* Cartesian */
+NUMERIC *g_fCartXBuf = g_fVertexBuf;
+NUMERIC *g_fCartYBuf = g_fVertexBuf + X_GRID_MAX;
+NUMERIC *g_fCartZBuf = g_fVertexBuf + X_GRID_MAX + Y_GRID_MAX;
+
+#define CART_Z_BUF(x,y) (g_fCartZBuf[(x) + (y) * Camera.xGrid])
+
+/* Parametric */
+NUMERIC *g_fParmXBuf = g_fVertexBuf;
+NUMERIC *g_fParmYBuf = g_fVertexBuf + U_GRID_MAX * V_GRID_MAX;
+NUMERIC *g_fParmZBuf = g_fVertexBuf + U_GRID_MAX * V_GRID_MAX * 2;
+
+#define PARM_X_BUF(iu,iv) (g_fParmXBuf[(iu) + (iv) * Camera.uGrid])
+#define PARM_Y_BUF(iu,iv) (g_fParmYBuf[(iu) + (iv) * Camera.uGrid])
+#define PARM_Z_BUF(iu,iv) (g_fParmZBuf[(iu) + (iv) * Camera.uGrid])
+
+/* GraphForm interaction */
+static Int16 	g_iDrawMode = 0; /* 0=Camera, 1=Pan Move, 2=Zoom, 3=Fov */
+static Boolean 	g_bDrawBox = false;
+static Boolean 	g_bDrawAxes = false;
+static Boolean 	g_bDrawFooter = true;
+static Boolean 	g_bDrawPenDown = false;
+static Int16 	g_iDrawPrevX, g_iDrawPrevY;
+static Int16 	g_iDrawZoomAccum = 0;
+static Int16 	g_iFovAccum = 0;
+static Int16 	g_iSurfaceDragThreshold = 12;
+static Int16 	g_iFormulaDragThreshold = 6;
+static UInt32 	g_dwLastDrawUpdate = 0;
+
+/* MainForm interaction */
+static Int16 	g_iFormulaX = 0;
+static Int16 	g_iFormulaY = 0;
+static Int16 	g_iMainFormState = MAIN_FORM_IDLE;
+static Boolean	g_bParseSuccess = false;
 
 /*********************************************************************
  * Internal Constants
@@ -85,168 +146,174 @@ static void * GetObjectPtr(UInt16 objectID) {
 /*====================================================
  * Renderer-Z interface wrappers (draw on formula bmp)
  *====================================================*/
-static void rzSetPixel(int x, int y) {
+static void RzSetPixel(int x, int y) {
     BmpBuffer_SetPixel(g_pBmpBufFormula, x, y, 1);
 }
 
-static void rzPlotLine(int x0, int y0, int x1, int y1) {
+static void RzPlotLine(int x0, int y0, int x1, int y1) {
     BmpBuffer_PlotLine(g_pBmpBufFormula, x0, y0, x1, y1, 1);
 }
 
-static void rzPutChar(int x, int y, UInt8 ch) {
+static void RzPutChar(int x, int y, UInt8 ch) {
     BmpBuffer_PutChar(g_pBmpBufFormula, x, y, ch, 1);
 }
 
 /*====================================================
  * Parse expression (AST, compile, build RenderNode)
  *====================================================*/
-static void parseFormula(void) {
-    /* Destroy previous state (keep VM singleton) */
+void HandleParseError(
+    int bIsSyntaxError,
+    int iCompileError,
+    const char* szErrorBuf,
+    int bIsParm,
+    int iParamIndex
+) {
+    static const char* szParmLabel[] = { "x", "y", "z" };
+
+    g_szErrMsgLine1[0] = 0;
+    g_szErrMsgLine2[0] = 0;
+
+    if (bIsSyntaxError) {
+        if (bIsParm) {
+            StrPrintF(g_szErrMsgLine1, "Failed to parse \"%s=\":", szParmLabel[iParamIndex]);
+        } else {
+            StrCopy(g_szErrMsgLine1, "Failed to parse:");
+        }
+        StrCopy(g_szErrMsgLine2, "Syntax error.");
+    }
+    else {
+        switch (iCompileError) {
+            case EZERR_VARIABLE_UNDEFINED:
+                StrCopy(g_szErrMsgLine1, "Undefined variable:");
+                StrPrintF(g_szErrMsgLine2, "\"%s\"", szErrorBuf);
+                break;
+            case EZERR_FUNCTION_UNDEFINED:
+                StrCopy(g_szErrMsgLine1, "Undefined function:");
+                StrPrintF(g_szErrMsgLine2, "\"%s\"", szErrorBuf);
+                break;
+            case EZERR_FUNCTION_PARAM_MISMATCH:
+                StrCopy(g_szErrMsgLine1, "Function parameter mismatch");
+                StrPrintF(g_szErrMsgLine2, "\"%s\"", szErrorBuf);
+                break;
+        }
+    }
+
+	g_iMainFormState = MAIN_FORM_ERROR;
+}
+
+int ParseAndRenderExpr(void) {
+    int iW = g_pBmpBufFormula->iW, iH = g_pBmpBufFormula->iH - 16, i;
+    char szErrorBuf[EZ_ERROR_CONTENT_LENGTH];
+    int iCompileError;
+
+	g_bParseSuccess = true;
+
+    /* Destroy previous AST, RenderNode */
     if (g_pRenderNode != NULL) {
         RenderNode_Destroy(g_pRenderNode);
         g_pRenderNode = NULL;
     }
-    if (g_pAstExpr != NULL) {
-        FzAstNode_Destroy(g_pAstExpr);
-        g_pAstExpr = NULL;
+    if (g_pAstCartZ != NULL) {
+        FzAstNode_Destroy(g_pAstCartZ);
+        g_pAstCartZ = NULL;
     }
-
-    g_bParseOk = false;
-    g_iFormulaX = 0;
-    g_iFormulaY = 0;
-
-    /* Parse expression */
-    g_pAstExpr = FzParser_ParseExpression(g_szExpr);
-    if (g_pAstExpr == NULL) return;
-
-    /* Create VM singleton and compile */
-    if (g_pVm == NULL) {
-        g_pVm = EzMachine_Create();
-        if (g_pVm != NULL) {
-            EzMachine_DeclareVariable(g_pVm, "x");
-            EzMachine_DeclareVariable(g_pVm, "y");
-            EzMachine_DeclareVariable(g_pVm, "pi");
-            EzMachine_AllocateVariables(g_pVm);
-            EzMachine_SetVariableByIndex(g_pVm, 2, PZ_PI);
+    for (i = 0; i < 3; ++i) {
+        if (g_pAstParm[i] != NULL) {
+            FzAstNode_Destroy(g_pAstParm[i]);
+            g_pAstParm[i] = NULL;
         }
     }
-    if (g_pVm != NULL) {
-        g_iCompileErr = EzMachine_Compile(g_pVm, g_pAstExpr, g_szErrorBuf);
-        if (g_iCompileErr != EZERR_NONE) return;
+
+    if (g_iFuncType == FUNC_TYPE_CARTESIAN) {
+        /* Parse */
+        g_pAstCartZ = FzParser_ParseExpression(g_szCartExpr);
+        if (g_pAstCartZ == NULL) {
+            HandleParseError(1, EZERR_NONE, NULL, 0, 0);
+            return 0;
+        }
+
+        /* Create VM singleton */
+        if (g_pVmCartZ == NULL) {
+            g_pVmCartZ = EzMachine_Create();
+            if (g_pVmCartZ != NULL) {
+                EzMachine_DeclareVariable(g_pVmCartZ, "x");
+                EzMachine_DeclareVariable(g_pVmCartZ, "y");
+                EzMachine_DeclareVariable(g_pVmCartZ, "pi");
+                EzMachine_DeclareVariable(g_pVmCartZ, "t");
+                EzMachine_AllocateVariables(g_pVmCartZ);
+                EzMachine_SetVariableByIndex(g_pVmCartZ, 2, PZ_PI);
+            }
+        }
+
+        /* Compile */
+        if (g_pVmCartZ != NULL) {
+            iCompileError = EzMachine_Compile(g_pVmCartZ, g_pAstCartZ, szErrorBuf);
+            if (iCompileError != EZERR_NONE) {
+                HandleParseError(0, iCompileError, szErrorBuf, 0, 0);
+            }
+        }
+
+        /* Build render tree */
+        g_pRenderNode = Render_Transform(g_pAstCartZ, "z=");
+    }
+    else if (g_iFuncType == FUNC_TYPE_PARAMETRIC) {
+        const char *szPrefix[] = { "x=", "y=", "z=" };
+        /* Parse */
+        for (i = 0; i < 3; ++i) {
+            g_pAstParm[i] = FzParser_ParseExpression(g_szParmExpr[i]);
+            if (g_pAstParm[i] == NULL) {
+                HandleParseError(1, EZERR_NONE, NULL, 1, i);
+                return 0;
+            }
+        }
+
+        /* Build render tree */
+        g_pRenderNode = RenderNode_Create(RN_VERTICAL);
+        for (i = 0; i < 3; ++i) {
+            vlPushBack(g_pRenderNode->uData.sVertical.pList, Render_Transform(g_pAstParm[i], szPrefix[i]));
+        }
+
+        /* Compile */
+        for (i = 0; i < 3; ++i) {
+            /* Create VM singleton */
+            if (g_pVmParm[i] == NULL) {
+                g_pVmParm[i] = EzMachine_Create();
+                EzMachine_DeclareVariable(g_pVmParm[i], "u");
+                EzMachine_DeclareVariable(g_pVmParm[i], "v");
+                EzMachine_DeclareVariable(g_pVmParm[i], "pi");
+                EzMachine_DeclareVariable(g_pVmParm[i], "t");
+                EzMachine_AllocateVariables(g_pVmParm[i]);
+                EzMachine_SetVariableByIndex(g_pVmParm[i], 2, PZ_PI);
+            }
+            /* Compile expression to VM */
+            if (g_pVmParm[i] != NULL) {
+                iCompileError = EzMachine_Compile(g_pVmParm[i], g_pAstParm[i], szErrorBuf);
+                if (iCompileError != EZERR_NONE) {
+                    HandleParseError(0, iCompileError, szErrorBuf, 1, i);
+                }
+            }
+        }
     }
 
-    /* Build render tree */
-    g_pRenderNode = Render_Transform(g_pAstExpr);
-    if (g_pRenderNode != NULL) {
-        RenderNode_CalculateSize(g_pRenderNode, &g_RenderConfig);
-        /* Center formula horizontally */
-        g_iFormulaX = (Int16)((g_pBmpBufFormula->iW
-            - g_pRenderNode->sLayout.iWidth) / 2);
-        if (g_iFormulaX < 0) g_iFormulaX = 0;
-		g_iFormulaY = (Int16)((g_pBmpBufFormula->iH - g_pRenderNode->sLayout.iAscent - g_pRenderNode->sLayout.iDescent) / 2) + g_pRenderNode->sLayout.iAscent;
-		if (g_iFormulaY < 0) g_iFormulaY = 0;
-    }
+    if (g_pRenderNode == NULL) return 0;
+
+    RenderNode_CalculateSize(g_pRenderNode, &g_rzConfig);
+
+    /* Center formula */
+    g_iFormulaX = (iW - g_pRenderNode->sLayout.iWidth) / 2;
+    if (g_iFormulaX < 0) g_iFormulaX = 0;
+    g_iFormulaY = (iH - g_pRenderNode->sLayout.iAscent - g_pRenderNode->sLayout.iDescent) / 2 + g_pRenderNode->sLayout.iAscent;
+    
+	g_bParseSuccess = true;
+	g_iMainFormState = MAIN_FORM_READY;
+    return 1;
 }
-
-/*====================================================
- * Render formula to bitmap
- *====================================================*/
-static void renderFormula(void) {
-    Int16 x, y;
-    Int16 iW, iH;
-
-    iW = g_pBmpBufFormula->iW;
-    iH = g_pBmpBufFormula->iH;
-
-    BmpBuffer_AllClear(g_pBmpBufFormula);
-
-    /* Parse error */
-    if (g_pAstExpr == NULL) {
-        const char* szMsg = "Syntax Error";
-        Int16 iLen = (Int16)(StrLen(szMsg) * CURRENT_FONT_WIDTH);
-        x = (iW - iLen) / 2;
-        y = (iH - CURRENT_FONT_HEIGHT) / 2;
-        BmpBuffer_PutText(g_pBmpBufFormula, x, y, (UInt8*)szMsg, 1);
-        return;
-    }
-
-    /* Compile error (check g_szErrorBuf non-empty) */
-    if (g_szErrorBuf[0] != '\0' && g_pRenderNode == NULL) {
-        const char* szErrType = "Compile Error:";
-        Int16 iLen;
-
-		switch (g_iCompileErr) {
-			case EZERR_VARIABLE_UNDEFINED:
-				szErrType = "Undefined Variable:";
-				break;
-			case EZERR_FUNCTION_UNDEFINED:
-				szErrType = "Undefined Function:";
-				break;
-			case EZERR_FUNCTION_PARAM_MISMATCH:
-				szErrType = "Parameters mismatch:";
-				break;
-		}
-
-        iLen = (Int16)(StrLen(szErrType) * CURRENT_FONT_WIDTH);
-        x = (iW - iLen) / 2;
-        y = (iH - CURRENT_FONT_HEIGHT * 2) / 2;
-        BmpBuffer_PutText(g_pBmpBufFormula, x, y, (UInt8*)szErrType, 1);
-        iLen = (Int16)(StrLen(g_szErrorBuf) * CURRENT_FONT_WIDTH);
-        x = (iW - iLen) / 2;
-        y += CURRENT_FONT_HEIGHT;
-        BmpBuffer_PutText(g_pBmpBufFormula, x, y, (UInt8*)g_szErrorBuf, 1);
-        return;
-    }
-
-    /* Render error */
-    if (g_pRenderNode == NULL) {
-        const char* szMsg = "Render error";
-        Int16 iLen = (Int16)(StrLen(szMsg) * CURRENT_FONT_WIDTH);
-        x = (iW - iLen) / 2;
-        y = (iH - CURRENT_FONT_HEIGHT) / 2;
-        BmpBuffer_PutText(g_pBmpBufFormula, x, y, (UInt8*)szMsg, 1);
-        return;
-    }
-
-    g_bParseOk = true;
-
-    /* Line 2: formula rendering */
-    RenderNode_Draw(g_pRenderNode, &g_RenderConfig, g_iFormulaX, g_iFormulaY);
-
-    /* Line 1: f(x,y)= on filled background */
-    {
-        const char* szLabel = "f(x,y)=";
-        BmpBuffer_FillRect(g_pBmpBufFormula, 0, 0,
-            iW, CURRENT_FONT_HEIGHT, 1);
-        BmpBuffer_PutText(g_pBmpBufFormula, 0, 0, (UInt8*)szLabel, 0);
-    }
-
-    /* Line 3: Ready> on filled background */
-    {
-        const char* szReady = "Ready\x18";
-        Int16 iLen = (Int16)(StrLen(szReady) * CURRENT_FONT_WIDTH);
-        x = iW - iLen - 2;
-        y = iH - CURRENT_FONT_HEIGHT;
-        BmpBuffer_FillRect(g_pBmpBufFormula, 0, y,
-            iW, CURRENT_FONT_HEIGHT, 1);
-        BmpBuffer_PutText(g_pBmpBufFormula, x, y, (UInt8*)szReady, 0);
-    }
-}
-
-/*====================================================
- * Projection
- *====================================================*/
-#define ORTHOGRAPHIC    0
-#define PERSPECTIVE     1
-
-void (*xyz2xy)(PZ_FIXED, PZ_FIXED, PZ_FIXED, int*, int *) = PzCamera_OrthoProjectFixed;
-int g_iProjection = ORTHOGRAPHIC;
 
 /*====================================================
  * Recalculate surface geometry
  *====================================================*/
 
-static void redrawRecalc(Int16 iPct) {
+static void RedrawRecalcProgress(Int16 iPct) {
 	char szBuf[32];
 	Int16 iLen, iBarW, iBarH, iBarX, iBarY, iFillW;
 	Int16 iTextX, iTextY, iLabelY;
@@ -300,156 +367,366 @@ static void redrawRecalc(Int16 iPct) {
 	WinDrawBitmap(g_pBmpCanvas->pBmp, 0, 0);
 }
 
-static Boolean recalcSurface(void) {
-    Int16 ix, iy;
-    PZ_FLOAT fXbuf[GRID_MAX], fYbuf[GRID_MAX];
-    PZ_FLOAT fz;
-    PZ_FLOAT fzMid   = (Camera.zMax + Camera.zMin) * 0.5f;
-    PZ_FLOAT fzRange = (Camera.zMax - Camera.zMin);
-    PZ_FLOAT fxMid   = (Camera.xMax + Camera.xMin) * 0.5f;
-    PZ_FLOAT fxRange = (Camera.xMax - Camera.xMin);
-    PZ_FLOAT fyMid   = (Camera.yMax + Camera.yMin) * 0.5f;
-    PZ_FLOAT fyRange = (Camera.yMax - Camera.yMin);
-    Int16 iLastPct = -1;
+static void RecalcCartesian(void) {
+    int iX, iY;
+    PZ_FLOAT fX[X_GRID_MAX];
+    PZ_FLOAT fY[Y_GRID_MAX];
+    PZ_FLOAT fZ;
 
-    if (g_pVm == NULL) return false;
+    /* Compute actual x, y sample positions and store in buffers */
+    for (iX = 0; iX < Camera.xGrid; ++iX) {
+        fX[iX] = Camera.xMin + (Camera.xMax - Camera.xMin) * iX / (Camera.xGrid - 1);
+    }
+    for (iY = 0; iY < Camera.yGrid; ++iY) {
+        fY[iY] = Camera.yMin + (Camera.yMax - Camera.yMin) * iY / (Camera.yGrid - 1);
+    }
 
-	redrawRecalc(0);
-
-    for (ix = 0; ix < Camera.xGrid; ++ix)
-        fXbuf[ix] = Camera.xMin + (Camera.xMax - Camera.xMin) * ix / (PZ_FLOAT)(Camera.xGrid - 1);
-    for (iy = 0; iy < Camera.yGrid; ++iy)
-        fYbuf[iy] = Camera.yMin + (Camera.yMax - Camera.yMin) * iy / (PZ_FLOAT)(Camera.yGrid - 1);
-
-    for (ix = 0; ix < Camera.xGrid; ++ix) {
-        PZ_FLOAT fx = fXbuf[ix];
-        Int16 iPct;
-        for (iy = 0; iy < Camera.yGrid; ++iy) {
-            PZ_FLOAT fy = fYbuf[iy];
-            EzMachine_SetVariableByIndex(g_pVm, 0, fx);
-            EzMachine_SetVariableByIndex(g_pVm, 1, fy);
-            fz = EzMachine_Eval(g_pVm);
-            xBuf[ix] = PZ_FLOAT_TO_FIXED(2.0f * (fx - fxMid) / fxRange);
-            yBuf[iy] = PZ_FLOAT_TO_FIXED(2.0f * (fy - fyMid) / fyRange);
-            Z_BUF(ix, iy) = PZ_FLOAT_TO_FIXED(2.0f * (fz - fzMid) / fzRange);
+    /* Evaluate z = f(x, y) for every grid point */
+    for (iX = 0; iX < Camera.xGrid; ++iX) {
+        for (iY = 0; iY < Camera.yGrid; ++iY) {
+            EzMachine_SetVariableByIndex(g_pVmCartZ, 0, fX[iX]);
+            EzMachine_SetVariableByIndex(g_pVmCartZ, 1, fY[iY]);
+            /* Evaluate the z value */
+            fZ = EzMachine_Eval(g_pVmCartZ);
+            /* Normalize z into [-1, 1] based on the z-axis bounds */
+            CART_Z_BUF(iX, iY) = NUM_VAL(2.0f * (fZ - (Camera.zMax + Camera.zMin) / 2.0f) / (Camera.zMax - Camera.zMin));
         }
-        iPct = (Int16)((ix + 1) * 100 / Camera.xGrid);
-        if (iPct != iLastPct) {
-			redrawRecalc(iPct);
-			iLastPct = iPct;
+        RedrawRecalcProgress((iX + 1) * 100 / Camera.uGrid);
+    }
+
+    /* Normalize x and y grid coordinates into [-1, 1] */
+    for (iX = 0; iX < Camera.xGrid; ++iX) {
+        g_fCartXBuf[iX] = NUM_VAL(2.0f * (fX[iX] - (Camera.xMax + Camera.xMin) / 2.0f) / (Camera.xMax - Camera.xMin));
+    }
+    for (iY = 0; iY < Camera.yGrid; ++iY) {
+        g_fCartYBuf[iY] = NUM_VAL(2.0f * (fY[iY] - (Camera.yMax + Camera.yMin) / 2.0f) / (Camera.yMax - Camera.yMin));
+    }
+}
+
+void RecalcParametric(void) {
+    int iU, iV, i;
+    PZ_FLOAT fU, fV;
+    PZ_FLOAT fPoint[3];
+
+    if (!g_pVmParm[0] || !g_pVmParm[1] || !g_pVmParm[2]) {
+        return;
+    }
+
+    for (iU = 0; iU < Camera.uGrid; ++iU) {
+        fU = Camera.uMin + (Camera.uMax - Camera.uMin) * iU / (Camera.uGrid - 1);
+        for (iV = 0; iV < Camera.vGrid; ++iV) {
+            fV = Camera.vMin + (Camera.vMax - Camera.vMin) * iV / (Camera.vGrid - 1);
+            /* Evaluate x */
+            for (i = 0; i < 3; ++i) {
+                EzMachine_SetVariableByIndex(g_pVmParm[i], 0, fU);
+                EzMachine_SetVariableByIndex(g_pVmParm[i], 1, fV);
+                fPoint[i] = EzMachine_Eval(g_pVmParm[i]);
+            }
+            /* Normalize */
+            PARM_X_BUF(iU, iV) = NUM_VAL(2.0f * (fPoint[0] - (Camera.xMax + Camera.xMin) / 2.0f) / (Camera.xMax - Camera.xMin));
+            PARM_Y_BUF(iU, iV) = NUM_VAL(2.0f * (fPoint[1] - (Camera.yMax + Camera.yMin) / 2.0f) / (Camera.yMax - Camera.yMin));
+            PARM_Z_BUF(iU, iV) = NUM_VAL(2.0f * (fPoint[2] - (Camera.zMax + Camera.zMin) / 2.0f) / (Camera.zMax - Camera.zMin));
+        }
+        RedrawRecalcProgress((iU + 1) * 100 / Camera.uGrid);
+    }
+}
+
+static int RecalcSurface() {
+    RedrawRecalcProgress(0);
+
+    switch (g_iFuncType) {
+        case FUNC_TYPE_CARTESIAN:
+            RecalcCartesian();
+            break;
+        case FUNC_TYPE_PARAMETRIC:
+            RecalcParametric();
+            break;
+    }
+    return 1;
+}
+
+/*====================================================
+ * Draw wireframe to bitmap
+ *====================================================*/
+static void DrawCartSurfaceWireframe(void (*xyz2xy)(NUMERIC, NUMERIC, NUMERIC, int*, int *)) {
+    int iX, iY, x0, y0, x1, y1;
+    NUMERIC z0, z1;
+
+    for (iX = 0; iX < Camera.xGrid; ++iX) {
+        iY = 0;
+        xyz2xy(g_fCartXBuf[iX], g_fCartYBuf[iY], z0 = CART_Z_BUF(iX, iY), &x0, &y0); 
+        for (iY = 0; iY < Camera.yGrid; ++iY) {
+            xyz2xy(g_fCartXBuf[iX], g_fCartYBuf[iY], z1 = CART_Z_BUF(iX, iY), &x1, &y1); 
+            if (
+                z0 <= NUM_VAL(1.0f) &&
+                z0 >= NUM_VAL(-1.0f) &&
+                z1 <= NUM_VAL(1.0f) &&
+                z1 >= NUM_VAL(-1.0f)
+            ) {
+                BmpBuffer_PlotLine(g_pBmpCanvas, x0, y0, x1, y1, 1);
+            }
+            x0 = x1, y0 = y1, z0 = z1;
         }
     }
-    return true;
+
+    for (iY = 0; iY < Camera.yGrid; ++iY) {
+        iX = 0;
+        xyz2xy(g_fCartXBuf[iX], g_fCartYBuf[iY], z0 = CART_Z_BUF(iX, iY), &x0, &y0); 
+        for (iX = 0; iX < Camera.xGrid; ++iX) {
+            xyz2xy(g_fCartXBuf[iX], g_fCartYBuf[iY], z1 = CART_Z_BUF(iX, iY), &x1, &y1); 
+            if (
+                z0 <= NUM_VAL(1.0f) &&
+                z0 >= NUM_VAL(-1.0f) &&
+                z1 <= NUM_VAL(1.0f) &&
+                z1 >= NUM_VAL(-1.0f)
+            ) {
+                BmpBuffer_PlotLine(g_pBmpCanvas, x0, y0, x1, y1, 1);
+            }
+            x0 = x1, y0 = y1, z0 = z1;
+        }
+    }
+}
+
+static void DrawParmSurfaceWireframe(void (*xyz2xy)(NUMERIC, NUMERIC, NUMERIC, int*, int *)) {
+    int iU, iV, x0, y0, x1, y1;
+    for (iV = 0; iV < Camera.vGrid; ++iV) {
+        iU = 0;
+        xyz2xy(PARM_X_BUF(iU, iV), PARM_Y_BUF(iU, iV), PARM_Z_BUF(iU, iV), &x0, &y0); 
+        for (iU = 0; iU < Camera.uGrid; ++iU) {
+            xyz2xy(PARM_X_BUF(iU, iV), PARM_Y_BUF(iU, iV), PARM_Z_BUF(iU, iV), &x1, &y1);
+            BmpBuffer_PlotLine(g_pBmpCanvas, x0, y0, x1, y1, 1);
+            x0 = x1, y0 = y1;
+        }
+    }
+    for (iU = 0; iU < Camera.uGrid; ++iU) {
+        iV = 0;
+        xyz2xy(PARM_X_BUF(iU, iV), PARM_Y_BUF(iU, iV), PARM_Z_BUF(iU, iV), &x0, &y0); 
+        for (iV = 0; iV < Camera.vGrid; ++iV) {
+            xyz2xy(PARM_X_BUF(iU, iV), PARM_Y_BUF(iU, iV), PARM_Z_BUF(iU, iV), &x1, &y1); 
+            BmpBuffer_PlotLine(g_pBmpCanvas, x0, y0, x1, y1, 1);
+            x0 = x1, y0 = y1;
+        }
+    }
 }
 
 /*====================================================
  * Redraw wireframe on canvas
  *====================================================*/
-static void redrawCanvas(BmpBuffer* pBuf) {
-    int ix, iy;
-    PZ_FIXED z0, z1;
-    int x0, y0, x1, y1;
+static void RefreshCameraTrigBuf(void) {
+#ifdef USE_FIXED_POINT
+    Camera.uTrigBuf.sFixed.sinA = PZ_FLOAT_TO_FIXED(sin(Camera.iAlphaDeg * PZ_PI / 180));
+    Camera.uTrigBuf.sFixed.cosA = PZ_FLOAT_TO_FIXED(cos(Camera.iAlphaDeg * PZ_PI / 180));
+    Camera.uTrigBuf.sFixed.sinB = PZ_FLOAT_TO_FIXED(sin(Camera.iBetaDeg * PZ_PI / 180));
+    Camera.uTrigBuf.sFixed.cosB = PZ_FLOAT_TO_FIXED(cos(Camera.iBetaDeg * PZ_PI / 180));
+#else
+    Camera.uTrigBuf.sFloat.sinA = (PZ_FLOAT)sin(Camera.iAlphaDeg * PZ_PI / 180);
+    Camera.uTrigBuf.sFloat.cosA = (PZ_FLOAT)cos(Camera.iAlphaDeg * PZ_PI / 180);
+    Camera.uTrigBuf.sFloat.sinB = (PZ_FLOAT)sin(Camera.iBetaDeg * PZ_PI / 180);
+    Camera.uTrigBuf.sFloat.cosB = (PZ_FLOAT)cos(Camera.iBetaDeg * PZ_PI / 180);
+#endif
+}
 
-    BmpBuffer_AllClear(pBuf);
+static void DrawBoxEdges(void (*xyz2xy)(NUMERIC, NUMERIC, NUMERIC, int*, int *)) {
+    static const Vertex BoxVertices[] = {
+        { NUM_VAL(1.0f),    NUM_VAL(1.0f),  NUM_VAL(1.0f)   },
+        { NUM_VAL(-1.0f),   NUM_VAL(1.0f),  NUM_VAL(1.0f)   },
+        { NUM_VAL(-1.0f),   NUM_VAL(-1.0f), NUM_VAL(1.0f)   },
+        { NUM_VAL(1.0f),    NUM_VAL(-1.0f), NUM_VAL(1.0f)   },
+        { NUM_VAL(1.0f),    NUM_VAL(1.0f),  NUM_VAL(-1.0f)  },
+        { NUM_VAL(-1.0f),   NUM_VAL(1.0f),  NUM_VAL(-1.0f)  },
+        { NUM_VAL(-1.0f),   NUM_VAL(-1.0f), NUM_VAL(-1.0f)  },
+        { NUM_VAL(1.0f),    NUM_VAL(-1.0f), NUM_VAL(-1.0f)  },
+    };
 
-    Camera.sinA = PZ_FLOAT_TO_FIXED(sin(Camera.iAlphaDeg * PZ_PI / 180));
-    Camera.cosA = PZ_FLOAT_TO_FIXED(cos(Camera.iAlphaDeg * PZ_PI / 180));
-    Camera.sinB = PZ_FLOAT_TO_FIXED(sin(Camera.iBetaDeg * PZ_PI / 180));
-    Camera.cosB = PZ_FLOAT_TO_FIXED(cos(Camera.iBetaDeg * PZ_PI / 180));
+    static const Edge BoxEdges[] = {
+        { 0, 1 }, { 1, 2 }, { 2, 3 }, { 3, 0 },
+        { 4, 5 }, { 5, 6 }, { 6, 7 }, { 7, 4 },
+        { 0, 4 }, { 1, 5 }, { 2, 6 }, { 3, 7 }
+    };
 
-    for (ix = 0; ix < Camera.xGrid; ++ix) {
-        iy = 0;
-        xyz2xy(xBuf[ix], yBuf[iy], z0 = Z_BUF(ix, iy), &x0, &y0);
-        for (iy = 0; iy < Camera.yGrid; ++iy) {
-            xyz2xy(xBuf[ix], yBuf[iy], z1 = Z_BUF(ix, iy), &x1, &y1);
-            if (z0 <= PZ_FIXED_ONE && z0 >= PZ_FIXED_NEG_ONE
-                && z1 <= PZ_FIXED_ONE && z1 >= PZ_FIXED_NEG_ONE)
-                BmpBuffer_PlotLine(pBuf, x0, y0, x1, y1, 1);
-            x0 = x1; y0 = y1; z0 = z1;
-        }
-    }
-    for (iy = 0; iy < Camera.yGrid; ++iy) {
-        ix = 0;
-        xyz2xy(xBuf[ix], yBuf[iy], z0 = Z_BUF(ix, iy), &x0, &y0);
-        for (ix = 0; ix < Camera.xGrid; ++ix) {
-            xyz2xy(xBuf[ix], yBuf[iy], z1 = Z_BUF(ix, iy), &x1, &y1);
-            if (z0 <= PZ_FIXED_ONE && z0 >= PZ_FIXED_NEG_ONE
-                && z1 <= PZ_FIXED_ONE && z1 >= PZ_FIXED_NEG_ONE)
-                BmpBuffer_PlotLine(pBuf, x0, y0, x1, y1, 1);
-            x0 = x1; y0 = y1; z0 = z1;
-        }
-    }
+    static const int numEdges = sizeof(BoxEdges) / sizeof(BoxEdges[0]);
+    int i;
 
-    /* Bounding box edges */
-    if (g_bDrawBox) {
-        static const PZ_FIXED bvX[8] = {
-             PZ_FIXED_ONE, PZ_FIXED_NEG_ONE, PZ_FIXED_NEG_ONE,  PZ_FIXED_ONE,
-             PZ_FIXED_ONE, PZ_FIXED_NEG_ONE, PZ_FIXED_NEG_ONE,  PZ_FIXED_ONE
-        };
-        static const PZ_FIXED bvY[8] = {
-             PZ_FIXED_ONE,  PZ_FIXED_ONE, PZ_FIXED_NEG_ONE, PZ_FIXED_NEG_ONE,
-             PZ_FIXED_ONE,  PZ_FIXED_ONE, PZ_FIXED_NEG_ONE, PZ_FIXED_NEG_ONE
-        };
-        static const PZ_FIXED bvZ[8] = {
-             PZ_FIXED_ONE,  PZ_FIXED_ONE,  PZ_FIXED_ONE,  PZ_FIXED_ONE,
-            PZ_FIXED_NEG_ONE,PZ_FIXED_NEG_ONE,PZ_FIXED_NEG_ONE,PZ_FIXED_NEG_ONE
-        };
-        static const UInt8 edges[12][2] = {
-            {0,1},{1,2},{2,3},{3,0},
-            {4,5},{5,6},{6,7},{7,4},
-            {0,4},{1,5},{2,6},{3,7}
-        };
-        Int16 ei;
-        for (ei = 0; ei < 12; ++ei) {
-            Int16 v0, v1;
-            v0 = edges[ei][0]; v1 = edges[ei][1];
-            xyz2xy(bvX[v0], bvY[v0], bvZ[v0], &x0, &y0);
-            xyz2xy(bvX[v1], bvY[v1], bvZ[v1], &x1, &y1);
-            BmpBuffer_PlotLine(pBuf, x0, y0, x1, y1, 1);
-        }
+    for (i = 0; i < numEdges; ++i) {
+        const Edge* e = BoxEdges + i;
+        const Vertex* v0 = BoxVertices + e->i0;
+        const Vertex* v1 = BoxVertices + e->i1;
+        int x0, y0, x1, y1;
+
+        xyz2xy(v0->x, v0->y, v0->z, &x0, &y0); 
+        xyz2xy(v1->x, v1->y, v1->z, &x1, &y1); 
+        BmpBuffer_PlotLine(g_pBmpCanvas, x0, y0, x1, y1, 1);
     }
 }
 
+#define AXES_ARROW_SIZE (0.05f)
+
+static void DrawAxes(void (*xyz2xy)(NUMERIC, NUMERIC, NUMERIC, int*, int *)) {
+    static const Vertex AxesVertices[] = {
+        /* [0] Origin */
+        { NUM_VAL(0), NUM_VAL(0),  NUM_VAL(0) },
+        /* [1] X-axis direction */
+        { NUM_VAL(1), NUM_VAL(0),  NUM_VAL(0) },
+        /* [2] X-axis arrow line (upper) */
+        { NUM_VAL(1 - AXES_ARROW_SIZE), NUM_VAL(AXES_ARROW_SIZE),  NUM_VAL(0) },
+        /* [3] X-axis arrow line (lower) */
+        { NUM_VAL(1 - AXES_ARROW_SIZE), NUM_VAL(-AXES_ARROW_SIZE),  NUM_VAL(0) },
+        /* [4] Y-axis direction */
+        { NUM_VAL(0), NUM_VAL(1),  NUM_VAL(0) },
+        /* [5] Y-axis arrow line (upper) */
+        { NUM_VAL(AXES_ARROW_SIZE), NUM_VAL(1 - AXES_ARROW_SIZE),  NUM_VAL(0) },
+        /* [6] Y-axis arrow line (lower) */
+        { NUM_VAL(-AXES_ARROW_SIZE), NUM_VAL(1 - AXES_ARROW_SIZE),  NUM_VAL(0) },
+        /* [7] Z-axis direction */
+        { NUM_VAL(0), NUM_VAL(0),  NUM_VAL(1) },
+        /* [8] Z-axis arrow line (upper) */
+        { NUM_VAL(AXES_ARROW_SIZE), NUM_VAL(0),  NUM_VAL(1 - AXES_ARROW_SIZE ) },
+        /* [9] Z-axis arrow line (lower) */
+        { NUM_VAL(-AXES_ARROW_SIZE), NUM_VAL(-0),  NUM_VAL(1 - AXES_ARROW_SIZE) },
+    };
+
+    static const Edge AxesEdges[] = {
+        { 0, 1 }, { 1, 2 }, { 1, 3 },   /* X-axis */
+        { 0, 4 }, { 4, 5 }, { 4, 6 },   /* Y-axis */
+        { 0, 7 }, { 7, 8 }, { 7, 9 }    /* Z-axis */
+    };
+
+    static const int numEdges = sizeof(AxesEdges) / sizeof(AxesEdges[0]);
+    int i;
+
+    for (i = 0; i < numEdges; ++i) {
+        const Edge* e = AxesEdges + i;
+        const Vertex* v0 = AxesVertices + e->i0;
+        const Vertex* v1 = AxesVertices + e->i1;
+        int x0, y0, x1, y1;
+
+        xyz2xy(v0->x, v0->y, v0->z, &x0, &y0); 
+        xyz2xy(v1->x, v1->y, v1->z, &x1, &y1); 
+        BmpBuffer_PlotLine(g_pBmpCanvas, x0, y0, x1, y1, 1);
+    }
+}
+
+static void RedrawCanvas() {
+    void (*xyz2xy)(NUMERIC, NUMERIC, NUMERIC, int*, int *) = NULL;
+
+    switch (g_iProjection) {
+        case PERSPECTIVE:
+            xyz2xy = PerspProject;
+            break;
+        case ORTHOGRAPHIC:
+        default:
+            xyz2xy = OrthoProject;
+            break;
+    }
+
+	RefreshCameraTrigBuf();
+    BmpBuffer_AllClear(g_pBmpCanvas);
+
+	/* Box */
+    if (g_bDrawBox) DrawBoxEdges(xyz2xy);
+
+	/* Aexs */
+    if (g_bDrawAxes) DrawAxes(xyz2xy);
+
+	/* Surface */
+    switch (g_iFuncType) {
+        case FUNC_TYPE_CARTESIAN:
+            DrawCartSurfaceWireframe(xyz2xy);
+            break;
+        case FUNC_TYPE_PARAMETRIC:
+            DrawParmSurfaceWireframe(xyz2xy);
+            break;
+    }
+}
+
+static void MainFormDrawIdle(void) {
+	Int16 iW = g_pBmpBufFormula->iW;
+	Int16 iH = g_pBmpBufFormula->iH;
+	Int16 y, iLen;
+	static const char* szLines[] = {
+		"\x17 Plotter-Z \x18",
+		"3D Graphing Tool",
+		"Input and Parse to start"
+	};
+	const int iCount = sizeof(szLines) / sizeof(szLines[0]);
+	int i;
+
+	BmpBuffer_AllClear(g_pBmpBufFormula);
+
+	BmpBuffer_FillRect(g_pBmpBufFormula, 0, 0, iW, iH, 0);
+
+	y = (iH - iCount * CURRENT_FONT_HEIGHT) / 2;
+	for (i = 0; i < iCount; ++i) {
+		iLen = (Int16)(StrLen(szLines[i]) * CURRENT_FONT_WIDTH);
+		BmpBuffer_PutText(g_pBmpBufFormula,
+			(iW - iLen) / 2, y, (UInt8*)szLines[i], 1);
+		y += CURRENT_FONT_HEIGHT;
+	}
+}
+
+static void MainFormDrawFormula(void) {
+    Int16 x, y;
+    Int16 iW, iH;
+
+    iW = g_pBmpBufFormula->iW;
+    iH = g_pBmpBufFormula->iH;
+
+    BmpBuffer_AllClear(g_pBmpBufFormula);
+
+    /* Line 2: formula rendering */
+    RenderNode_Draw(g_pRenderNode, &g_rzConfig, g_iFormulaX, g_iFormulaY);
+
+    /* Line 1: Type label filled background */
+    {
+        const char* szLabel = szFuncTypeLabel[g_iFuncType];
+        BmpBuffer_FillRect(g_pBmpBufFormula, 0, 0, iW, CURRENT_FONT_HEIGHT, 1);
+        BmpBuffer_PutText(g_pBmpBufFormula, (iW - CURRENT_FONT_WIDTH * StrLen(szLabel)) / 2, 0, (UInt8*)szLabel, 0);
+    }
+
+    /* Line 3: Ready> on filled background */
+    {
+        const char* szReady = "Ready\x18";
+        Int16 iLen = (Int16)(StrLen(szReady) * CURRENT_FONT_WIDTH);
+        x = iW - iLen - 2;
+        y = iH - CURRENT_FONT_HEIGHT;
+        BmpBuffer_FillRect(g_pBmpBufFormula, 0, y,
+            iW, CURRENT_FONT_HEIGHT, 1);
+        BmpBuffer_PutText(g_pBmpBufFormula, x, y, (UInt8*)szReady, 0);
+    }
+}
+
+static void MainFormDrawError(void) {
+    int iW;
+    static const char* szTitle = "Error";
+
+    iW = StrLen(szTitle) * CURRENT_FONT_WIDTH;
+	BmpBuffer_FillRect(g_pBmpBufFormula, 0, 0,iW, CURRENT_FONT_HEIGHT, 1);
+    BmpBuffer_PutText(g_pBmpBufFormula, (g_pBmpBufFormula->iW - iW) / 2, 0, (const UInt8 *)szTitle, 0);
+    
+    iW = StrLen(g_szErrMsgLine1) * CURRENT_FONT_WIDTH;
+    BmpBuffer_PutText(g_pBmpBufFormula, (g_pBmpBufFormula->iW - iW) / 2, 24, (const UInt8 *)g_szErrMsgLine1, 1);
+
+    iW = StrLen(g_szErrMsgLine2) * CURRENT_FONT_WIDTH;
+    BmpBuffer_PutText(g_pBmpBufFormula, (g_pBmpBufFormula->iW - iW) / 2, 32, (const UInt8 *)g_szErrMsgLine2, 1);
+}
+
+static void MainFormBitmapRedraw(void) {
+	switch (g_iMainFormState) {
+		case MAIN_FORM_IDLE:
+			MainFormDrawIdle();
+			break;
+		case MAIN_FORM_ERROR:
+			MainFormDrawError();
+			break;
+		case MAIN_FORM_READY:
+			MainFormDrawFormula();
+			break;
+	}
+}
+
 static void MainFormInit(FormType *frmP) {
-	/* Set default expression text */
-	{
-		FieldType *fieldInput;
-		UInt16 fieldIndex;
-
-		fieldIndex = FrmGetObjectIndex(frmP, MainFormulaField);
-		fieldInput = (FieldType *)FrmGetObjectPtr(frmP, fieldIndex);
-		FrmSetFocus(frmP, fieldIndex);
-
-		FldInsert(fieldInput, g_szExpr, StrLen(g_szExpr));
-	}
-
-	/* Idle screen on formula bitmap */
-	{
-		Int16 iW = g_pBmpBufFormula->iW;
-		Int16 iH = g_pBmpBufFormula->iH;
-		Int16 y, iLen;
-		static const char* szLines[] = {
-			"\x17 Plotter-Z \x18",
-			"3D Graphing Tool",
-			"Input and Parse to start"
-		};
-		const int iCount = sizeof(szLines) / sizeof(szLines[0]);
-		int i;
-
-		BmpBuffer_AllClear(g_pBmpBufFormula);
-
-		BmpBuffer_FillRect(g_pBmpBufFormula, 0, 0, iW, iH, 0);
-
-		y = (iH - iCount * CURRENT_FONT_HEIGHT) / 2;
-		for (i = 0; i < iCount; ++i) {
-			iLen = (Int16)(StrLen(szLines[i]) * CURRENT_FONT_WIDTH);
-			BmpBuffer_PutText(g_pBmpBufFormula,
-				(iW - iLen) / 2, y, (UInt8*)szLines[i], 1);
-			y += CURRENT_FONT_HEIGHT;
-		}
-	}
-
-	/* Draw button starts disabled */
+	MainFormBitmapRedraw();
+	/* Plot button starts disabled */
 	{
 		ControlType *ctlDraw;
 		ctlDraw = (ControlType*)FrmGetObjectPtr(frmP,
@@ -458,6 +735,25 @@ static void MainFormInit(FormType *frmP) {
 			CtlHideControl(ctlDraw);
 		}
 	}
+}
+
+static void MainFormStartParse(void) {
+	ControlType *pCtlPlot;
+
+	ParseAndRenderExpr();
+	MainFormBitmapRedraw();
+
+	/* Enable or disable Draw button */
+	pCtlPlot = (ControlType*)GetObjectPtr(MainDrawButton);
+	if (pCtlPlot != NULL) {
+		if (g_bParseSuccess)
+			CtlShowControl(pCtlPlot);
+		else
+			CtlHideControl(pCtlPlot);
+	}
+
+	/* Trigger redraw */
+	FrmUpdateForm(MainForm, frmRedrawUpdateCode);
 }
 
 static Boolean MainFormDoCommand(UInt16 command) {
@@ -524,31 +820,52 @@ static Boolean MainFormDoCommand(UInt16 command) {
 				if (handle) { text = MemHandleLock(handle); StrCopy(szBuf, (const char*)text); MemHandleUnlock(handle);
 					Camera.xMax = (PZ_FLOAT)Utils_Atof(szBuf); }
 				handle = FldGetTextHandle(WE_FIELD(WinEditorFieldXgrid));
-				if (handle) { text = MemHandleLock(handle); StrCopy(szBuf, (const char*)text); MemHandleUnlock(handle);
+				if (handle) {
+					text = MemHandleLock(handle);
+					StrCopy(szBuf, (const char*)text);
+					MemHandleUnlock(handle);
 					iGrid = (Int16)Utils_Atoi(szBuf);
 					if (iGrid < 5) iGrid = 5;
-					if (iGrid > GRID_MAX) iGrid = GRID_MAX;
-					Camera.xGrid = iGrid; }
-
+					if (iGrid > X_GRID_MAX) iGrid = X_GRID_MAX;
+					Camera.xGrid = iGrid;
+				}
 				handle = FldGetTextHandle(WE_FIELD(WinEditorFieldYmin));
-				if (handle) { text = MemHandleLock(handle); StrCopy(szBuf, (const char*)text); MemHandleUnlock(handle);
-					Camera.yMin = (PZ_FLOAT)Utils_Atof(szBuf); }
+				if (handle) {
+					text = MemHandleLock(handle);
+					StrCopy(szBuf, (const char*)text);
+					MemHandleUnlock(handle);
+					Camera.yMin = (PZ_FLOAT)Utils_Atof(szBuf);
+				}
 				handle = FldGetTextHandle(WE_FIELD(WinEditorFieldYmax));
-				if (handle) { text = MemHandleLock(handle); StrCopy(szBuf, (const char*)text); MemHandleUnlock(handle);
-					Camera.yMax = (PZ_FLOAT)Utils_Atof(szBuf); }
+				if (handle) {
+					text = MemHandleLock(handle);
+					StrCopy(szBuf, (const char*)text); MemHandleUnlock(handle);
+					Camera.yMax = (PZ_FLOAT)Utils_Atof(szBuf);
+				}
 				handle = FldGetTextHandle(WE_FIELD(WinEditorFieldYgrid));
-				if (handle) { text = MemHandleLock(handle); StrCopy(szBuf, (const char*)text); MemHandleUnlock(handle);
+				if (handle) {
+					text = MemHandleLock(handle);
+					StrCopy(szBuf, (const char*)text);
+					MemHandleUnlock(handle);
 					iGrid = (Int16)Utils_Atoi(szBuf);
 					if (iGrid < 5) iGrid = 5;
-					if (iGrid > GRID_MAX) iGrid = GRID_MAX;
-					Camera.yGrid = iGrid; }
-
+					if (iGrid > Y_GRID_MAX) iGrid = Y_GRID_MAX;
+					Camera.yGrid = iGrid;
+				}
 				handle = FldGetTextHandle(WE_FIELD(WinEditorFieldZmin));
-				if (handle) { text = MemHandleLock(handle); StrCopy(szBuf, (const char*)text); MemHandleUnlock(handle);
-					Camera.zMin = (PZ_FLOAT)Utils_Atof(szBuf); }
+				if (handle) {
+					text = MemHandleLock(handle);
+					StrCopy(szBuf, (const char*)text);
+					MemHandleUnlock(handle);
+					Camera.zMin = (PZ_FLOAT)Utils_Atof(szBuf);
+				}
 				handle = FldGetTextHandle(WE_FIELD(WinEditorFieldZmax));
-				if (handle) { text = MemHandleLock(handle); StrCopy(szBuf, (const char*)text); MemHandleUnlock(handle);
-					Camera.zMax = (PZ_FLOAT)Utils_Atof(szBuf); }
+				if (handle) {
+					text = MemHandleLock(handle);
+					StrCopy(szBuf, (const char*)text);
+					MemHandleUnlock(handle);
+					Camera.zMax = (PZ_FLOAT)Utils_Atof(szBuf);
+				}
 			}
 
 			FrmDeleteForm(frmP);
@@ -575,7 +892,7 @@ static Boolean MainFormDoCommand(UInt16 command) {
 			/* Allocate string pointer array */
 			ppItems = (Char**)MemPtrNew(iCount * sizeof(Char*));
 			for (i = 0; i < iCount; ++i)
-				ppItems[i] = PlotterZSamples[i].szExpr;
+				ppItems[i] = (char *)PlotterZSamples[i].szName;
 
 			LstSetListChoices(lstP, ppItems, (UInt16)iCount);
 			/* LstDrawList(lstP); */
@@ -592,39 +909,27 @@ static Boolean MainFormDoCommand(UInt16 command) {
 					Camera.yMax = p->yMax;
 					Camera.zMin = p->zMin;
 					Camera.zMax = p->zMax;
+					Camera.uMin = p->uMin;
+					Camera.uMax = p->uMax;
+					Camera.vMin = p->vMin;
+					Camera.vMax = p->vMax;
 					Camera.xGrid = 15;
 					Camera.yGrid = 15;
-					Utils_StringCopy(g_szExpr, sizeof(g_szExpr), p->szExpr);
-					/* Update MainForm field */
-					{
-						FormType * frmMain;
-						FieldType * field;
-						frmMain = FrmGetFormPtr(MainForm);
-						if (frmMain != NULL) {
-							field = (FieldType*)FrmGetObjectPtr(frmMain,
-								FrmGetObjectIndex(frmMain, MainFormulaField));
-							if (field != NULL) {
-								FldDelete(field, 0, 0xFFFF);
-								FldInsert(field, p->szExpr, StrLen(p->szExpr));
-								FldDrawField(field);
+					Camera.uGrid = 15;
+					Camera.vGrid = 15;
+					g_iFuncType = p->iFuncType;
+					switch (p->iFuncType) {
+						case FUNC_TYPE_CARTESIAN:
+							Utils_StringCopy(g_szCartExpr, sizeof(g_szCartExpr), p->szExpr[0]);
+							break;
+						case FUNC_TYPE_PARAMETRIC:
+							for (i = 0; i < 3; ++i) {
+								Utils_StringCopy(g_szParmExpr[i], PARM_EXPR_LENGTH, p->szExpr[i]);
 							}
-						}
+							break;
 					}
 				}
-				parseFormula();
-				renderFormula();
-				/* Draw button starts disabled */
-				{
-					ControlType *ctlDraw;
-					/* Enable or disable Draw button */
-					ctlDraw = (ControlType*)GetObjectPtr(MainDrawButton);
-					if (ctlDraw != NULL) {
-						if (g_bParseOk)
-							CtlShowControl(ctlDraw);
-						else
-							CtlHideControl(ctlDraw);
-					}
-				}
+				MainFormStartParse();
 			}
 		
 			FrmDeleteForm(frmP);
@@ -651,7 +956,7 @@ static Boolean MainFormDoCommand(UInt16 command) {
 /*====================================================
  * Draw UI indicators on canvas
  *====================================================*/
-static void drawDrawUI(BmpBuffer* pBuf) {
+static void DrawGraphUI(BmpBuffer* pBuf) {
     Int16 iW, iH, iBarY;
 
     iW = pBuf->iW;
@@ -708,7 +1013,7 @@ static void drawDrawUI(BmpBuffer* pBuf) {
     }
 }
 
-static Boolean DrawFormHandleEvent(EventType * eventP) {
+static Boolean GraphFormHandleEvent(EventType * eventP) {
 	Boolean handled = false;
 	FormType * frmP;
 
@@ -721,9 +1026,9 @@ static Boolean DrawFormHandleEvent(EventType * eventP) {
 			Camera.iViewportX = g_pBmpCanvas->iW / 2;
 			Camera.iViewportY = g_pBmpCanvas->iH / 2;
 
-			if (recalcSurface()) {
-				redrawCanvas(g_pBmpCanvas);
-				drawDrawUI(g_pBmpCanvas);
+			if (RecalcSurface()) {
+				RedrawCanvas(g_pBmpCanvas);
+				DrawGraphUI(g_pBmpCanvas);
 			}
 			WinDrawBitmap(g_pBmpCanvas->pBmp, 0, 0);
 			handled = true;
@@ -758,8 +1063,8 @@ static Boolean DrawFormHandleEvent(EventType * eventP) {
 						handled = true;
 						break;
 					}
-					redrawCanvas(g_pBmpCanvas);
-					drawDrawUI(g_pBmpCanvas);
+					RedrawCanvas(g_pBmpCanvas);
+					DrawGraphUI(g_pBmpCanvas);
 					WinDrawBitmap(g_pBmpCanvas->pBmp, 0, 0);
 					handled = true;
 					break;
@@ -768,14 +1073,8 @@ static Boolean DrawFormHandleEvent(EventType * eventP) {
 				/* Middle: ORTHO/PERSP toggle */
 				if (iTapX >= 55 && iTapX <= 105) {
 					g_iProjection = !g_iProjection;
-					if (g_iProjection == ORTHOGRAPHIC) {
-						xyz2xy = PzCamera_OrthoProjectFixed;
-						if (g_iDrawMode == 3) g_iDrawMode = 0;
-					} else {
-						xyz2xy = PzCamera_PerspProjectFixed;
-					}
-					redrawCanvas(g_pBmpCanvas);
-					drawDrawUI(g_pBmpCanvas);
+					RedrawCanvas(g_pBmpCanvas);
+					DrawGraphUI(g_pBmpCanvas);
 					WinDrawBitmap(g_pBmpCanvas->pBmp, 0, 0);
 					handled = true;
 					break;
@@ -787,8 +1086,8 @@ static Boolean DrawFormHandleEvent(EventType * eventP) {
 					if (iTapX >= iRightX && iTapX < iRightX + 10) {
 						/* Reset */
 						PzCamera_Reset(g_pBmpCanvas->iW / 2, g_pBmpCanvas->iH / 2);
-						redrawCanvas(g_pBmpCanvas);
-						drawDrawUI(g_pBmpCanvas);
+						RedrawCanvas(g_pBmpCanvas);
+						DrawGraphUI(g_pBmpCanvas);
 						WinDrawBitmap(g_pBmpCanvas->pBmp, 0, 0);
 						handled = true;
 						break;
@@ -796,8 +1095,8 @@ static Boolean DrawFormHandleEvent(EventType * eventP) {
 					if (iTapX >= iRightX + 10 && iTapX < iRightX + 20) {
 						/* Toggle bounding box */
 						g_bDrawBox = !g_bDrawBox;
-						redrawCanvas(g_pBmpCanvas);
-						drawDrawUI(g_pBmpCanvas);
+						RedrawCanvas(g_pBmpCanvas);
+						DrawGraphUI(g_pBmpCanvas);
 						WinDrawBitmap(g_pBmpCanvas->pBmp, 0, 0);
 						handled = true;
 						break;
@@ -805,8 +1104,8 @@ static Boolean DrawFormHandleEvent(EventType * eventP) {
 					if (iTapX >= iRightX + 20 && iTapX < iRightX + 30) {
 						/* Toggle footer */
 						g_bDrawFooter = !g_bDrawFooter;
-						redrawCanvas(g_pBmpCanvas);
-						drawDrawUI(g_pBmpCanvas);
+						RedrawCanvas(g_pBmpCanvas);
+						DrawGraphUI(g_pBmpCanvas);
 						WinDrawBitmap(g_pBmpCanvas->pBmp, 0, 0);
 						handled = true;
 						break;
@@ -821,8 +1120,8 @@ static Boolean DrawFormHandleEvent(EventType * eventP) {
 			    && iTapX >= g_pBmpCanvas->iW - CORNER_SIZE
 			    && iTapY >= g_pBmpCanvas->iH - CORNER_SIZE) {
 				g_bDrawFooter = true;
-				redrawCanvas(g_pBmpCanvas);
-				drawDrawUI(g_pBmpCanvas);
+				RedrawCanvas(g_pBmpCanvas);
+				DrawGraphUI(g_pBmpCanvas);
 				WinDrawBitmap(g_pBmpCanvas->pBmp, 0, 0);
 				handled = true;
 				break;
@@ -901,8 +1200,8 @@ static Boolean DrawFormHandleEvent(EventType * eventP) {
 					dwNow = TimGetTicks();
 					if (dwNow - g_dwLastDrawUpdate
 					    >= (UInt32)g_iSurfaceDragThreshold) {
-						redrawCanvas(g_pBmpCanvas);
-						drawDrawUI(g_pBmpCanvas);
+						RedrawCanvas(g_pBmpCanvas);
+						DrawGraphUI(g_pBmpCanvas);
 						WinDrawBitmap(g_pBmpCanvas->pBmp, 0, 0);
 						g_dwLastDrawUpdate = dwNow;
 					}
@@ -913,8 +1212,8 @@ static Boolean DrawFormHandleEvent(EventType * eventP) {
 
 		case penUpEvent:
 			if (g_bDrawPenDown) {
-				redrawCanvas(g_pBmpCanvas);
-				drawDrawUI(g_pBmpCanvas);
+				RedrawCanvas(g_pBmpCanvas);
+				DrawGraphUI(g_pBmpCanvas);
 				WinDrawBitmap(g_pBmpCanvas->pBmp, 0, 0);
 			}
 			g_bDrawPenDown = false;
@@ -939,18 +1238,7 @@ static Boolean MainFormHandleEvent(EventType * eventP) {
 
 		case frmOpenEvent:
 			frmP = FrmGetActiveForm();
-			if (g_bParseOk) {
-				/* Restore field text and re-render */
-				FieldType *fieldInput;
-				UInt16 fieldIndex;
-				fieldIndex = FrmGetObjectIndex(frmP, MainFormulaField);
-				fieldInput = (FieldType *)FrmGetObjectPtr(frmP, fieldIndex);
-				FldDelete(fieldInput, 0, 0xFFFF);
-				FldInsert(fieldInput, g_szExpr, StrLen(g_szExpr));
-				renderFormula();
-			} else {
-				MainFormInit(frmP);
-			}
+			MainFormInit(frmP);
 			FrmDrawForm(frmP);
 			FrmUpdateForm(MainForm, frmRedrawUpdateCode);
 			handled = true;
@@ -963,7 +1251,7 @@ static Boolean MainFormHandleEvent(EventType * eventP) {
 
 		case penDownEvent:
 			/* Only start drag if parsed OK and on canvas area */
-			if (g_bParseOk && eventP->screenY > 16 && eventP->screenY < 116) {
+			if (g_iMainFormState == MAIN_FORM_READY && eventP->screenY > 16 && eventP->screenY < 116) {
 				g_bDrawPenDown = true;
 				g_iDrawPrevX = eventP->screenX;
 				g_iDrawPrevY = eventP->screenY;
@@ -992,7 +1280,7 @@ static Boolean MainFormHandleEvent(EventType * eventP) {
 					dwNow = TimGetTicks();
 					if (dwNow - g_dwLastDrawUpdate
 					    >= (UInt32)g_iFormulaDragThreshold) {
-						renderFormula();
+						MainFormBitmapRedraw();
 						WinDrawBitmap(g_pBmpBufFormula->pBmp, 0, 15);
 						g_dwLastDrawUpdate = dwNow;
 					}
@@ -1003,7 +1291,7 @@ static Boolean MainFormHandleEvent(EventType * eventP) {
 
 		case penUpEvent:
 			if (g_bDrawPenDown) {
-				renderFormula();
+				MainFormBitmapRedraw();
 				WinDrawBitmap(g_pBmpBufFormula->pBmp, 0, 15);
 				handled = true;
 			}
@@ -1014,51 +1302,95 @@ static Boolean MainFormHandleEvent(EventType * eventP) {
 			break;
 
 		case ctlSelectEvent: {
-			if (eventP->data.ctlSelect.controlID == MainParseButton) {
-				FieldType *field;
-				MemHandle handle;
-				MemPtr text;
-				UInt32 len, count;
-				ControlType *ctlDraw;
+			if (eventP->data.ctlSelect.controlID == MainCartesianButton) {
+				FormType * frmP;
+				FieldType * field;
+				UInt16 controlID;
 
-				/* Read text from formula field */
-				field = (FieldType*)GetObjectPtr(MainFormulaField);
-				if (field != NULL) {
+				frmP = FrmInitForm(CartesianForm);
+
+				/* Populate field */
+				field = (FieldType*)FrmGetObjectPtr(frmP,
+					FrmGetObjectIndex(frmP, CartesianExprField));
+				if (field != NULL)
+					FldInsert(field, g_szCartExpr, StrLen(g_szCartExpr));
+
+				controlID = FrmDoDialog(frmP);
+
+				if (controlID == CartesianOKButton) {
+					MemHandle handle;
+					MemPtr text;
 					handle = FldGetTextHandle(field);
 					if (handle) {
 						text = MemHandleLock(handle);
 						if (text) {
-							len = StrLen((const char *)text);
-							count = (len > (sizeof(g_szExpr) - 1))
-							      ? (sizeof(g_szExpr) - 1) : len;
-							MemMove(g_szExpr, text, count);
-							g_szExpr[count] = '\0';
+							UInt32 len = StrLen((const char*)text);
+							UInt32 count = (len > (sizeof(g_szCartExpr) - 1))
+							             ? (sizeof(g_szCartExpr) - 1) : len;
+							MemMove(g_szCartExpr, text, count);
+							g_szCartExpr[count] = '\0';
+							
 						}
 						MemHandleUnlock(handle);
+						g_iFuncType = FUNC_TYPE_CARTESIAN;
+						MainFormStartParse();
 					}
 				}
 
-				parseFormula();
-				renderFormula();
+				FrmDeleteForm(frmP);
+				handled = true;
+				break;
+			}
 
-				/* Enable or disable Draw button */
-				ctlDraw = (ControlType*)GetObjectPtr(MainDrawButton);
-				if (ctlDraw != NULL) {
-					if (g_bParseOk)
-						CtlShowControl(ctlDraw);
-					else
-						CtlHideControl(ctlDraw);
+			if (eventP->data.ctlSelect.controlID == MainParametricButton) {
+				FormType * frmP;
+				FieldType * fields[3];
+				UInt16 controlID;
+				int i;
+				UInt16 fieldIds[3] = { ParmExprField1, ParmExprField2, ParmExprField3 };
+
+				frmP = FrmInitForm(ParametricForm);
+
+				/* Populate fields */
+				for (i = 0; i < 3; ++i) {
+					fields[i] = (FieldType*)FrmGetObjectPtr(frmP,
+						FrmGetObjectIndex(frmP, fieldIds[i]));
+					if (fields[i] != NULL)
+						FldInsert(fields[i], g_szParmExpr[i], StrLen(g_szParmExpr[i]));
 				}
 
-				/* Trigger redraw */
-				FrmUpdateForm(MainForm, frmRedrawUpdateCode);
+				controlID = FrmDoDialog(frmP);
 
+				if (controlID == ParmOKButton) {
+					for (i = 0; i < 3; ++i) {
+						if (fields[i] != NULL) {
+							MemHandle handle;
+							MemPtr text;
+							handle = FldGetTextHandle(fields[i]);
+							if (handle) {
+								text = MemHandleLock(handle);
+								if (text) {
+									UInt32 len = StrLen((const char*)text);
+									UInt32 count = (len > (sizeof(g_szParmExpr[i]) - 1))
+									             ? (sizeof(g_szParmExpr[i]) - 1) : len;
+									MemMove(g_szParmExpr[i], text, count);
+									g_szParmExpr[i][count] = '\0';
+								}
+								MemHandleUnlock(handle);
+								g_iFuncType = FUNC_TYPE_PARAMETRIC;
+								MainFormStartParse();
+							}
+						}
+					}
+				}
+
+				FrmDeleteForm(frmP);
 				handled = true;
 				break;
 			}
 
 			if (eventP->data.ctlSelect.controlID == MainDrawButton) {
-				FrmGotoForm(DrawForm);
+				FrmGotoForm(GraphForm);
 				handled = true;
 				break;
 			}
@@ -1084,8 +1416,8 @@ static Boolean AppHandleEvent(EventType * eventP) {
 				FrmSetEventHandler(frmP, MainFormHandleEvent);
 				break;
 
-			case DrawForm:
-				FrmSetEventHandler(frmP, DrawFormHandleEvent);
+			case GraphForm:
+				FrmSetEventHandler(frmP, GraphFormHandleEvent);
 				break;
 		}
 		return true;
@@ -1131,18 +1463,20 @@ static Err AppStart(void) {
 	}
 
 	/* Create bitmap buffers */
-	g_pBmpBufFormula = BmpBuffer_Create(160, 100);
+	g_pBmpBufFormula = BmpBuffer_Create(160, 130);
 	g_pBmpCanvas     = BmpBuffer_Create(160, 160);
 
 	/* Set up renderer-Z config */
-	RenderConfig_GetDefaultStyle(&g_RenderConfig);
-	RenderConfig_CalculateBigSymbolPoints(&g_RenderConfig);
-	g_RenderConfig.sInterfaces.setPixel = rzSetPixel;
-	g_RenderConfig.sInterfaces.plotLine = rzPlotLine;
-	g_RenderConfig.sInterfaces.putChar  = rzPutChar;
+	RenderConfig_GetDefaultStyle(&g_rzConfig);
+	RenderConfig_CalculateBigSymbolPoints(&g_rzConfig);
+	g_rzConfig.sInterfaces.setPixel = RzSetPixel;
+	g_rzConfig.sInterfaces.plotLine = RzPlotLine;
+	g_rzConfig.sInterfaces.putChar  = RzPutChar;
 
 	/* Initialize Camera defaults */
 	PzCamera_Initialize();
+	Camera.uGrid = 15;
+	Camera.vGrid = 15;
 
 	/* Read saved preferences */
 	prefsSize = sizeof(g_prefs);
@@ -1157,6 +1491,8 @@ static Err AppStart(void) {
 }
 
 static void AppStop(void) {
+	int i;
+
 	PrefSetAppPreferences(
 		appFileCreator, appPrefID, appPrefVersionNum,
 		&g_prefs, sizeof(g_prefs), true);
@@ -1164,9 +1500,30 @@ static void AppStop(void) {
 	FrmCloseAllForms();
 
 	/* Destroy renderer-Z objects */
-	if (g_pRenderNode != NULL) RenderNode_Destroy(g_pRenderNode);
-	if (g_pAstExpr != NULL) FzAstNode_Destroy(g_pAstExpr);
-	if (g_pVm != NULL) EzMachine_Destroy(g_pVm);
+    if (g_pRenderNode != NULL) {
+        RenderNode_Destroy(g_pRenderNode);
+        g_pRenderNode = NULL;
+    }
+    if (g_pAstCartZ != NULL) {
+        FzAstNode_Destroy(g_pAstCartZ);
+        g_pAstCartZ = NULL;
+    }
+    for (i = 0; i < 3; ++i) {
+        if (g_pAstParm[i] != NULL) {
+            FzAstNode_Destroy(g_pAstParm[i]);
+            g_pAstParm[i] = NULL;
+        }
+    }
+	if (g_pVmCartZ != NULL) {
+		EzMachine_Destroy(g_pVmCartZ);
+		g_pVmCartZ = NULL;
+	}
+	for (i = 0; i < 3; ++i) {
+        if (g_pVmParm[i] != NULL) {
+            EzMachine_Destroy(g_pVmParm[i]);
+            g_pVmParm[i] = NULL;
+        }
+    }
 
 	/* Destroy bitmap buffers */
 	BmpBuffer_Destroy(g_pBmpCanvas);

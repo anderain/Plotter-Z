@@ -60,13 +60,9 @@ FORM ID MainForm AT (0 0 160 160)
 BEGIN
 	TITLE "PlotterZ"
     GRAFFITISTATEINDICATOR AT (149 148)
-	FIELD ID MainFormulaField AT (0 116 161 28)
-		SINGLELINE
-		EDITABLE
-		
-		MAXCHARS 256 MULTIPLELINES UNDERLINED HASSCROLLBAR
-	BUTTON "Parse" ID MainParseButton AT (1 147 76 12)
-	BUTTON "Draw >" ID MainDrawButton AT (83 147 76 12)
+	BUTTON "Cartesian" ID MainCartesianButton  AT (1 147 55 12)
+	BUTTON "Plot >" ID MainDrawButton AT (119 147 40 12)
+	BUTTON "Parametric" ID MainParametricButton  AT (60 147 55 12)
 END
 
 FORM ID AboutForm AT (2 2 156 156)
@@ -127,9 +123,39 @@ BEGIN
     BUTTON "Cancel" ID SamplesCancelButton AT (51 134 40 12)
 END
 
-FORM ID DrawForm AT (0 0 160 160)
+FORM ID GraphForm AT (0 0 160 160)
 	NOSAVEBEHIND NOFRAME
 BEGIN
+END
+
+FORM ID CartesianForm AT (2 68 156 90)
+    SAVEBEHIND MODAL
+    DEFAULTBTNID CartesianCancelButton
+BEGIN
+    TITLE "Cartesian"
+    LABEL "z(x,y)=" AUTOID AT (5 17)
+    FIELD ID CartesianExprField AT (3 30 146 40)
+        UNDERLINED MAXCHARS 150 HASSCROLLBAR MULTIPLELINES
+    BUTTON "OK" ID CartesianOKButton AT (5 74 40 12)
+    BUTTON "Cancel" ID CartesianCancelButton AT (51 74 40 12)
+END
+
+FORM ID ParametricForm AT (2 38 156 120)
+    SAVEBEHIND MODAL
+    DEFAULTBTNID ParmCancelButton
+BEGIN
+    TITLE "Parametric"
+    LABEL "x(u,v)=" AUTOID AT (5 15)
+    FIELD ID ParmExprField1 AT (5 27 146 14)
+        UNDERLINED MAXCHARS 80
+    LABEL "y(u,v) =" AUTOID AT (5 44)
+    FIELD ID ParmExprField2 AT (5 58 146 14)
+        UNDERLINED MAXCHARS 80
+    LABEL "z(u,v) =" AUTOID AT (5 74)
+    FIELD ID ParmExprField3 AT (5 86 146 14)
+        UNDERLINED MAXCHARS 80
+    BUTTON "OK" ID ParmOKButton AT (5 104 40 12)
+    BUTTON "Cancel" ID ParmCancelButton AT (50 104 40 12)
 END
 
 ICONFAMILYEX
