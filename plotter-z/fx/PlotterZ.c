@@ -1352,56 +1352,54 @@ int ValueEditorStage(const char* szTitle, const char* szInitial) {
  * Window Editor Stage
  *====================================================*/
 
-#define WIN_EDIT_ROWS           4
-#define WIN_EDIT_COLS           2
-#define WIN_EDIT_LABEL_X        8
-#define WIN_EDIT_FIELD_X        40
-#define WIN_EDIT_ROW_START_Y    12
-#define WIN_EDIT_ROW_H          10
-#define WIN_EDIT_FIELD_W        36
+#define WIN_EDIT_ROWS           14
+#define WE_VISIBLE_ROWS          6
 
-/* Cursor position in grid */
-static int g_iWinEditCursorRow = 0;
-static int g_iWinEditCursorCol = 0;
+/* Cursor */
+static int g_iWinEditCursor = 0;
+static int g_iWinEditScroll = 0;
 
 /* Row labels */
-static const char* g_szWinEditLabels[WIN_EDIT_ROWS] = { "X:", "Y:", "Z:", "Grid:" };
+static const char* g_szWinEditLabels[WIN_EDIT_ROWS] = {
+    "X Min", "X Max", "X Grid",
+    "Y Min", "Y Max", "Y Grid",
+    "Z Min", "Z Max",
+    "U Min", "U Max", "U Grid",
+    "V Min", "V Max", "V Grid"
+};
 
 /* String buffers for each field */
-static char g_szWinEditValues[WIN_EDIT_ROWS][WIN_EDIT_COLS][20];
+static char g_szWinEditValues[WIN_EDIT_ROWS][20];
 
 void DrawWindowEditorStage(void) {
-    int iRow, iCol;
-
+    int iRow;
     Bdisp_AllClr_VRAM();
 
-    /* Draw field labels and values */
-    for (iRow = 0; iRow < WIN_EDIT_ROWS; ++iRow) {
-        for (iCol = 0; iCol < WIN_EDIT_COLS; ++iCol) {
-            int iX = WIN_EDIT_FIELD_X + iCol * (WIN_EDIT_FIELD_W + 10);
-            int iY = WIN_EDIT_ROW_START_Y + iRow * WIN_EDIT_ROW_H;
-            PutText(iX, iY, (const uchar*)g_szWinEditValues[iRow][iCol]);
+    /* Top Banner */
+    {
+        static const char szTopText[] = "Window Editor";
+        static const int iLeft = (VRAM_WIDTH - (sizeof(szTopText) - 1) * CURRENT_FONT_WIDTH) / 2;
+        PutText(iLeft, 0, (const uchar *)szTopText);
+        Bdisp_AreaReverseVRAM(0, 0, VRAM_WIDTH - 1, 7);
+    }
 
-            /* Highlight cursor field */
-            if (iRow == g_iWinEditCursorRow && iCol == g_iWinEditCursorCol) {
-                int iLen = (int)strlen(g_szWinEditValues[iRow][iCol]);
-                Bdisp_AreaReverseVRAM(iX, iY,
-                    iX + iLen * CURRENT_FONT_WIDTH - 1,
+    /* Field list (6 visible rows) */
+    for (iRow = g_iWinEditScroll; iRow < g_iWinEditScroll + WE_VISIBLE_ROWS; ++iRow) {
+        if (iRow >= WIN_EDIT_ROWS) break;
+        {
+            int iY = 8 + (iRow - g_iWinEditScroll) * CURRENT_FONT_HEIGHT;
+            char szLine[32];
+            sprintf(szLine, "%-7s= %s",
+                g_szWinEditLabels[iRow], g_szWinEditValues[iRow]);
+            PutText(4, iY, (const uchar*)szLine);
+
+            /* Highlight cursor */
+            if (iRow == g_iWinEditCursor) {
+                Bdisp_AreaReverseVRAM(0, iY,
+                    VRAM_WIDTH - 1,
                     iY + CURRENT_FONT_HEIGHT - 1);
             }
         }
-        /* Arrow between columns for x/y/z rows */
-        if (iRow < 3) {
-            int iArrowX = WIN_EDIT_FIELD_X + WIN_EDIT_FIELD_W + 2;
-            int iY = WIN_EDIT_ROW_START_Y + iRow * WIN_EDIT_ROW_H;
-            PutChar(iArrowX, iY, '\x18');
-        }
-    }
-
-    /* Row label */
-    for (iRow = 0; iRow < WIN_EDIT_ROWS; ++iRow) {
-        int iY = WIN_EDIT_ROW_START_Y + iRow * WIN_EDIT_ROW_H;
-        PutText(WIN_EDIT_LABEL_X, iY, (const uchar*)g_szWinEditLabels[iRow]);
     }
 
     /* Bottom Menu */
@@ -1417,54 +1415,64 @@ void DrawWindowEditorStage(void) {
             }
         }
     }
-    /* Top Banner */
-    {
-        static const char szTopText[] = "Window Editor";
-        static const int iLeft = (VRAM_WIDTH - (sizeof(szTopText) - 1) * CURRENT_FONT_WIDTH) / 2;
-        PutText(iLeft, 0, (const uchar *)szTopText);
-        Bdisp_AreaReverseVRAM(0, 0, VRAM_WIDTH - 1, 7);
-    }
+}
+
+static void WinEdit_SetField(int iRow, PZ_FLOAT f) {
+    Utils_Ftoa((double)f, g_szWinEditValues[iRow], 2);
+}
+
+static void WinEdit_SetFieldInt(int iRow, int n) {
+    char szBuf[16];
+    sprintf(szBuf, "%d", n);
+    strcpy(g_szWinEditValues[iRow], szBuf);
 }
 
 static void WinEdit_LoadCamera(void) {
-    int i;
-    for (i = 0; i < 4; ++i) {
-        if (i == 0) {
-            Utils_Ftoa((double)Camera.xMin, g_szWinEditValues[0][0], 2);
-            Utils_Ftoa((double)Camera.xMax, g_szWinEditValues[0][1], 2);
-        } else if (i == 1) {
-            Utils_Ftoa((double)Camera.yMin, g_szWinEditValues[1][0], 2);
-            Utils_Ftoa((double)Camera.yMax, g_szWinEditValues[1][1], 2);
-        } else if (i == 2) {
-            Utils_Ftoa((double)Camera.zMin, g_szWinEditValues[2][0], 2);
-            Utils_Ftoa((double)Camera.zMax, g_szWinEditValues[2][1], 2);
-        } else {
-            Utils_Ftoa(Camera.xGrid, g_szWinEditValues[3][0], 2);
-            Utils_Ftoa(Camera.yGrid, g_szWinEditValues[3][1], 2);
-        }
-    }
+    WinEdit_SetField(0,  Camera.xMin);
+    WinEdit_SetField(1,  Camera.xMax);
+    WinEdit_SetFieldInt(2, Camera.xGrid);
+    WinEdit_SetField(3,  Camera.yMin);
+    WinEdit_SetField(4,  Camera.yMax);
+    WinEdit_SetFieldInt(5, Camera.yGrid);
+    WinEdit_SetField(6,  Camera.zMin);
+    WinEdit_SetField(7,  Camera.zMax);
+    WinEdit_SetField(8,  Camera.uMin);
+    WinEdit_SetField(9,  Camera.uMax);
+    WinEdit_SetFieldInt(10, Camera.uGrid);
+    WinEdit_SetField(11, Camera.vMin);
+    WinEdit_SetField(12, Camera.vMax);
+    WinEdit_SetFieldInt(13, Camera.vGrid);
 }
 
 static void WinEdit_SaveCamera(void) {
-    Camera.xMin  = (PZ_FLOAT)Utils_Atof(g_szWinEditValues[0][0]);
-    Camera.xMax  = (PZ_FLOAT)Utils_Atof(g_szWinEditValues[0][1]);
-    Camera.yMin  = (PZ_FLOAT)Utils_Atof(g_szWinEditValues[1][0]);
-    Camera.yMax  = (PZ_FLOAT)Utils_Atof(g_szWinEditValues[1][1]);
-    Camera.zMin  = (PZ_FLOAT)Utils_Atof(g_szWinEditValues[2][0]);
-    Camera.zMax  = (PZ_FLOAT)Utils_Atof(g_szWinEditValues[2][1]);
+    int iGrid;
 
-    {
-        int iGrid;
-        iGrid = (int)Utils_Atoi(g_szWinEditValues[3][0]);
-        if (iGrid < 5) iGrid = 5;
-        if (iGrid > GRID_MAX) iGrid = GRID_MAX;
-        Camera.xGrid = iGrid;
+    Camera.xMin  = (PZ_FLOAT)Utils_Atof(g_szWinEditValues[0]);
+    Camera.xMax  = (PZ_FLOAT)Utils_Atof(g_szWinEditValues[1]);
+    iGrid = (int)Utils_Atoi(g_szWinEditValues[2]);
+    if (iGrid < 5) iGrid = 5; if (iGrid > GRID_MAX) iGrid = GRID_MAX;
+    Camera.xGrid = iGrid;
 
-        iGrid = (int)Utils_Atoi(g_szWinEditValues[3][1]);
-        if (iGrid < 5) iGrid = 5;
-        if (iGrid > GRID_MAX) iGrid = GRID_MAX;
-        Camera.yGrid = iGrid;
-    }
+    Camera.yMin  = (PZ_FLOAT)Utils_Atof(g_szWinEditValues[3]);
+    Camera.yMax  = (PZ_FLOAT)Utils_Atof(g_szWinEditValues[4]);
+    iGrid = (int)Utils_Atoi(g_szWinEditValues[5]);
+    if (iGrid < 5) iGrid = 5; if (iGrid > GRID_MAX) iGrid = GRID_MAX;
+    Camera.yGrid = iGrid;
+
+    Camera.zMin  = (PZ_FLOAT)Utils_Atof(g_szWinEditValues[6]);
+    Camera.zMax  = (PZ_FLOAT)Utils_Atof(g_szWinEditValues[7]);
+
+    Camera.uMin  = (PZ_FLOAT)Utils_Atof(g_szWinEditValues[8]);
+    Camera.uMax  = (PZ_FLOAT)Utils_Atof(g_szWinEditValues[9]);
+    iGrid = (int)Utils_Atoi(g_szWinEditValues[10]);
+    if (iGrid < 5) iGrid = 5; if (iGrid > GRID_MAX) iGrid = GRID_MAX;
+    Camera.uGrid = iGrid;
+
+    Camera.vMin  = (PZ_FLOAT)Utils_Atof(g_szWinEditValues[11]);
+    Camera.vMax  = (PZ_FLOAT)Utils_Atof(g_szWinEditValues[12]);
+    iGrid = (int)Utils_Atoi(g_szWinEditValues[13]);
+    if (iGrid < 5) iGrid = 5; if (iGrid > GRID_MAX) iGrid = GRID_MAX;
+    Camera.vGrid = iGrid;
 }
 
 void WinEdit_ApplyDefault() {
@@ -1476,16 +1484,28 @@ void WinEdit_ApplyDefault() {
     Camera.yGrid = CAM_INIT_YGRID;
     Camera.zMin  = CAM_INIT_ZMIN;
     Camera.zMax  = CAM_INIT_ZMAX;
+    Camera.uMin  = -1.0f;
+    Camera.uMax  =  1.0f;
+    Camera.uGrid = 12;
+    Camera.vMin  = -1.0f;
+    Camera.vMax  =  1.0f;
+    Camera.vGrid = 12;
 }
 
 void WindowEditorStage(void) {
     uint uKey;
 
     WinEdit_LoadCamera();
-    g_iWinEditCursorRow = 0;
-    g_iWinEditCursorCol = 0;
+    g_iWinEditCursor = 0;
+    g_iWinEditScroll = 0;
 
     while (1) {
+        /* Keep cursor in view */
+        if (g_iWinEditCursor < g_iWinEditScroll)
+            g_iWinEditScroll = g_iWinEditCursor;
+        if (g_iWinEditCursor >= g_iWinEditScroll + WE_VISIBLE_ROWS)
+            g_iWinEditScroll = g_iWinEditCursor - WE_VISIBLE_ROWS + 1;
+
         DrawWindowEditorStage();
         GetKey(&uKey);
 
@@ -1496,55 +1516,29 @@ void WindowEditorStage(void) {
 
             case KEY_CTRL_EXE:
             case KEY_CTRL_F4:
-            {
-                static const char* szFieldTitles[4][2] = {
-                    { "X Min", "X Max" },
-                    { "Y Min", "Y Max" },
-                    { "Z Min", "Z Max" },
-                    { "X Grid", "Y Grid" }
-                };
-                ValueEditorStage(szFieldTitles[g_iWinEditCursorRow][g_iWinEditCursorCol],
-                    g_szWinEditValues[g_iWinEditCursorRow][g_iWinEditCursorCol]);
-                strcpy(g_szWinEditValues[g_iWinEditCursorRow][g_iWinEditCursorCol],
+                ValueEditorStage(g_szWinEditLabels[g_iWinEditCursor],
+                    g_szWinEditValues[g_iWinEditCursor]);
+                strcpy(g_szWinEditValues[g_iWinEditCursor],
                     g_szValueEditorBuf);
                 break;
-            }
 
-            case KEY_CTRL_F5: {
+            case KEY_CTRL_F5:
                 WinEdit_ApplyDefault();
-                return;
-            };
+                WinEdit_LoadCamera();
+                break;
 
             case KEY_CTRL_F6:
                 WinEdit_SaveCamera();
                 return;
 
             case KEY_CTRL_UP:
-                if (g_iWinEditCursorRow > 0)
-                    g_iWinEditCursorRow--;
+                if (g_iWinEditCursor > 0)
+                    g_iWinEditCursor--;
                 break;
 
             case KEY_CTRL_DOWN:
-                if (g_iWinEditCursorRow < WIN_EDIT_ROWS - 1)
-                    g_iWinEditCursorRow++;
-                break;
-
-            case KEY_CTRL_LEFT:
-                if (g_iWinEditCursorCol > 0)
-                    g_iWinEditCursorCol--;
-                else if (g_iWinEditCursorRow > 0) {
-                    g_iWinEditCursorRow--;
-                    g_iWinEditCursorCol = WIN_EDIT_COLS - 1;
-                }
-                break;
-
-            case KEY_CTRL_RIGHT:
-                if (g_iWinEditCursorCol < WIN_EDIT_COLS - 1)
-                    g_iWinEditCursorCol++;
-                else if (g_iWinEditCursorRow < WIN_EDIT_ROWS - 1) {
-                    g_iWinEditCursorRow++;
-                    g_iWinEditCursorCol = 0;
-                }
+                if (g_iWinEditCursor < WIN_EDIT_ROWS - 1)
+                    g_iWinEditCursor++;
                 break;
 
         }
