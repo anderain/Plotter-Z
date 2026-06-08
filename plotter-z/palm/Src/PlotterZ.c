@@ -1013,10 +1013,12 @@ static void DrawGraphUI(BmpBuffer* pBuf) {
                 (const UInt8*)szProj, 1);
         }
 
-        /* Right: R B H */
-        BmpBuffer_PutChar(pBuf, (Int16)(iW - 30), iBarY, 'R', 1);
-        BmpBuffer_PutChar(pBuf, (Int16)(iW - 20), iBarY,
+        /* Right: R B A H */
+        BmpBuffer_PutChar(pBuf, (Int16)(iW - 40), iBarY, 'R', 1);
+        BmpBuffer_PutChar(pBuf, (Int16)(iW - 30), iBarY,
             g_bDrawBox ? 'B' : 'b', 1);
+        BmpBuffer_PutChar(pBuf, (Int16)(iW - 20), iBarY,
+            g_bDrawAxes ? 'A' : 'a', 1);
         BmpBuffer_PutChar(pBuf, (Int16)(iW - 10), iBarY, 'H', 1);
     }
 
@@ -1097,9 +1099,9 @@ static Boolean GraphFormHandleEvent(EventType * eventP) {
 					break;
 				}
 
-				/* Right buttons: R B H */
+				/* Right buttons: R B A H */
 				{
-					Int16 iRightX = (Int16)(g_pBmpCanvas->iW - 30);
+					Int16 iRightX = (Int16)(g_pBmpCanvas->iW - 40);
 					if (iTapX >= iRightX && iTapX < iRightX + 10) {
 						/* Reset */
 						PzCamera_Reset(g_pBmpCanvas->iW / 2, g_pBmpCanvas->iH / 2);
@@ -1119,6 +1121,15 @@ static Boolean GraphFormHandleEvent(EventType * eventP) {
 						break;
 					}
 					if (iTapX >= iRightX + 20 && iTapX < iRightX + 30) {
+						/* Toggle axes */
+						g_bDrawAxes = !g_bDrawAxes;
+						RedrawCanvas(g_pBmpCanvas);
+						DrawGraphUI(g_pBmpCanvas);
+						WinDrawBitmap(g_pBmpCanvas->pBmp, 0, 0);
+						handled = true;
+						break;
+					}
+					if (iTapX >= iRightX + 30 && iTapX < iRightX + 40) {
 						/* Toggle footer */
 						g_bDrawFooter = !g_bDrawFooter;
 						RedrawCanvas(g_pBmpCanvas);
