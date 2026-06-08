@@ -77,6 +77,7 @@ int             iCanvasH = 480;
 int             iBlitOffX = 0;
 int             iBlitOffY = 0;
 int             bShowBox = 1;
+int             bShowAxes = 0;
 SDL_Surface*    sfScreen;
 SDL_Surface*    sfCanvas;
 Uint32          uLcdDarken = 0x111111;
@@ -483,6 +484,53 @@ static void scaleBlit(SDL_Surface* sfSrc, SDL_Surface* sfDst, int iFactor,
  * Redraw
  *====================================================*/
 
+#define AXES_ARROW_SIZE (0.05f)
+
+static void drawAxes(void (*xyz2xy)(NUMERIC, NUMERIC, NUMERIC, int*, int *)) {
+    static const Vertex AxesVertices[] = {
+        /* [0] Origin */
+        { NUM_VAL(0), NUM_VAL(0),  NUM_VAL(0) },
+        /* [1] X-axis direction */
+        { NUM_VAL(1), NUM_VAL(0),  NUM_VAL(0) },
+        /* [2] X-axis arrow line (upper) */
+        { NUM_VAL(1 - AXES_ARROW_SIZE), NUM_VAL(AXES_ARROW_SIZE),  NUM_VAL(0) },
+        /* [3] X-axis arrow line (lower) */
+        { NUM_VAL(1 - AXES_ARROW_SIZE), NUM_VAL(-AXES_ARROW_SIZE),  NUM_VAL(0) },
+        /* [4] Y-axis direction */
+        { NUM_VAL(0), NUM_VAL(1),  NUM_VAL(0) },
+        /* [5] Y-axis arrow line (upper) */
+        { NUM_VAL(AXES_ARROW_SIZE), NUM_VAL(1 - AXES_ARROW_SIZE),  NUM_VAL(0) },
+        /* [6] Y-axis arrow line (lower) */
+        { NUM_VAL(-AXES_ARROW_SIZE), NUM_VAL(1 - AXES_ARROW_SIZE),  NUM_VAL(0) },
+        /* [7] Z-axis direction */
+        { NUM_VAL(0), NUM_VAL(0),  NUM_VAL(1) },
+        /* [8] Z-axis arrow line (upper) */
+        { NUM_VAL(AXES_ARROW_SIZE), NUM_VAL(0),  NUM_VAL(1 - AXES_ARROW_SIZE ) },
+        /* [9] Z-axis arrow line (lower) */
+        { NUM_VAL(-AXES_ARROW_SIZE), NUM_VAL(-0),  NUM_VAL(1 - AXES_ARROW_SIZE) },
+    };
+
+    static const Edge AxesEdges[] = {
+        { 0, 1 }, { 1, 2 }, { 1, 3 },   /* X-axis */
+        { 0, 4 }, { 4, 5 }, { 4, 6 },   /* Y-axis */
+        { 0, 7 }, { 7, 8 }, { 7, 9 }    /* Z-axis */
+    };
+
+    static const int numEdges = sizeof(AxesEdges) / sizeof(AxesEdges[0]);
+    int i;
+
+    for (i = 0; i < numEdges; ++i) {
+        const Edge* e = AxesEdges + i;
+        const Vertex* v0 = AxesVertices + e->i0;
+        const Vertex* v1 = AxesVertices + e->i1;
+        int x0, y0, x1, y1;
+
+        xyz2xy(v0->x, v0->y, v0->z, &x0, &y0); 
+        xyz2xy(v1->x, v1->y, v1->z, &x1, &y1); 
+        plotLineColor(x0, y0, x1, y1, getColor(COLOR_LIGHT_GRAY));
+    }
+}
+
 static void drawBoxEdges(void (*xyz2xy)(NUMERIC, NUMERIC, NUMERIC, int*, int *)) {
     static const Vertex BoxVertices[] = {
         { NUM_VAL(1.0f),    NUM_VAL(1.0f),  NUM_VAL(1.0f)   },
@@ -610,6 +658,10 @@ static void redraw(void) {
 
     if (bShowBox) {
         drawBoxEdges(xyz2xy);
+    }
+    
+    if (bShowAxes) {
+        drawAxes(xyz2xy);
     }
 
     switch (appConfig.iFuncType) {
@@ -1338,6 +1390,9 @@ parseComplete:
                         }
                         else if (sdlEvent.key.keysym.sym == SDLK_b) {
                             bShowBox = !bShowBox;
+                        }
+                        else if (sdlEvent.key.keysym.sym == SDLK_o) {
+                            bShowAxes = !bShowAxes;
                         }
 
                         Camera.iBetaDeg = Camera.iBetaDeg % 360;
