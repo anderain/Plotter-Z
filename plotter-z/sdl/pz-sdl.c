@@ -309,6 +309,12 @@ static void applyConfig(const PzSdlConfig* pCfg) {
     Camera.yGrid = pCfg->iYGrid;
     Camera.zMin  = pCfg->fZMin;
     Camera.zMax  = pCfg->fZMax;
+    Camera.uMin  = pCfg->fUMin;
+    Camera.uMax  = pCfg->fUMax;
+    Camera.uGrid = pCfg->iUGrid;
+    Camera.vMin  = pCfg->fVMin;
+    Camera.vMax  = pCfg->fVMax;
+    Camera.vGrid = pCfg->iVGrid;
 }
 
 /*====================================================
