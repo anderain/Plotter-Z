@@ -110,6 +110,8 @@ typedef struct tagPzCamera {
     PZ_FLOAT xMin;  PZ_FLOAT xMax;  int xGrid;
     PZ_FLOAT yMin;  PZ_FLOAT yMax;  int yGrid;
     PZ_FLOAT zMin;  PZ_FLOAT zMax;
+    PZ_FLOAT uMin;  PZ_FLOAT uMax;  int uGrid;
+    PZ_FLOAT vMin;  PZ_FLOAT vMax;  int vGrid;
     int iZoomLevel;
     int iFovLevel; /* Only for perspective projection */
 } PzCamera;
@@ -126,5 +128,12 @@ void PzCamera_OrthoProjectFloat     (PZ_FLOAT, PZ_FLOAT, PZ_FLOAT, int *, int *)
 void PzCamera_OrthoProjectFixed     (PZ_FIXED, PZ_FIXED, PZ_FIXED, int *, int *);
 void PzCamera_PerspProjectFloat     (PZ_FLOAT, PZ_FLOAT, PZ_FLOAT, int *, int *);
 void PzCamera_PerspProjectFixed     (PZ_FIXED, PZ_FIXED, PZ_FIXED, int *, int *);
+
+/*****************************************
+ * Function types
+ *****************************************/
+
+#define FUNC_TYPE_CARTESIAN     0
+#define FUNC_TYPE_PARAMETRIC    1
 
 #endif

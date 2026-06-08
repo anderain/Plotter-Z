@@ -3,6 +3,8 @@
 #include "rz.h"
 #include "ascii_extended_mapping.h"
 
+#define createRenderNode RenderNode_Create
+
 static const struct {
     char* szToken;
     unsigned char ucSpecial;
@@ -22,7 +24,7 @@ static const struct {
     { NULL,         0x0                 }
 };
 
-static RenderNode* createRenderNode(RenderNodeType iType) {
+RenderNode* RenderNode_Create(RenderNodeType iType) {
     RenderNode* pNode = (RenderNode *)malloc(sizeof(RenderNode));
 
     pNode->iType = iType;
@@ -61,6 +63,9 @@ static RenderNode* createRenderNode(RenderNodeType iType) {
             break;
         case RN_BIG_SYMBOL:
             pNode->uData.sBigSymbol.iType = ST_NONE;
+            break;
+        case RN_VERTICAL:
+            pNode->uData.sVertical.pList = vlNewList();  
             break;
     }
 
@@ -109,6 +114,11 @@ static void cleanUpRenderNode(RenderNode* pNode) {
             break;
         case RN_BIG_SYMBOL:
             pNode->uData.sBigSymbol.iType = ST_NONE;
+            break;
+        case RN_VERTICAL:
+            if (pNode->uData.sVertical.pList) {
+                vlDestroy(pNode->uData.sVertical.pList, destroyRenderNodeVoidPtr);
+            }
             break;
     }
 }
@@ -508,14 +518,30 @@ static void reduceHorizontal(RenderNode* pNode) {
             reduceHorizontal(pNode->uData.sSuperscript.pBody);
             reduceHorizontal(pNode->uData.sSuperscript.pScript);
             break;
+        case RN_VERTICAL: {
+            VlistNode* pListNode;
+            for (
+                pListNode = pNode->uData.sVertical.pList->pHead;
+                pListNode != NULL;
+                pListNode = pListNode->pNext
+            ) {
+                reduceHorizontal((RenderNode *)pListNode->pData);
+            }
+            break;
+        }
         default:
             break;
     }
 }
 
-RenderNode* Render_Transform(const FzAstNode* pAstNode) {
+RenderNode* Render_Transform(const FzAstNode* pAstNode, const char* szPrefix) {
     RenderNode* pHorz = createRenderNode(RN_HORIZONTAL);
     transform(pHorz, pAstNode);
+    if (szPrefix != NULL) {
+        RenderNode* pPrefix = RenderNode_Create(RN_TEXT);
+        pPrefix->uData.sText.szText = Utils_StringDump(szPrefix);
+        vlPushFront(pHorz->uData.sHorizontal.pList, pPrefix);
+    }
     reduceHorizontal(pHorz);
     return pHorz;
 }

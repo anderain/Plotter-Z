@@ -23,14 +23,17 @@ typedef struct {
     int         iScale;
     int         bLcd;
     int         bFullscreen;
-    PZ_FLOAT    fXMin, fXMax;
-    int         iXGrid;
-    PZ_FLOAT    fYMin, fYMax;
-    int         iYGrid;
+    PZ_FLOAT    fXMin, fXMax; int iXGrid;
+    PZ_FLOAT    fYMin, fYMax; int iYGrid;
     PZ_FLOAT    fZMin, fZMax;
+    PZ_FLOAT    fUMin, fUMax; int iUGrid;
+    PZ_FLOAT    fVMin, fVMax; int iVGrid;
     int         bShowBox;
     const char* szExpr;
+    int         iFuncType;
 } PzSdlConfig;
+
+PzSdlConfig appConfig;
 
 static const PzSdlConfig DEFAULT_CONFIG = {
     640, 480,                                   /* width, height */
@@ -40,8 +43,11 @@ static const PzSdlConfig DEFAULT_CONFIG = {
     -6.0f, 6.0f, 20,                            /* xMin, xMax, xGrid */
     -6.0f, 6.0f, 20,                            /* yMin, yMax, yGrid */
     -3.0f, 3.0f,                                /* zMin, zMax */
+    -PZ_PI, PZ_PI, 20,                          /* uMin, uMax, uGrid */
+    -PZ_PI, PZ_PI, 20,                          /* vMin, vMax, vGrid */
     0,                                          /* showBox */
-    "exp(-abs(x/pi))*cos(sqr(x^2+y^2))*3"       /* default expression */
+    "exp(-abs(x/pi))*cos(sqr(x^2+y^2))*3",      /* default expression */
+    FUNC_TYPE_CARTESIAN                         /* function type */
 };
 
 /*====================================================
@@ -80,6 +86,7 @@ static Uint32 uPalette[] = {
 static Uint32 getColor(int iIndex) {
     return uPalette[iIndex];
 }
+
 int             g_bError = 0;
 int             g_bHelp = 0;
 int             g_bInspector = 0;
@@ -90,19 +97,47 @@ int             g_bMouseRightDown = 0;
 int             g_iMousePrevX = 0;
 int             g_iMousePrevY = 0;
 
+FzAstNode*      pAstCartZ   = NULL;
+EzMachine*      pVmCartZ    = NULL;
+
+FzAstNode*      pAstParm[]   = { NULL, NULL, NULL };
+EzMachine*      pVmParm[]    = { NULL, NULL, NULL };
+
+RenderNode*     pRenderNode = NULL;
+RenderConfig    rzConfig;
+
+/*====================================================
+ * Vertex
+ *====================================================*/
+
+#define X_GRID_MAX      40
+#define Y_GRID_MAX      40
+#define U_GRID_MAX      20
+#define V_GRID_MAX      20
+#define BUFFER_MAX(a,b) ((a) > (b) ? (a) : (b))
+
+#define VERTEX_BUFFER_SIZE  BUFFER_MAX(X_GRID_MAX + Y_GRID_MAX + X_GRID_MAX * Y_GRID_MAX, U_GRID_MAX * V_GRID_MAX * 3)
+
 typedef struct { PZ_FLOAT x, y, z; } Vertex;
 typedef struct { int i0, i1; } Edge;
 
-PZ_FLOAT zBuf[2000];
-PZ_FLOAT xBuf[50];
-PZ_FLOAT yBuf[50];
+PZ_FLOAT g_fVertexBuf[VERTEX_BUFFER_SIZE];
 
-#define Z_BUF(x,y) (zBuf[(x) + (y) * Camera.xGrid])
+/* Cartesian */
+PZ_FLOAT *g_fCartXBuf = g_fVertexBuf;
+PZ_FLOAT *g_fCartYBuf = g_fVertexBuf + X_GRID_MAX;
+PZ_FLOAT *g_fCartZBuf = g_fVertexBuf + X_GRID_MAX + Y_GRID_MAX;
 
-FzAstNode*      pAstExpr = NULL;
-EzMachine*      pVm;
-RenderNode*     pRenderNode;
-RenderConfig    config;
+#define CART_Z_BUF(x,y) (g_fCartZBuf[(x) + (y) * Camera.xGrid])
+
+/* Parametric */
+PZ_FLOAT *g_fParmXBuf = g_fVertexBuf;
+PZ_FLOAT *g_fParmYBuf = g_fVertexBuf + U_GRID_MAX * V_GRID_MAX;
+PZ_FLOAT *g_fParmZBuf = g_fVertexBuf + U_GRID_MAX * V_GRID_MAX * 2;
+
+#define PARM_X_BUF(iu,iv) (g_fParmXBuf[(iu) + (iv) * Camera.uGrid])
+#define PARM_Y_BUF(iu,iv) (g_fParmYBuf[(iu) + (iv) * Camera.uGrid])
+#define PARM_Z_BUF(iu,iv) (g_fParmZBuf[(iu) + (iv) * Camera.uGrid])
 
 /*====================================================
  * I18N - Internationalization
@@ -367,7 +402,6 @@ static void putText(int x, int y, const unsigned char* usz, Uint32 uColor) {
 #define ORTHOGRAPHIC    0
 #define PERSPECTIVE     1
 
-void (*xyz2xy)(PZ_FLOAT, PZ_FLOAT, PZ_FLOAT, int*, int *) = PzCamera_OrthoProjectFloat;
 int g_iProjection = ORTHOGRAPHIC;
 
 /*====================================================
@@ -435,7 +469,7 @@ static void scaleBlit(SDL_Surface* sfSrc, SDL_Surface* sfDst, int iFactor,
  * Redraw
  *====================================================*/
 
-static void drawBoxEdges() {
+static void drawBoxEdges(void (*xyz2xy)(PZ_FLOAT, PZ_FLOAT, PZ_FLOAT, int*, int *)) {
     static const Vertex BoxVertices[] = {
         {  1,  1,  1 },
         { -1,  1,  1 },
@@ -468,15 +502,15 @@ static void drawBoxEdges() {
     }
 }
 
-static void drawSurfaceWireframe(void) {
+static void drawCartSurfaceWireframe(void (*xyz2xy)(PZ_FLOAT, PZ_FLOAT, PZ_FLOAT, int*, int *)) {
     int ix, iy, x0, y0, x1, y1;
     PZ_FLOAT z0, z1;
 
     for (ix = 0; ix < Camera.xGrid; ++ix) {
         iy = 0;
-        xyz2xy(xBuf[ix], yBuf[iy], z0 = Z_BUF(ix, iy), &x0, &y0); 
+        xyz2xy(g_fCartXBuf[ix], g_fCartYBuf[iy], z0 = CART_Z_BUF(ix, iy), &x0, &y0); 
         for (iy = 0; iy < Camera.yGrid; ++iy) {
-            xyz2xy(xBuf[ix], yBuf[iy], z1 = Z_BUF(ix, iy), &x1, &y1); 
+            xyz2xy(g_fCartXBuf[ix], g_fCartYBuf[iy], z1 = CART_Z_BUF(ix, iy), &x1, &y1); 
             if (z0 <= 1 && z0 >= -1 && z1 <= 1 && z1 >= -1) {
                 plotLine(x0, y0, x1, y1);
             }
@@ -486,9 +520,9 @@ static void drawSurfaceWireframe(void) {
 
     for (iy = 0; iy < Camera.yGrid; ++iy) {
         ix = 0;
-        xyz2xy(xBuf[ix], yBuf[iy], z0 = Z_BUF(ix, iy), &x0, &y0); 
+        xyz2xy(g_fCartXBuf[ix], g_fCartYBuf[iy], z0 = CART_Z_BUF(ix, iy), &x0, &y0); 
         for (ix = 0; ix < Camera.xGrid; ++ix) {
-            xyz2xy(xBuf[ix], yBuf[iy], z1 = Z_BUF(ix, iy), &x1, &y1); 
+            xyz2xy(g_fCartXBuf[ix], g_fCartYBuf[iy], z1 = CART_Z_BUF(ix, iy), &x1, &y1); 
             if (z0 <= 1 && z0 >= -1 && z1 <= 1 && z1 >= -1) {
                 plotLine(x0, y0, x1, y1);
             }
@@ -497,7 +531,40 @@ static void drawSurfaceWireframe(void) {
     }
 }
 
+static void drawParmSurfaceWireframe(void (*xyz2xy)(PZ_FLOAT, PZ_FLOAT, PZ_FLOAT, int*, int *)) {
+    int iu, iv, x0, y0, x1, y1;
+    for (iv = 0; iv < Camera.vGrid; ++iv) {
+        iu = 0;
+        xyz2xy(PARM_X_BUF(iu, iv), PARM_Y_BUF(iu, iv), PARM_Z_BUF(iu, iv), &x0, &y0); 
+        for (iu = 0; iu < Camera.uGrid; ++iu) {
+            xyz2xy(PARM_X_BUF(iu, iv), PARM_Y_BUF(iu, iv), PARM_Z_BUF(iu, iv), &x1, &y1); 
+            plotLine(x0, y0, x1, y1);
+            x0 = x1, y0 = y1;
+        }
+    }
+    for (iu = 0; iu < Camera.uGrid; ++iu) {
+        iv = 0;
+        xyz2xy(PARM_X_BUF(iu, iv), PARM_Y_BUF(iu, iv), PARM_Z_BUF(iu, iv), &x0, &y0); 
+        for (iv = 0; iv < Camera.vGrid; ++iv) {
+            xyz2xy(PARM_X_BUF(iu, iv), PARM_Y_BUF(iu, iv), PARM_Z_BUF(iu, iv), &x1, &y1); 
+            plotLine(x0, y0, x1, y1);
+            x0 = x1, y0 = y1;
+        }
+    }
+}
+
 static void redraw(void) {
+    void (*xyz2xy)(PZ_FLOAT, PZ_FLOAT, PZ_FLOAT, int*, int *) = NULL;
+
+    switch (g_iProjection) {
+        case PERSPECTIVE:
+            xyz2xy = PzCamera_PerspProjectFloat;
+            break;
+        case ORTHOGRAPHIC:
+        default:
+            xyz2xy = PzCamera_OrthoProjectFloat;
+            break;
+    }
 
     SDL_FillRect(sfCanvas, NULL, getColor(COLOR_WHITE));
 
@@ -507,10 +574,17 @@ static void redraw(void) {
     Camera.cosB = (PZ_FLOAT)cos(Camera.iBetaDeg * PZ_PI / 180);
 
     if (bShowBox) {
-        drawBoxEdges();
+        drawBoxEdges(xyz2xy);
     }
 
-    drawSurfaceWireframe();
+    switch (appConfig.iFuncType) {
+        case FUNC_TYPE_CARTESIAN:
+            drawCartSurfaceWireframe(xyz2xy);
+            break;
+        case FUNC_TYPE_PARAMETRIC:
+            drawParmSurfaceWireframe(xyz2xy);
+            break;
+    }
 
     /* Display title text */
     {
@@ -521,14 +595,14 @@ static void redraw(void) {
     }
     
     /* Render expression */
-    {
+    if (pRenderNode) {
         int iStartX = 2;
         int iStartY = 12;
         int iNodeWidth = pRenderNode->sLayout.iWidth;
         int iNodeHeight = pRenderNode->sLayout.iAscent + pRenderNode->sLayout.iDescent;
         int iBaseline = iStartY + pRenderNode->sLayout.iAscent;
         fillRect(iStartX - 2, iStartY - 2, iNodeWidth + 3, iNodeHeight + 3, getColor(COLOR_WHITE));
-        RenderNode_Draw(pRenderNode, &config, iStartX, iBaseline);
+        RenderNode_Draw(pRenderNode, &rzConfig, iStartX, iBaseline);
     }
 
     /* Display footer */
@@ -570,37 +644,64 @@ static void redraw(void) {
  * Recalculate surface geometry
  *====================================================*/
 
-static void recalc(void) {
+static void recalcCartesian(void) {
     int ix, iy;
     PZ_FLOAT fz;
 
     /* Compute actual x, y sample positions and store in buffers */
     for (ix = 0; ix < Camera.xGrid; ++ix) {
-        xBuf[ix] = Camera.xMin + (Camera.xMax - Camera.xMin) * ix / (Camera.xGrid - 1);
+        g_fCartXBuf[ix] = Camera.xMin + (Camera.xMax - Camera.xMin) * ix / (Camera.xGrid - 1);
     }
     for (iy = 0; iy < Camera.yGrid; ++iy) {
-        yBuf[iy] = Camera.yMin + (Camera.yMax - Camera.yMin) * iy / (Camera.yGrid - 1);
+        g_fCartYBuf[iy] = Camera.yMin + (Camera.yMax - Camera.yMin) * iy / (Camera.yGrid - 1);
     }
 
     /* Evaluate z = f(x, y) for every grid point */
     for (ix = 0; ix < Camera.xGrid; ++ix) {
         for (iy = 0; iy < Camera.yGrid; ++iy) {
-            EzMachine_SetVariableByIndex(pVm, 0, xBuf[ix]);
-            EzMachine_SetVariableByIndex(pVm, 1, yBuf[iy]);
+            EzMachine_SetVariableByIndex(pVmCartZ, 0, g_fCartXBuf[ix]);
+            EzMachine_SetVariableByIndex(pVmCartZ, 1, g_fCartYBuf[iy]);
             /* Evaluate the z value */
-            fz = EzMachine_Eval(pVm);
+            fz = EzMachine_Eval(pVmCartZ);
             /* Normalize z into [-1, 1] based on the z-axis bounds */
-            Z_BUF(ix, iy) = 2.0f * (fz - (Camera.zMax + Camera.zMin) / 2.0f) / (Camera.zMax - Camera.zMin);
+            CART_Z_BUF(ix, iy) = 2.0f * (fz - (Camera.zMax + Camera.zMin) / 2.0f) / (Camera.zMax - Camera.zMin);
         }
     }
 
     /* Normalize x and y grid coordinates into [-1, 1] */
     for (ix = 0; ix < Camera.xGrid; ++ix) {
-        xBuf[ix] = 2.0f * (xBuf[ix] - (Camera.xMax + Camera.xMin) / 2.0f) / (Camera.xMax - Camera.xMin);
+        g_fCartXBuf[ix] = 2.0f * (g_fCartXBuf[ix] - (Camera.xMax + Camera.xMin) / 2.0f) / (Camera.xMax - Camera.xMin);
     }
     for (iy = 0; iy < Camera.yGrid; ++iy) {
-        yBuf[iy] = 2.0f * (yBuf[iy] - (Camera.yMax + Camera.yMin) / 2.0f) / (Camera.yMax - Camera.yMin);
-    }   
+        g_fCartYBuf[iy] = 2.0f * (g_fCartYBuf[iy] - (Camera.yMax + Camera.yMin) / 2.0f) / (Camera.yMax - Camera.yMin);
+    }
+}
+
+void recalcParametric(void) {
+    int iu, iv, i;
+    PZ_FLOAT u, v;
+    PZ_FLOAT pos[3];
+
+    if (!pVmParm[0] || !pVmParm[1] || !pVmParm[2]) {
+        return;
+    }
+
+    for (iu = 0; iu < Camera.uGrid; ++iu) {
+        u = Camera.uMin + (Camera.uMax - Camera.uMin) * iu / (Camera.uGrid - 1);
+        for (iv = 0; iv < Camera.vGrid; ++iv) {
+            v = Camera.vMin + (Camera.vMax - Camera.vMin) * iv / (Camera.vGrid - 1);
+            /* Evaluate x */
+            for (i = 0; i < 3; ++i) {
+                EzMachine_SetVariableByIndex(pVmParm[i], 0, u);
+                EzMachine_SetVariableByIndex(pVmParm[i], 1, v);
+                pos[i] = EzMachine_Eval(pVmParm[i]);
+            }
+            /* Normalize */
+            PARM_X_BUF(iu, iv) = 2.0f * (pos[0] - (Camera.xMax + Camera.xMin) / 2.0f) / (Camera.xMax - Camera.xMin);
+            PARM_Y_BUF(iu, iv) = 2.0f * (pos[1] - (Camera.yMax + Camera.yMin) / 2.0f) / (Camera.yMax - Camera.yMin);
+            PARM_Z_BUF(iu, iv) = 2.0f * (pos[2] - (Camera.zMax + Camera.zMin) / 2.0f) / (Camera.zMax - Camera.zMin);
+        }
+    }
 }
 
 /*====================================================
@@ -612,7 +713,7 @@ static void drawErrorScreen(void) {
     putText(8, 2, (const unsigned char *)I18N(I18N_TITLE), getColor(COLOR_BLACK));
     putText(8, 20, (const unsigned char *)I18N(I18N_ERROR), getColor(COLOR_BLACK));
     putText(8, 30, (const unsigned char *)I18N(I18N_EXPRESSION_LABEL), getColor(COLOR_BLACK));
-    if (pAstExpr == NULL) {
+    if (pAstCartZ == NULL) {
         putText(8, 38, (const unsigned char *)I18N(I18N_SYNTAX_ERROR), getColor(COLOR_BLACK));
     } else {
         putText(8, 38, (const unsigned char *)g_szErrorText, getColor(COLOR_BLACK));
@@ -709,14 +810,14 @@ static void drawInspectorScreen(void) {
 
     SDL_FillRect(sfCanvas, NULL, getColor(COLOR_WHITE));
 
-    if (pAstExpr == NULL || pRenderNode == NULL || pVm == NULL) {
+    if (pAstCartZ == NULL || pRenderNode == NULL || pVmCartZ == NULL) {
         putText(iStartX, iStartY, (const unsigned char *)"N/A", getColor(COLOR_DARK_GRAY));
     } else {
         fillRect(iStartX - 2, iStartY - 2, iCanvasW, CURRENT_FONT_HEIGHT + 2, getColor(COLOR_DARK_GRAY));
         putText(iStartX, iStartY, (const unsigned char *)I18N(I18N_EZ_INSPECTOR), getColor(COLOR_WHITE));
         iStartY += CURRENT_FONT_HEIGHT + iMargin;
         iBaseline = iStartY + pRenderNode->sLayout.iAscent;
-        RenderNode_Draw(pRenderNode, &config, (iCanvasW - pRenderNode->sLayout.iWidth) / 2, iBaseline);
+        RenderNode_Draw(pRenderNode, &rzConfig, (iCanvasW - pRenderNode->sLayout.iWidth) / 2, iBaseline);
 
         iVmInfoStartY = iStartY + (pRenderNode->sLayout.iAscent + pRenderNode->sLayout.iDescent) + iMargin * 2;
 
@@ -726,7 +827,7 @@ static void drawInspectorScreen(void) {
         putText(iStartX, iStartY, (const unsigned char *)I18N(I18N_EZ_PREDEF_VARS), getColor(COLOR_DARK_GRAY));
         iStartY += CURRENT_FONT_HEIGHT + iMargin;
         for (
-            i = 0, pListNode = pVm->pListVariableName->pHead;
+            i = 0, pListNode = pVmCartZ->pListVariableName->pHead;
             pListNode != NULL;
             pListNode = pListNode->pNext, iStartY += CURRENT_FONT_HEIGHT, ++i
         ) {
@@ -745,9 +846,9 @@ static void drawInspectorScreen(void) {
         /* Calculate scrolling: visible area = canvasH minus header and safety margin */
         iVisibleLines = (iCanvasH - iStartY - CURRENT_FONT_HEIGHT) / CURRENT_FONT_HEIGHT;
         if (iVisibleLines < 1) iVisibleLines = 1;
-        if (pVm->iInstructionLength > iVisibleLines) {
+        if (pVmCartZ->iInstructionLength > iVisibleLines) {
             bNeedScroll = 1;
-            iMaxScroll = pVm->iInstructionLength - iVisibleLines;
+            iMaxScroll = pVmCartZ->iInstructionLength - iVisibleLines;
             if (g_iInspectorScroll > iMaxScroll) g_iInspectorScroll = iMaxScroll;
             if (g_iInspectorScroll < 0) g_iInspectorScroll = 0;
         } else {
@@ -756,8 +857,8 @@ static void drawInspectorScreen(void) {
 
         /* Draw VM instructions (visible window) */
         i = g_iInspectorScroll;
-        for (; i < pVm->iInstructionLength && i < g_iInspectorScroll + iVisibleLines; ++i, iStartY += CURRENT_FONT_HEIGHT) {
-            EzInstruction* pInst = pVm->pInstructions + i;
+        for (; i < pVmCartZ->iInstructionLength && i < g_iInspectorScroll + iVisibleLines; ++i, iStartY += CURRENT_FONT_HEIGHT) {
+            EzInstruction* pInst = pVmCartZ->pInstructions + i;
             int iLeftOffset;
             iLeftOffset = CURRENT_FONT_WIDTH * sprintf(szBuf, "%03d\x18", i);
             putText(iStartX, iStartY, (const unsigned char *)szBuf, getColor(COLOR_LIGHT_GRAY));
@@ -825,53 +926,66 @@ static void drawInspectorScreen(void) {
  *====================================================*/
 
 int main(int argc, char* argv[]) {
-    PzSdlConfig cfg = DEFAULT_CONFIG;
     int i;
     int bFullscreen = 0;
     EzError iCompileError = EZERR_NONE;
     char szErrorBuf[EZ_ERROR_CONTENT_LENGTH];
+
+    memcpy(&appConfig, &DEFAULT_CONFIG, sizeof(PzSdlConfig));
 
     PzCamera_Initialize();
     
     /* Parse command-line arguments */
     for (i = 1; i < argc; ++i) {
         if (strcmp(argv[i], "-r") == 0 || strcmp(argv[i], "--resolution") == 0) {
-            if (i + 1 >= argc || !parseResolution(argv[i + 1], &cfg.iScreenWidth, &cfg.iScreenHeight)) {
+            if (i + 1 >= argc || !parseResolution(argv[i + 1], &appConfig.iScreenWidth, &appConfig.iScreenHeight)) {
                 fprintf(stderr, "Error: -r requires WIDTHxHEIGHT\n");
                 return 2;
             }
             i++;
         } else if (strcmp(argv[i], "-f") == 0 || strcmp(argv[i], "--fullscreen") == 0) {
-            cfg.bFullscreen = 1;
+            appConfig.bFullscreen = 1;
         } else if (strcmp(argv[i], "-x") == 0 || strcmp(argv[i], "--xrange") == 0) {
-            if (i + 1 >= argc || !parseTriple(argv[i + 1], &cfg.fXMin, &cfg.fXMax, &cfg.iXGrid)) {
+            if (i + 1 >= argc || !parseTriple(argv[i + 1], &appConfig.fXMin, &appConfig.fXMax, &appConfig.iXGrid)) {
                 fprintf(stderr, "Error: -x requires MIN,MAX,GRID\n");
                 return 2;
             }
             i++;
         } else if (strcmp(argv[i], "-y") == 0 || strcmp(argv[i], "--yrange") == 0) {
-            if (i + 1 >= argc || !parseTriple(argv[i + 1], &cfg.fYMin, &cfg.fYMax, &cfg.iYGrid)) {
+            if (i + 1 >= argc || !parseTriple(argv[i + 1], &appConfig.fYMin, &appConfig.fYMax, &appConfig.iYGrid)) {
                 fprintf(stderr, "Error: -y requires MIN,MAX,GRID\n");
                 return 2;
             }
             i++;
         } else if (strcmp(argv[i], "-z") == 0 || strcmp(argv[i], "--zrange") == 0) {
-            if (i + 1 >= argc || !parsePair(argv[i + 1], &cfg.fZMin, &cfg.fZMax)) {
+            if (i + 1 >= argc || !parsePair(argv[i + 1], &appConfig.fZMin, &appConfig.fZMax)) {
                 fprintf(stderr, "Error: -z requires MIN,MAX\n");
                 return 2;
             }
             i++;
+        } else if (strcmp(argv[i], "-u") == 0 || strcmp(argv[i], "--urange") == 0) {
+            if (i + 1 >= argc || !parseTriple(argv[i + 1], &appConfig.fUMin, &appConfig.fUMax, &appConfig.iUGrid)) {
+                fprintf(stderr, "Error: -u requires MIN,MAX,GRID\n");
+                return 2;
+            }
+            i++;
+        } else if (strcmp(argv[i], "-v") == 0 || strcmp(argv[i], "--vrange") == 0) {
+            if (i + 1 >= argc || !parseTriple(argv[i + 1], &appConfig.fVMin, &appConfig.fVMax, &appConfig.iVGrid)) {
+                fprintf(stderr, "Error: -v requires MIN,MAX,GRID\n");
+                return 2;
+            }
+            i++;
         } else if (strcmp(argv[i], "-b") == 0 || strcmp(argv[i], "--box") == 0) {
-            cfg.bShowBox = !cfg.bShowBox;
+            appConfig.bShowBox = !appConfig.bShowBox;
         } else if (strcmp(argv[i], "-l") == 0 || strcmp(argv[i], "--lcd") == 0) {
-            cfg.bLcd = !cfg.bLcd;
+            appConfig.bLcd = !appConfig.bLcd;
         } else if (strcmp(argv[i], "-s") == 0 || strcmp(argv[i], "--scale") == 0) {
             if (i + 1 >= argc) {
                 fprintf(stderr, "Error: -s requires SCALE\n");
                 return 2;
             }
-            cfg.iScale = atoi(argv[i + 1]);
-            if (cfg.iScale < 1) cfg.iScale = 1;
+            appConfig.iScale = atoi(argv[i + 1]);
+            if (appConfig.iScale < 1) appConfig.iScale = 1;
             i++;
         } else if (strcmp(argv[i], "-t") == 0 || strcmp(argv[i], "--translation") == 0) {
             if (i + 1 >= argc) {
@@ -884,66 +998,136 @@ int main(int argc, char* argv[]) {
                 g_iLang = I18N_LANG_EN;
             }
             i++;
-        } else if (strcmp(argv[i], "-p") == 0 || strcmp(argv[i], "--palette") == 0) {
-            if (i + 1 >= argc || !parsePalette(argv[i + 1])) {
-                fprintf(stderr, "Error: -p requires C1,C2,C3,C4 (hex RRGGBB)\n");
-                return 2;
-            }
-            i++;
-        } else if (cfg.szExpr == DEFAULT_CONFIG.szExpr) {
+        } else if (strcmp(argv[i], "-c") == 0 || strcmp(argv[i], "--cartesian") == 0) {
+            appConfig.iFuncType = FUNC_TYPE_CARTESIAN;
+        } else if (strcmp(argv[i], "-p") == 0 || strcmp(argv[i], "--parametric") == 0) {
+            appConfig.iFuncType = FUNC_TYPE_PARAMETRIC;
+        } else if (appConfig.szExpr == DEFAULT_CONFIG.szExpr) {
             /* First positional argument overrides the default expression */
-            cfg.szExpr = argv[i];
+            appConfig.szExpr = argv[i];
         }
     }
 
-    applyConfig(&cfg);
-    bFullscreen = cfg.bFullscreen;
+    applyConfig(&appConfig);
+    bFullscreen = appConfig.bFullscreen;
 
     /* Initialize renderer interface */
-    RenderConfig_GetDefaultStyle(&config);
-    RenderConfig_CalculateBigSymbolPoints(&config);
-    config.sInterfaces.setPixel = setPixel;
-    config.sInterfaces.plotLine = plotLine;
-    config.sInterfaces.putChar = putChar;
+    RenderConfig_GetDefaultStyle(&rzConfig);
+    RenderConfig_CalculateBigSymbolPoints(&rzConfig);
+    rzConfig.sInterfaces.setPixel = setPixel;
+    rzConfig.sInterfaces.plotLine = plotLine;
+    rzConfig.sInterfaces.putChar = putChar;
 
     /* Parse expression */
-    pAstExpr = FzParser_ParseExpression(cfg.szExpr);
-    if (pAstExpr == NULL) {
-        g_bError = 1;
-    } else {
-        pRenderNode = Render_Transform(pAstExpr);
-        RenderNode_CalculateSize(pRenderNode, &config);
-
-        /* Compile expression to VM */
-        pVm = EzMachine_Create();
-        EzMachine_DeclareVariable(pVm, "x");
-        EzMachine_DeclareVariable(pVm, "y");
-        EzMachine_DeclareVariable(pVm, "pi");
-        EzMachine_AllocateVariables(pVm);
-        EzMachine_SetVariableByIndex(pVm, 2, PZ_PI);
-
-        iCompileError = EzMachine_Compile(pVm, pAstExpr, szErrorBuf);
-
-        if (iCompileError != EZERR_NONE) {
+    if (appConfig.iFuncType == FUNC_TYPE_CARTESIAN) {
+        pAstCartZ = FzParser_ParseExpression(appConfig.szExpr);
+        if (pAstCartZ == NULL) {
             g_bError = 1;
-            switch (iCompileError) {
-                default:
-                case EZERR_NONE:
-                    break;
-                case EZERR_VARIABLE_UNDEFINED:
-                    sprintf(g_szErrorText, I18N(I18N_VARIABLE_UNDEFINED_FMT), szErrorBuf);
-                    break;
-                case EZERR_FUNCTION_UNDEFINED:
-                    sprintf(g_szErrorText, I18N(I18N_FUNCTION_UNDEFINED_FMT), szErrorBuf);
-                    break;
-                case EZERR_FUNCTION_PARAM_MISMATCH:
-                    sprintf(g_szErrorText, I18N(I18N_FUNCTION_PARAM_FMT), szErrorBuf);
-                    break;
-            }
         } else {
-            recalc();
+            pRenderNode = Render_Transform(pAstCartZ, "z=");
+            RenderNode_CalculateSize(pRenderNode, &rzConfig);
+
+            /* Compile expression to VM */
+            pVmCartZ = EzMachine_Create();
+            EzMachine_DeclareVariable(pVmCartZ, "x");
+            EzMachine_DeclareVariable(pVmCartZ, "y");
+            EzMachine_DeclareVariable(pVmCartZ, "pi");
+            EzMachine_AllocateVariables(pVmCartZ);
+            EzMachine_SetVariableByIndex(pVmCartZ, 2, PZ_PI);
+
+            iCompileError = EzMachine_Compile(pVmCartZ, pAstCartZ, szErrorBuf);
+            if (iCompileError == EZERR_NONE) {
+                recalcCartesian();
+            }
         }
     }
+    else if (appConfig.iFuncType == FUNC_TYPE_PARAMETRIC) {
+        char szExprBuf[300];
+        const char *szExprPtr[3];
+        int iSemicolonPos[2];
+        int iSemicolonCount = 0;
+        RenderNode* pRenderNodes[3];
+        const char *szPrefix[] = { "x=", "y=", "z=" };
+
+        strcpy(szExprBuf, appConfig.szExpr);
+
+        for (i = 0; szExprBuf[i]; ++i) {
+            if (szExprBuf[i] == ';') {
+                if (iSemicolonCount >= 2) {
+                    g_bError = 1;
+                    sprintf(g_szErrorText, "The number of expressions is not 3.");
+                    goto parseComplete;
+                }
+                iSemicolonPos[iSemicolonCount] = i;
+                iSemicolonCount++;
+                szExprBuf[i] = 0;
+            }
+        }
+
+        if (iSemicolonCount != 2) {
+            g_bError = 1;
+            sprintf(g_szErrorText, "The number of expressions is not 3.");
+            goto parseComplete;
+        }
+
+        szExprPtr[0] = szExprBuf;
+        szExprPtr[1] = szExprBuf + iSemicolonPos[0] + 1;
+        szExprPtr[2] = szExprBuf + iSemicolonPos[1] + 1;
+
+        for (i = 0; i < 3; ++i) {
+            pAstParm[i] = FzParser_ParseExpression(szExprPtr[i]);
+            if (pAstParm[i] == NULL) {
+                g_bError = 1;
+                goto parseComplete;
+            }
+        }
+
+        pRenderNode = RenderNode_Create(RN_VERTICAL);
+        for (i = 0; i < 3; ++i) {
+            vlPushBack(pRenderNode->uData.sVertical.pList, Render_Transform(pAstParm[i], szPrefix[i]));
+        }
+        RenderNode_CalculateSize(pRenderNode, &rzConfig);
+
+        for (i = 0; i < 3; ++i) {
+            /* Compile expression to VM */
+            pVmParm[i] = EzMachine_Create();
+            EzMachine_DeclareVariable(pVmParm[i], "u");
+            EzMachine_DeclareVariable(pVmParm[i], "v");
+            EzMachine_DeclareVariable(pVmParm[i], "pi");
+            EzMachine_AllocateVariables(pVmParm[i]);
+            EzMachine_SetVariableByIndex(pVmParm[i], 2, PZ_PI);
+
+            iCompileError = EzMachine_Compile(pVmParm[i], pAstParm[i], szErrorBuf);
+            if (iCompileError != EZERR_NONE) {
+                goto compileComplete;
+            }
+        }
+
+        recalcParametric();
+    }
+
+compileComplete:
+
+    /* Format error message */
+    if (iCompileError != EZERR_NONE) {
+        g_bError = 1;
+        switch (iCompileError) {
+            default:
+            case EZERR_NONE:
+                break;
+            case EZERR_VARIABLE_UNDEFINED:
+                sprintf(g_szErrorText, I18N(I18N_VARIABLE_UNDEFINED_FMT), szErrorBuf);
+                break;
+            case EZERR_FUNCTION_UNDEFINED:
+                sprintf(g_szErrorText, I18N(I18N_FUNCTION_UNDEFINED_FMT), szErrorBuf);
+                break;
+            case EZERR_FUNCTION_PARAM_MISMATCH:
+                sprintf(g_szErrorText, I18N(I18N_FUNCTION_PARAM_FMT), szErrorBuf);
+                break;
+        }
+    }
+
+parseComplete:
 
     /* Initialize SDL */
     if (SDL_Init(SDL_INIT_VIDEO) < 0) {
@@ -1072,8 +1256,10 @@ int main(int argc, char* argv[]) {
                             break;
                         }
                         if (sdlEvent.key.keysym.sym == SDLK_i) {
-                            g_bInspector = 1;
-                            drawInspectorScreen();
+                            if (appConfig.iFuncType == FUNC_TYPE_CARTESIAN) {
+                                g_bInspector = 1;
+                                drawInspectorScreen();
+                            }
                             break;
                         }
                         if (sdlEvent.key.keysym.sym == SDLK_LEFT) {
@@ -1109,14 +1295,6 @@ int main(int argc, char* argv[]) {
                         }
                         else if (sdlEvent.key.keysym.sym == SDLK_p) {
                             g_iProjection = !g_iProjection;
-                            switch (g_iProjection) {
-                                case ORTHOGRAPHIC:
-                                    xyz2xy = PzCamera_OrthoProjectFloat;
-                                    break;
-                                default:
-                                    xyz2xy = PzCamera_PerspProjectFloat;
-                                    break;
-                            }
                         }
                         else if (sdlEvent.key.keysym.sym == SDLK_b) {
                             bShowBox = !bShowBox;
@@ -1134,14 +1312,14 @@ int main(int argc, char* argv[]) {
         }
     }
 
-    if (pRenderNode != NULL) {
-        RenderNode_Destroy(pRenderNode);
-    }
-    if (pVm != NULL) {
-        EzMachine_Destroy(pVm);
-    }
-    if (pAstExpr != NULL) {
-        FzAstNode_Destroy(pAstExpr);
+    if (pRenderNode != NULL) RenderNode_Destroy(pRenderNode);
+
+    if (pVmCartZ != NULL) EzMachine_Destroy(pVmCartZ);
+    if (pAstCartZ != NULL) FzAstNode_Destroy(pAstCartZ);
+
+    for (i = 0; i < 3; ++i) {
+        if (pVmParm[i] != NULL) EzMachine_Destroy(pVmParm[i]);
+        if (pAstParm[i] != NULL) FzAstNode_Destroy(pAstParm[i]);
     }
 
     SDL_FreeSurface(sfCanvas);

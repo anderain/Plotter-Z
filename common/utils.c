@@ -339,12 +339,15 @@ const PzCamera DefaultCamera = {
     -6.0f, 6.0f, 20,
     -6.0f, 6.0f, 20,
     -3.0f, 3.0f,
+    0, 2 * PZ_PI, 20,
+    0, 2 * PZ_PI, 20,
     ZOOM_LEVEL_DEFAULT,
-    5
+    6
 };
 
 const PZ_FLOAT fZoomLevels[] = {
-    0.33f,
+    0.3f,
+    0.4f,
     0.5f,
     0.6f,
     0.7f,
@@ -359,7 +362,8 @@ const PZ_FLOAT fZoomLevels[] = {
 };
 
 const PZ_FIXED iZoomLevels[] = {
-    PZ_FLOAT_TO_FIXED(0.33f),
+    PZ_FLOAT_TO_FIXED(0.30f),
+    PZ_FLOAT_TO_FIXED(0.40f),
     PZ_FLOAT_TO_FIXED(0.50f),
     PZ_FLOAT_TO_FIXED(0.60f),
     PZ_FLOAT_TO_FIXED(0.70f),
@@ -374,7 +378,8 @@ const PZ_FIXED iZoomLevels[] = {
 };
 
 const char* szZoomLevels[] = {
-    "33",
+    "30",
+    "40",
     "50",
     "60",
     "70",

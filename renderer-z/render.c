@@ -16,6 +16,7 @@ static const RenderConfig DefaultConfig = {
         /* Prd */   { 12, 12 },
         /* Int */   { 8, 18 }
     },
+    /* Vertical */  { 2 },
     /* Debug */     { 0 },
     /* Interface */ { NULL, NULL, NULL }
 };
@@ -177,6 +178,28 @@ void RenderNode_CalculateSize(RenderNode* pNode, const RenderConfig* pConfig) {
                     pNode->sLayout.iDescent = pConfig->sBigSymbol.sInt.iHeight / 2;
                     break;
             }
+            break;
+        }
+        case RN_VERTICAL: {
+            int iWidthMax = 0;
+            int iHeightTotal = 0;
+            VlistNode* pListNode;
+            for (
+                pListNode = pNode->uData.sVertical.pList->pHead;
+                pListNode != NULL;
+                pListNode = pListNode->pNext
+            ) {
+                RenderNode* pChild = (RenderNode *)pListNode->pData;
+                RenderNode_CalculateSize(pChild, pConfig);
+                iHeightTotal += pChild->sLayout.iAscent + pChild->sLayout.iDescent + pConfig->sVertical.iPadding;
+                if (pChild->sLayout.iWidth > iWidthMax) iWidthMax = pChild->sLayout.iWidth;
+            }
+            
+            if (iHeightTotal % 2 == 1) iHeightTotal++;
+
+            pNode->sLayout.iWidth = iWidthMax;
+            pNode->sLayout.iAscent = iHeightTotal / 2;
+            pNode->sLayout.iDescent = iHeightTotal / 2;
             break;
         }
     }
@@ -419,6 +442,22 @@ void RenderNode_Draw(RenderNode* pNode, const RenderConfig* pConfig, int iStartX
                         );
                     }
                 }
+            }
+            break;
+        }
+        case RN_VERTICAL: {
+            int x = iStartX;
+            int y = iBaseline - pNode->sLayout.iAscent;
+            VlistNode* pListNode;
+            for (
+                pListNode = pNode->uData.sVertical.pList->pHead;
+                pListNode != NULL;
+                pListNode = pListNode->pNext
+            ) {
+                RenderNode* pChild = (RenderNode *)pListNode->pData;
+                y += pChild->sLayout.iAscent;
+                RenderNode_Draw(pChild, pConfig, x, y);
+                y += pChild->sLayout.iDescent + pConfig->sVertical.iPadding;
             }
             break;
         }

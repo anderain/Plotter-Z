@@ -53,6 +53,21 @@ void printRenderNode(int iLevel, const RenderNode* pNode) {
             printf("</Horizontal>");
             printNewline();
             break;
+        case RN_VERTICAL:
+            printIndent(iLevel);
+            printf("<Vertical>");
+            printNewline();
+            for (
+                pListNode = pNode->uData.sVertical.pList->pHead;
+                pListNode != NULL;
+                pListNode = pListNode->pNext
+            ) {
+                printRenderNode(iLevel + 1, (RenderNode *)pListNode->pData);
+            }
+            printIndent(iLevel);
+            printf("</Vertical>");
+            printNewline();
+            break;
         case RN_ENCLOSURE:
             printIndent(iLevel);
             printf("<Enclosure>");
@@ -188,7 +203,7 @@ int main(int argc, char* argv[]) {
         return 1;
     }
 
-    pRenderNode = Render_Transform(pAstExpr);
+    pRenderNode = Render_Transform(pAstExpr, NULL);
     FzAstNode_Destroy(pAstExpr);
 
     printRenderNode(0, pRenderNode);

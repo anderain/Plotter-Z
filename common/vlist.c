@@ -33,6 +33,24 @@ Vlist* vlPushBack(Vlist* _self, void *pData) {
     return _self;
 }
 
+Vlist* vlPushFront(Vlist* _self, void *pData) {
+    VlistNode *newNode = vlnNewNode(pData);
+
+    if (_self->pHead == NULL) {
+        _self->pHead = _self->pTail = newNode;
+    }
+    else {
+        VlistNode * pHead = _self->pHead;
+        pHead->pPrev = newNode;
+        newNode->pNext = pHead;
+        _self->pHead = newNode;
+    }
+
+    _self->iSize++;
+
+    return _self;
+}
+
 void* vlPopFront(Vlist* _self) {
     VlistNode *pHead;
     void *pData;

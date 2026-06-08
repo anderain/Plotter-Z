@@ -23,7 +23,8 @@ typedef enum tagRenderNodeType {
     RN_ROOT         = 32,
     RN_SUPERSCRIPT  = 64,
     RN_OVERUNDER    = 128,
-    RN_BIG_SYMBOL   = 256
+    RN_BIG_SYMBOL   = 256,
+    RN_VERTICAL     = 512
 } RenderNodeType;
 
 typedef enum tagBigSymbolType {
@@ -74,11 +75,16 @@ typedef struct tagRenderNode {
         struct {
             BigSymbolType iType;
         } sBigSymbol;
+        struct {
+            Vlist* pList; /* RenderNode* */
+        } sVertical;
     } uData;
 } RenderNode;
 
-void        RenderNode_Destroy  (RenderNode* pNode);
-RenderNode* Render_Transform    (const FzAstNode* pAstNode);
+RenderNode* RenderNode_Create       (RenderNodeType iType);
+RenderNode* RenderNode_CreateText   (const char* szText);
+void        RenderNode_Destroy      (RenderNode* pNode);
+RenderNode* Render_Transform        (const FzAstNode* pAstNode, const char* szPrefix);
 
 typedef struct tagGlyphPoint {
     int x, y;
@@ -126,6 +132,9 @@ typedef struct tagRenderConfig {
             GlyphPoint sPoints[6];
         } sInt;
     } sBigSymbol;
+    struct {
+        int iPadding;
+    } sVertical;
     struct {
         int bOutline;
     } sDebug;

@@ -13,6 +13,7 @@ typedef struct {
 
 Vlist*      vlNewList       ();
 Vlist*      vlPushBack      (Vlist* _self, void *pData);
+Vlist*      vlPushFront     (Vlist* _self, void *pData);
 void*       vlPopFront      (Vlist* _self);
 void*       vlPopBack       (Vlist* _self);
 void        vlDestroy       (Vlist* _self, void (* releaseData)(void *));
