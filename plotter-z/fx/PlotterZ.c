@@ -1576,7 +1576,7 @@ void DrawSamplesStage(void) {
     for (iRow = g_iSampleScroll; iRow < g_iSampleScroll + SAMPLE_VISIBLE_ROWS; ++iRow) {
         if (iRow >= g_iNumSamples) break;
         {
-            const char* szExpr = PlotterZSamples[iRow].szExpr;
+            const char* szName = PlotterZSamples[iRow].szName;
             int iY = 8 + (iRow - g_iSampleScroll) * CURRENT_FONT_HEIGHT;
             char szNum[4];
             int iMaxChars = CHARS_PER_LINE - 3;
@@ -1587,8 +1587,8 @@ void DrawSamplesStage(void) {
             {
                 char szLine[22];
                 int i;
-                for (i = 0; i < iMaxChars && szExpr[i] != '\0'; ++i)
-                    szLine[i] = szExpr[i];
+                for (i = 0; i < iMaxChars && szName[i] != '\0'; ++i)
+                    szLine[i] = szName[i];
                 szLine[i] = '\0';
                 PutText(22, iY, (const uchar*)szLine);
             }
@@ -1780,6 +1780,7 @@ static int ParametricStage() {
         DrawParametricStage();
         GetKey(&uKey);
         switch (uKey) {
+            case KEY_CTRL_EXIT:
             case KEY_CTRL_F1:
                 return 0;
     
@@ -1874,6 +1875,7 @@ void DrawMainStage(void) {
 }
 
 int MainStage(void) {
+    int i;
     uint uKey;
     int iRet;
     while (1) {
@@ -1906,7 +1908,7 @@ int MainStage(void) {
             case KEY_CTRL_F4:
                 iRet = SamplesStage();
                 if (iRet) {
-                    const PzSample* p = &PlotterZSamples[g_iSampleIndex];
+                    const PzSample* p = PlotterZSamples + g_iSampleIndex;
                     Camera.xMin = p->xMin;
                     Camera.xMax = p->xMax;
                     Camera.yMin = p->yMin;
@@ -1915,7 +1917,23 @@ int MainStage(void) {
                     Camera.zMax = p->zMax;
                     Camera.xGrid = 15;
                     Camera.yGrid = 15;
-                    Utils_StringCopy(g_szCartExpr, sizeof(g_szCartExpr), p->szExpr);
+                    Camera.uMin = p->uMin;
+                    Camera.uMax = p->uMax;
+                    Camera.vMin = p->vMin;
+                    Camera.vMax = p->vMax;
+                    Camera.uGrid = 15;
+                    Camera.vGrid = 15;
+                    switch (p->iFuncType) {
+                        case FUNC_TYPE_CARTESIAN:
+                            Utils_StringCopy(g_szCartExpr, sizeof(g_szCartExpr), p->szExpr[0]);
+                            break;
+                        case FUNC_TYPE_PARAMETRIC:
+                            for (i = 0; i < 3; ++i) {
+                                Utils_StringCopy(g_szParmExpr[i], sizeof(g_szCartExpr), p->szExpr[i]);
+                            }
+                            break;
+                    }
+                    g_iFuncType = p->iFuncType;
                     if (ParseAndRenderExpr())
                         g_iMainState = STATE_READY;
                     else
