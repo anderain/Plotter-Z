@@ -106,7 +106,6 @@ typedef struct tagPzCamera {
     int iViewportS;
     int iAlphaDeg;
     int iBetaDeg;
-    PZ_FLOAT cosA;  PZ_FLOAT sinA;  PZ_FLOAT cosB;  PZ_FLOAT sinB; 
     PZ_FLOAT xMin;  PZ_FLOAT xMax;  int xGrid;
     PZ_FLOAT yMin;  PZ_FLOAT yMax;  int yGrid;
     PZ_FLOAT zMin;  PZ_FLOAT zMax;
@@ -114,6 +113,20 @@ typedef struct tagPzCamera {
     PZ_FLOAT vMin;  PZ_FLOAT vMax;  int vGrid;
     int iZoomLevel;
     int iFovLevel; /* Only for perspective projection */
+    union {
+        struct {
+            PZ_FLOAT cosA;
+            PZ_FLOAT sinA;
+            PZ_FLOAT cosB;
+            PZ_FLOAT sinB;
+        } sFloat;
+        struct {
+            PZ_FIXED cosA;
+            PZ_FIXED sinA;
+            PZ_FIXED cosB;
+            PZ_FIXED sinB;
+        } sFixed;
+    } uTrigBuf;
 } PzCamera;
 
 extern PzCamera         Camera;

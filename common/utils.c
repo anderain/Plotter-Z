@@ -326,23 +326,23 @@ int Utils_IsLittleEndian() {
 /*****************************************
  * Camera
  *****************************************/
-#define ZOOM_LEVEL_DEFAULT  6
+#define ZOOM_LEVEL_DEFAULT  4
+#define FOV_LEVEL_DEFAULT   6
 #define DEFAULT_VIEW_ALPHA  330
 #define DEFAULT_VIEW_BETA   30
 
 PzCamera Camera;
 
 const PzCamera DefaultCamera = {
-    0, 0, 0,
-    DEFAULT_VIEW_ALPHA, DEFAULT_VIEW_BETA,
-    0.0f, 0.0f, 0.0f, 0.0f,
-    -6.0f, 6.0f, 20,
-    -6.0f, 6.0f, 20,
-    -3.0f, 3.0f,
-    0, 2 * PZ_PI, 20,
-    0, 2 * PZ_PI, 20,
-    ZOOM_LEVEL_DEFAULT,
-    6
+    /* Viewport X, Y, S */  0, 0, 0,
+    /* Alpha, Beta */       DEFAULT_VIEW_ALPHA, DEFAULT_VIEW_BETA,
+    /* X Min, Max, Grid */  -6.0f, 6.0f, 20,
+    /* Y Min, Max, Grid */  -6.0f, 6.0f, 20,
+    /* Z Min, Max */        -3.0f, 3.0f,
+    /* U Min, Max, Grid */  0, 2 * PZ_PI, 20,
+    /* V Min, Max, Grid */  0, 2 * PZ_PI, 20,
+    /* Zoom Level */        ZOOM_LEVEL_DEFAULT,
+    /* Fov Level */         FOV_LEVEL_DEFAULT
 };
 
 const PZ_FLOAT fZoomLevels[] = {
@@ -404,14 +404,15 @@ void PzCamera_Reset(int iViewportX, int iViewportY) {
     Camera.iViewportX = iViewportX;
     Camera.iViewportY = iViewportY;
     Camera.iZoomLevel = ZOOM_LEVEL_DEFAULT;
+    Camera.iFovLevel = FOV_LEVEL_DEFAULT;
     Camera.iBetaDeg = DEFAULT_VIEW_BETA;
     Camera.iAlphaDeg = DEFAULT_VIEW_ALPHA;
 }
 
 void PzCamera_OrthoProjectFloat(PZ_FLOAT x, PZ_FLOAT y, PZ_FLOAT z, int *ox, int *oy) {
     PZ_FLOAT scale = Camera.iViewportS * fZoomLevels[Camera.iZoomLevel];
-    PZ_FLOAT nx = y * Camera.sinB - x * Camera.cosB;
-    PZ_FLOAT ny = (x * Camera.sinB + y * Camera.cosB) * Camera.sinA - z * Camera.cosA;
+    PZ_FLOAT nx = y * Camera.uTrigBuf.sFloat.sinB - x * Camera.uTrigBuf.sFloat.cosB;
+    PZ_FLOAT ny = (x * Camera.uTrigBuf.sFloat.sinB + y * Camera.uTrigBuf.sFloat.cosB) * Camera.uTrigBuf.sFloat.sinA - z * Camera.uTrigBuf.sFloat.cosA;
     *ox = (int)(Camera.iViewportX + scale * nx);
     *oy = (int)(Camera.iViewportY + scale * ny);
 }
@@ -421,10 +422,10 @@ void PzCamera_OrthoProjectFixed(PZ_FIXED x, PZ_FIXED y, PZ_FIXED z, int *ox, int
     PZ_FIXED_LONG iScale = ((Camera.iViewportS * iZoom + PZ_FIXED_HALF) >> PZ_FIXED_SHIFT);
     PZ_FIXED_LONG nx, ny;
 
-    nx = PZ_FIXED_MUL(y, Camera.sinB) - PZ_FIXED_MUL(x, Camera.cosB);
-    ny = PZ_FIXED_MUL(PZ_FIXED_MUL(x, Camera.sinB) + PZ_FIXED_MUL(y, Camera.cosB), Camera.sinA)
-       - PZ_FIXED_MUL(z, Camera.cosA);
-
+    nx = PZ_FIXED_MUL(y, Camera.uTrigBuf.sFixed.sinB) - PZ_FIXED_MUL(x, Camera.uTrigBuf.sFixed.cosB);
+    ny = PZ_FIXED_MUL(PZ_FIXED_MUL(x, Camera.uTrigBuf.sFixed.sinB) + PZ_FIXED_MUL(y, Camera.uTrigBuf.sFixed.cosB), Camera.uTrigBuf.sFixed.sinA)
+       - PZ_FIXED_MUL(z, Camera.uTrigBuf.sFixed.cosA);
+    
     *ox = Camera.iViewportX + (int)((iScale * nx + PZ_FIXED_HALF) >> PZ_FIXED_SHIFT);
     *oy = Camera.iViewportY + (int)((iScale * ny + PZ_FIXED_HALF) >> PZ_FIXED_SHIFT);
 }
@@ -434,12 +435,12 @@ void PzCamera_PerspProjectFloat(PZ_FLOAT x, PZ_FLOAT y, PZ_FLOAT z, int *ox, int
     PZ_FLOAT scale, projX, projY;
 
     /* Rotate around Y axis (beta) */
-    nx = y * Camera.sinB - x * Camera.cosB;
-    y1 = x * Camera.sinB + y * Camera.cosB;
+    nx = y * Camera.uTrigBuf.sFloat.sinB - x * Camera.uTrigBuf.sFloat.cosB;
+    y1 = x * Camera.uTrigBuf.sFloat.sinB + y * Camera.uTrigBuf.sFloat.cosB;
 
     /* Rotate around X axis (alpha) */
-    ny = y1 * Camera.sinA - z * Camera.cosA;
-    nz = y1 * Camera.cosA + z * Camera.sinA;
+    ny = y1 * Camera.uTrigBuf.sFloat.sinA - z * Camera.uTrigBuf.sFloat.cosA;
+    nz = y1 * Camera.uTrigBuf.sFloat.cosA + z * Camera.uTrigBuf.sFloat.sinA;
 
     /* Perspective division */
     nz += Camera.iFovLevel;
@@ -459,12 +460,12 @@ void PzCamera_PerspProjectFixed(PZ_FIXED x, PZ_FIXED y, PZ_FIXED z, int *ox, int
     PZ_FIXED_LONG iFovFixed, iDiv, iScale, iCombined;
 
     /* Rotate around Y axis (beta) */
-    nx = PZ_FIXED_MUL(y, Camera.sinB) - PZ_FIXED_MUL(x, Camera.cosB);
-    y1 = PZ_FIXED_MUL(x, Camera.sinB) + PZ_FIXED_MUL(y, Camera.cosB);
+    nx = PZ_FIXED_MUL(y, Camera.uTrigBuf.sFixed.sinB) - PZ_FIXED_MUL(x, Camera.uTrigBuf.sFixed.cosB);
+    y1 = PZ_FIXED_MUL(x, Camera.uTrigBuf.sFixed.sinB) + PZ_FIXED_MUL(y, Camera.uTrigBuf.sFixed.cosB);
 
     /* Rotate around X axis (alpha) */
-    ny = PZ_FIXED_MUL(y1, Camera.sinA) - PZ_FIXED_MUL(z, Camera.cosA);
-    nz = PZ_FIXED_MUL(y1, Camera.cosA) + PZ_FIXED_MUL(z, Camera.sinA);
+    ny = PZ_FIXED_MUL(y1, Camera.uTrigBuf.sFixed.sinA) - PZ_FIXED_MUL(z, Camera.uTrigBuf.sFixed.cosA);
+    nz = PZ_FIXED_MUL(y1, Camera.uTrigBuf.sFixed.cosA) + PZ_FIXED_MUL(z, Camera.uTrigBuf.sFixed.sinA);
 
     /* Perspective division */
     iFov = Camera.iFovLevel;

@@ -14,6 +14,20 @@
 #define CURRENT_FONT_WIDTH 6
 #define CURRENT_FONT_HEIGHT 8
 
+#ifdef USE_FIXED_POINT
+#   define NUMERIC          PZ_FIXED
+#   define NUM_VAL(v)       (PZ_FLOAT_TO_FIXED(v))
+#   define TO_FLOAT(v)      (PZ_FIXED_TO_FLOAT(v))
+#   define OrthoProject     PzCamera_OrthoProjectFixed
+#   define PerspProject     PzCamera_PerspProjectFixed
+#else
+#   define NUMERIC          PZ_FLOAT
+#   define NUM_VAL(v)       (v)
+#   define TO_FLOAT(v)      (v)
+#   define OrthoProject     PzCamera_OrthoProjectFloat
+#   define PerspProject     PzCamera_PerspProjectFloat
+#endif
+
 /*====================================================
  * Configuration structure with defaults
  *====================================================*/
@@ -118,22 +132,22 @@ RenderConfig    rzConfig;
 
 #define VERTEX_BUFFER_SIZE  BUFFER_MAX(X_GRID_MAX + Y_GRID_MAX + X_GRID_MAX * Y_GRID_MAX, U_GRID_MAX * V_GRID_MAX * 3)
 
-typedef struct { PZ_FLOAT x, y, z; } Vertex;
+typedef struct { NUMERIC x, y, z; } Vertex;
 typedef struct { int i0, i1; } Edge;
 
-PZ_FLOAT g_fVertexBuf[VERTEX_BUFFER_SIZE];
+NUMERIC g_fVertexBuf[VERTEX_BUFFER_SIZE];
 
 /* Cartesian */
-PZ_FLOAT *g_fCartXBuf = g_fVertexBuf;
-PZ_FLOAT *g_fCartYBuf = g_fVertexBuf + X_GRID_MAX;
-PZ_FLOAT *g_fCartZBuf = g_fVertexBuf + X_GRID_MAX + Y_GRID_MAX;
+NUMERIC *g_fCartXBuf = g_fVertexBuf;
+NUMERIC *g_fCartYBuf = g_fVertexBuf + X_GRID_MAX;
+NUMERIC *g_fCartZBuf = g_fVertexBuf + X_GRID_MAX + Y_GRID_MAX;
 
 #define CART_Z_BUF(x,y) (g_fCartZBuf[(x) + (y) * Camera.xGrid])
 
 /* Parametric */
-PZ_FLOAT *g_fParmXBuf = g_fVertexBuf;
-PZ_FLOAT *g_fParmYBuf = g_fVertexBuf + U_GRID_MAX * V_GRID_MAX;
-PZ_FLOAT *g_fParmZBuf = g_fVertexBuf + U_GRID_MAX * V_GRID_MAX * 2;
+NUMERIC *g_fParmXBuf = g_fVertexBuf;
+NUMERIC *g_fParmYBuf = g_fVertexBuf + U_GRID_MAX * V_GRID_MAX;
+NUMERIC *g_fParmZBuf = g_fVertexBuf + U_GRID_MAX * V_GRID_MAX * 2;
 
 #define PARM_X_BUF(iu,iv) (g_fParmXBuf[(iu) + (iv) * Camera.uGrid])
 #define PARM_Y_BUF(iu,iv) (g_fParmYBuf[(iu) + (iv) * Camera.uGrid])
@@ -469,16 +483,16 @@ static void scaleBlit(SDL_Surface* sfSrc, SDL_Surface* sfDst, int iFactor,
  * Redraw
  *====================================================*/
 
-static void drawBoxEdges(void (*xyz2xy)(PZ_FLOAT, PZ_FLOAT, PZ_FLOAT, int*, int *)) {
+static void drawBoxEdges(void (*xyz2xy)(NUMERIC, NUMERIC, NUMERIC, int*, int *)) {
     static const Vertex BoxVertices[] = {
-        {  1,  1,  1 },
-        { -1,  1,  1 },
-        { -1, -1,  1 },
-        {  1, -1,  1 },
-        {  1,  1, -1 },
-        { -1,  1, -1 },
-        { -1, -1, -1 },
-        {  1, -1, -1 },
+        { NUM_VAL(1.0f),    NUM_VAL(1.0f),  NUM_VAL(1.0f)   },
+        { NUM_VAL(-1.0f),   NUM_VAL(1.0f),  NUM_VAL(1.0f)   },
+        { NUM_VAL(-1.0f),   NUM_VAL(-1.0f), NUM_VAL(1.0f)   },
+        { NUM_VAL(1.0f),    NUM_VAL(-1.0f), NUM_VAL(1.0f)   },
+        { NUM_VAL(1.0f),    NUM_VAL(1.0f),  NUM_VAL(-1.0f)  },
+        { NUM_VAL(-1.0f),   NUM_VAL(1.0f),  NUM_VAL(-1.0f)  },
+        { NUM_VAL(-1.0f),   NUM_VAL(-1.0f), NUM_VAL(-1.0f)  },
+        { NUM_VAL(1.0f),    NUM_VAL(-1.0f), NUM_VAL(-1.0f)  },
     };
 
     static const Edge BoxEdges[] = {
@@ -502,28 +516,38 @@ static void drawBoxEdges(void (*xyz2xy)(PZ_FLOAT, PZ_FLOAT, PZ_FLOAT, int*, int 
     }
 }
 
-static void drawCartSurfaceWireframe(void (*xyz2xy)(PZ_FLOAT, PZ_FLOAT, PZ_FLOAT, int*, int *)) {
-    int ix, iy, x0, y0, x1, y1;
-    PZ_FLOAT z0, z1;
+static void drawCartSurfaceWireframe(void (*xyz2xy)(NUMERIC, NUMERIC, NUMERIC, int*, int *)) {
+    int iX, iY, x0, y0, x1, y1;
+    NUMERIC z0, z1;
 
-    for (ix = 0; ix < Camera.xGrid; ++ix) {
-        iy = 0;
-        xyz2xy(g_fCartXBuf[ix], g_fCartYBuf[iy], z0 = CART_Z_BUF(ix, iy), &x0, &y0); 
-        for (iy = 0; iy < Camera.yGrid; ++iy) {
-            xyz2xy(g_fCartXBuf[ix], g_fCartYBuf[iy], z1 = CART_Z_BUF(ix, iy), &x1, &y1); 
-            if (z0 <= 1 && z0 >= -1 && z1 <= 1 && z1 >= -1) {
+    for (iX = 0; iX < Camera.xGrid; ++iX) {
+        iY = 0;
+        xyz2xy(g_fCartXBuf[iX], g_fCartYBuf[iY], z0 = CART_Z_BUF(iX, iY), &x0, &y0); 
+        for (iY = 0; iY < Camera.yGrid; ++iY) {
+            xyz2xy(g_fCartXBuf[iX], g_fCartYBuf[iY], z1 = CART_Z_BUF(iX, iY), &x1, &y1); 
+            if (
+                z0 <= NUM_VAL(1.0f) &&
+                z0 >= NUM_VAL(-1.0f) &&
+                z1 <= NUM_VAL(1.0f) &&
+                z1 >= NUM_VAL(-1.0f)
+            ) {
                 plotLine(x0, y0, x1, y1);
             }
             x0 = x1, y0 = y1, z0 = z1;
         }
     }
 
-    for (iy = 0; iy < Camera.yGrid; ++iy) {
-        ix = 0;
-        xyz2xy(g_fCartXBuf[ix], g_fCartYBuf[iy], z0 = CART_Z_BUF(ix, iy), &x0, &y0); 
-        for (ix = 0; ix < Camera.xGrid; ++ix) {
-            xyz2xy(g_fCartXBuf[ix], g_fCartYBuf[iy], z1 = CART_Z_BUF(ix, iy), &x1, &y1); 
-            if (z0 <= 1 && z0 >= -1 && z1 <= 1 && z1 >= -1) {
+    for (iY = 0; iY < Camera.yGrid; ++iY) {
+        iX = 0;
+        xyz2xy(g_fCartXBuf[iX], g_fCartYBuf[iY], z0 = CART_Z_BUF(iX, iY), &x0, &y0); 
+        for (iX = 0; iX < Camera.xGrid; ++iX) {
+            xyz2xy(g_fCartXBuf[iX], g_fCartYBuf[iY], z1 = CART_Z_BUF(iX, iY), &x1, &y1); 
+            if (
+                z0 <= NUM_VAL(1.0f) &&
+                z0 >= NUM_VAL(-1.0f) &&
+                z1 <= NUM_VAL(1.0f) &&
+                z1 >= NUM_VAL(-1.0f)
+            ) {
                 plotLine(x0, y0, x1, y1);
             }
             x0 = x1, y0 = y1, z0 = z1;
@@ -531,47 +555,58 @@ static void drawCartSurfaceWireframe(void (*xyz2xy)(PZ_FLOAT, PZ_FLOAT, PZ_FLOAT
     }
 }
 
-static void drawParmSurfaceWireframe(void (*xyz2xy)(PZ_FLOAT, PZ_FLOAT, PZ_FLOAT, int*, int *)) {
-    int iu, iv, x0, y0, x1, y1;
-    for (iv = 0; iv < Camera.vGrid; ++iv) {
-        iu = 0;
-        xyz2xy(PARM_X_BUF(iu, iv), PARM_Y_BUF(iu, iv), PARM_Z_BUF(iu, iv), &x0, &y0); 
-        for (iu = 0; iu < Camera.uGrid; ++iu) {
-            xyz2xy(PARM_X_BUF(iu, iv), PARM_Y_BUF(iu, iv), PARM_Z_BUF(iu, iv), &x1, &y1); 
+static void drawParmSurfaceWireframe(void (*xyz2xy)(NUMERIC, NUMERIC, NUMERIC, int*, int *)) {
+    int iU, iV, x0, y0, x1, y1;
+    for (iV = 0; iV < Camera.vGrid; ++iV) {
+        iU = 0;
+        xyz2xy(PARM_X_BUF(iU, iV), PARM_Y_BUF(iU, iV), PARM_Z_BUF(iU, iV), &x0, &y0); 
+        for (iU = 0; iU < Camera.uGrid; ++iU) {
+            xyz2xy(PARM_X_BUF(iU, iV), PARM_Y_BUF(iU, iV), PARM_Z_BUF(iU, iV), &x1, &y1);
             plotLine(x0, y0, x1, y1);
             x0 = x1, y0 = y1;
         }
     }
-    for (iu = 0; iu < Camera.uGrid; ++iu) {
-        iv = 0;
-        xyz2xy(PARM_X_BUF(iu, iv), PARM_Y_BUF(iu, iv), PARM_Z_BUF(iu, iv), &x0, &y0); 
-        for (iv = 0; iv < Camera.vGrid; ++iv) {
-            xyz2xy(PARM_X_BUF(iu, iv), PARM_Y_BUF(iu, iv), PARM_Z_BUF(iu, iv), &x1, &y1); 
+    for (iU = 0; iU < Camera.uGrid; ++iU) {
+        iV = 0;
+        xyz2xy(PARM_X_BUF(iU, iV), PARM_Y_BUF(iU, iV), PARM_Z_BUF(iU, iV), &x0, &y0); 
+        for (iV = 0; iV < Camera.vGrid; ++iV) {
+            xyz2xy(PARM_X_BUF(iU, iV), PARM_Y_BUF(iU, iV), PARM_Z_BUF(iU, iV), &x1, &y1); 
             plotLine(x0, y0, x1, y1);
             x0 = x1, y0 = y1;
         }
     }
+}
+
+static void refreshCameraTrigBuf(void) {
+#ifdef USE_FIXED_POINT
+    Camera.uTrigBuf.sFixed.sinA = PZ_FLOAT_TO_FIXED(sin(Camera.iAlphaDeg * PZ_PI / 180));
+    Camera.uTrigBuf.sFixed.cosA = PZ_FLOAT_TO_FIXED(cos(Camera.iAlphaDeg * PZ_PI / 180));
+    Camera.uTrigBuf.sFixed.sinB = PZ_FLOAT_TO_FIXED(sin(Camera.iBetaDeg * PZ_PI / 180));
+    Camera.uTrigBuf.sFixed.cosB = PZ_FLOAT_TO_FIXED(cos(Camera.iBetaDeg * PZ_PI / 180));
+#else
+    Camera.uTrigBuf.sFloat.sinA = (PZ_FLOAT)sin(Camera.iAlphaDeg * PZ_PI / 180);
+    Camera.uTrigBuf.sFloat.cosA = (PZ_FLOAT)cos(Camera.iAlphaDeg * PZ_PI / 180);
+    Camera.uTrigBuf.sFloat.sinB = (PZ_FLOAT)sin(Camera.iBetaDeg * PZ_PI / 180);
+    Camera.uTrigBuf.sFloat.cosB = (PZ_FLOAT)cos(Camera.iBetaDeg * PZ_PI / 180);
+#endif
 }
 
 static void redraw(void) {
-    void (*xyz2xy)(PZ_FLOAT, PZ_FLOAT, PZ_FLOAT, int*, int *) = NULL;
+    void (*xyz2xy)(NUMERIC, NUMERIC, NUMERIC, int*, int *) = NULL;
 
     switch (g_iProjection) {
         case PERSPECTIVE:
-            xyz2xy = PzCamera_PerspProjectFloat;
+            xyz2xy = PerspProject;
             break;
         case ORTHOGRAPHIC:
         default:
-            xyz2xy = PzCamera_OrthoProjectFloat;
+            xyz2xy = OrthoProject;
             break;
     }
 
     SDL_FillRect(sfCanvas, NULL, getColor(COLOR_WHITE));
 
-    Camera.sinA = (PZ_FLOAT)sin(Camera.iAlphaDeg * PZ_PI / 180);
-    Camera.cosA = (PZ_FLOAT)cos(Camera.iAlphaDeg * PZ_PI / 180);
-    Camera.sinB = (PZ_FLOAT)sin(Camera.iBetaDeg * PZ_PI / 180);
-    Camera.cosB = (PZ_FLOAT)cos(Camera.iBetaDeg * PZ_PI / 180);
+    refreshCameraTrigBuf();
 
     if (bShowBox) {
         drawBoxEdges(xyz2xy);
@@ -645,61 +680,63 @@ static void redraw(void) {
  *====================================================*/
 
 static void recalcCartesian(void) {
-    int ix, iy;
-    PZ_FLOAT fz;
+    int iX, iY;
+    PZ_FLOAT fX[X_GRID_MAX];
+    PZ_FLOAT fY[Y_GRID_MAX];
+    PZ_FLOAT fZ;
 
     /* Compute actual x, y sample positions and store in buffers */
-    for (ix = 0; ix < Camera.xGrid; ++ix) {
-        g_fCartXBuf[ix] = Camera.xMin + (Camera.xMax - Camera.xMin) * ix / (Camera.xGrid - 1);
+    for (iX = 0; iX < Camera.xGrid; ++iX) {
+        fX[iX] = Camera.xMin + (Camera.xMax - Camera.xMin) * iX / (Camera.xGrid - 1);
     }
-    for (iy = 0; iy < Camera.yGrid; ++iy) {
-        g_fCartYBuf[iy] = Camera.yMin + (Camera.yMax - Camera.yMin) * iy / (Camera.yGrid - 1);
+    for (iY = 0; iY < Camera.yGrid; ++iY) {
+        fY[iY] = Camera.yMin + (Camera.yMax - Camera.yMin) * iY / (Camera.yGrid - 1);
     }
 
     /* Evaluate z = f(x, y) for every grid point */
-    for (ix = 0; ix < Camera.xGrid; ++ix) {
-        for (iy = 0; iy < Camera.yGrid; ++iy) {
-            EzMachine_SetVariableByIndex(pVmCartZ, 0, g_fCartXBuf[ix]);
-            EzMachine_SetVariableByIndex(pVmCartZ, 1, g_fCartYBuf[iy]);
+    for (iX = 0; iX < Camera.xGrid; ++iX) {
+        for (iY = 0; iY < Camera.yGrid; ++iY) {
+            EzMachine_SetVariableByIndex(pVmCartZ, 0, fX[iX]);
+            EzMachine_SetVariableByIndex(pVmCartZ, 1, fY[iY]);
             /* Evaluate the z value */
-            fz = EzMachine_Eval(pVmCartZ);
+            fZ = EzMachine_Eval(pVmCartZ);
             /* Normalize z into [-1, 1] based on the z-axis bounds */
-            CART_Z_BUF(ix, iy) = 2.0f * (fz - (Camera.zMax + Camera.zMin) / 2.0f) / (Camera.zMax - Camera.zMin);
+            CART_Z_BUF(iX, iY) = NUM_VAL(2.0f * (fZ - (Camera.zMax + Camera.zMin) / 2.0f) / (Camera.zMax - Camera.zMin));
         }
     }
 
     /* Normalize x and y grid coordinates into [-1, 1] */
-    for (ix = 0; ix < Camera.xGrid; ++ix) {
-        g_fCartXBuf[ix] = 2.0f * (g_fCartXBuf[ix] - (Camera.xMax + Camera.xMin) / 2.0f) / (Camera.xMax - Camera.xMin);
+    for (iX = 0; iX < Camera.xGrid; ++iX) {
+        g_fCartXBuf[iX] = NUM_VAL(2.0f * (fX[iX] - (Camera.xMax + Camera.xMin) / 2.0f) / (Camera.xMax - Camera.xMin));
     }
-    for (iy = 0; iy < Camera.yGrid; ++iy) {
-        g_fCartYBuf[iy] = 2.0f * (g_fCartYBuf[iy] - (Camera.yMax + Camera.yMin) / 2.0f) / (Camera.yMax - Camera.yMin);
+    for (iY = 0; iY < Camera.yGrid; ++iY) {
+        g_fCartYBuf[iY] = NUM_VAL(2.0f * (fY[iY] - (Camera.yMax + Camera.yMin) / 2.0f) / (Camera.yMax - Camera.yMin));
     }
 }
 
 void recalcParametric(void) {
-    int iu, iv, i;
-    PZ_FLOAT u, v;
-    PZ_FLOAT pos[3];
+    int iU, iV, i;
+    PZ_FLOAT fU, fV;
+    PZ_FLOAT fPoint[3];
 
     if (!pVmParm[0] || !pVmParm[1] || !pVmParm[2]) {
         return;
     }
 
-    for (iu = 0; iu < Camera.uGrid; ++iu) {
-        u = Camera.uMin + (Camera.uMax - Camera.uMin) * iu / (Camera.uGrid - 1);
-        for (iv = 0; iv < Camera.vGrid; ++iv) {
-            v = Camera.vMin + (Camera.vMax - Camera.vMin) * iv / (Camera.vGrid - 1);
+    for (iU = 0; iU < Camera.uGrid; ++iU) {
+        fU = Camera.uMin + (Camera.uMax - Camera.uMin) * iU / (Camera.uGrid - 1);
+        for (iV = 0; iV < Camera.vGrid; ++iV) {
+            fV = Camera.vMin + (Camera.vMax - Camera.vMin) * iV / (Camera.vGrid - 1);
             /* Evaluate x */
             for (i = 0; i < 3; ++i) {
-                EzMachine_SetVariableByIndex(pVmParm[i], 0, u);
-                EzMachine_SetVariableByIndex(pVmParm[i], 1, v);
-                pos[i] = EzMachine_Eval(pVmParm[i]);
+                EzMachine_SetVariableByIndex(pVmParm[i], 0, fU);
+                EzMachine_SetVariableByIndex(pVmParm[i], 1, fV);
+                fPoint[i] = EzMachine_Eval(pVmParm[i]);
             }
             /* Normalize */
-            PARM_X_BUF(iu, iv) = 2.0f * (pos[0] - (Camera.xMax + Camera.xMin) / 2.0f) / (Camera.xMax - Camera.xMin);
-            PARM_Y_BUF(iu, iv) = 2.0f * (pos[1] - (Camera.yMax + Camera.yMin) / 2.0f) / (Camera.yMax - Camera.yMin);
-            PARM_Z_BUF(iu, iv) = 2.0f * (pos[2] - (Camera.zMax + Camera.zMin) / 2.0f) / (Camera.zMax - Camera.zMin);
+            PARM_X_BUF(iU, iV) = NUM_VAL(2.0f * (fPoint[0] - (Camera.xMax + Camera.xMin) / 2.0f) / (Camera.xMax - Camera.xMin));
+            PARM_Y_BUF(iU, iV) = NUM_VAL(2.0f * (fPoint[1] - (Camera.yMax + Camera.yMin) / 2.0f) / (Camera.yMax - Camera.yMin));
+            PARM_Z_BUF(iU, iV) = NUM_VAL(2.0f * (fPoint[2] - (Camera.zMax + Camera.zMin) / 2.0f) / (Camera.zMax - Camera.zMin));
         }
     }
 }
@@ -1141,8 +1178,11 @@ parseComplete:
         }
         sfScreen = SDL_SetVideoMode(iScreenWidth, iScreenHeight, 32, uFlags);
     }
+#ifdef USE_FIXED_POINT
+    SDL_WM_SetCaption("Plotter-Z (Fixed Point) | SDL", NULL);
+#else
     SDL_WM_SetCaption("Plotter-Z | SDL", NULL);
-
+#endif
     if (sfScreen == NULL) {
         return 0;
     }
