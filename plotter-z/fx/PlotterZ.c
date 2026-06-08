@@ -1668,10 +1668,10 @@ static const char* szHelpPage0[] = {
 };
 
 static const char* szHelpPage1[] = {
-    "F1: Go Back",
+    "F1: Reset camera",
     "F2: Play animation",
     "F3: Ortho \x17\x18 Persp",
-    "F4: Reset camera",
+    "F4: Toggle axes",
     "F5: Boundary box",
     "F6: Toggle menu"
 };
