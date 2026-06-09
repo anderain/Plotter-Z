@@ -1677,7 +1677,7 @@ int RecalcSurface(HWND hWnd) {
 /*====================================================
  * Save session to INI file
  *====================================================*/
-static void SaveSession(HWND hWnd) {
+static BOOL SaveSession(HWND hWnd) {
     OPENFILENAME ofn;
     TCHAR szFile[MAX_PATH];
     char szIni[4096];
@@ -1694,27 +1694,41 @@ static void SaveSession(HWND hWnd) {
     ofn.nMaxFile    = MAX_PATH;
     ofn.Flags       = OFN_OVERWRITEPROMPT;
     ofn.lpstrDefExt = TEXT("ini");
-    if (!GetSaveFileName(&ofn)) return;
+    if (!GetSaveFileName(&ofn)) return FALSE;
 
     iPos = 0;
     iPos += Salvia_Format(szIni + iPos,
-        "[expression]\r\nexpr=%s\r\n", g_szCartExpr);
+        "[function]\r\ntype=%d\r\n", g_iFuncType);
+    iPos += Salvia_Format(szIni + iPos,
+        "[cart_expr]\r\nz=%s\r\n", g_szCartExpr);
+    iPos += Salvia_Format(szIni + iPos, "[parm_expr]\r\n");
+    iPos += Salvia_Format(szIni + iPos, "x=%s\r\n", g_szParmExpr[0]);
+    iPos += Salvia_Format(szIni + iPos, "y=%s\r\n", g_szParmExpr[1]);
+    iPos += Salvia_Format(szIni + iPos, "z=%s\r\n", g_szParmExpr[2]);
     iPos += Salvia_Format(szIni + iPos,
         "[camera]\r\n"
         "alpha=%d\r\nbeta=%d\r\n"
         "xmin=%.4f\r\nxmax=%.4f\r\n"
         "ymin=%.4f\r\nymax=%.4f\r\n"
         "zmin=%.4f\r\nzmax=%.4f\r\n"
+        "umin=%.4f\r\numax=%.4f\r\n"
+        "vmin=%.4f\r\nvmax=%.4f\r\n"
         "xgrid=%d\r\nygrid=%d\r\n"
+        "ugrid=%d\r\nvgrid=%d\r\n"
         "zoom=%d\r\n"
+        "fov=%d\r\n"
         "viewx=%d\r\nviewy=%d\r\n"
         "exprx=%d\r\nexpry=%d\r\n",
         Camera.iAlphaDeg, Camera.iBetaDeg,
         Camera.xMin, Camera.xMax,
         Camera.yMin, Camera.yMax,
         Camera.zMin, Camera.zMax,
+        Camera.uMin, Camera.uMax,
+        Camera.vMin, Camera.vMax,
         Camera.xGrid, Camera.yGrid,
+        Camera.uGrid, Camera.vGrid,
         Camera.iZoomLevel,
+        Camera.iFovLevel,
         Camera.iViewportX * g_iCanvasScaleFactor,
         Camera.iViewportY * g_iCanvasScaleFactor,
         g_iFormulaX * g_iCanvasScaleFactor,
@@ -1730,17 +1744,33 @@ static void SaveSession(HWND hWnd) {
         (unsigned long)(g_rgbPalette[COLOR_LIGHT_GRAY] & 0xFFFFFF),
         (unsigned long)(g_rgbPalette[COLOR_WHITE] & 0xFFFFFF));
 
+    iPos += Salvia_Format(szIni + iPos,
+        "[display]\r\n"
+        "projection=%d\r\n"
+        "formula=%d\r\n"
+        "box=%d\r\n"
+        "axes=%d\r\n"
+        "footer=%d\r\n",
+        g_iProjection,
+        g_bShowFormula,
+        g_bShowBox,
+        g_bShowAxes,
+        g_bShowFooter
+    );
+
     hFile = CreateFile(szFile, GENERIC_WRITE, 0, NULL,
                        CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
     if (hFile == INVALID_HANDLE_VALUE) return;
     WriteFile(hFile, szIni, (DWORD)strlen(szIni), &dwWritten, NULL);
     CloseHandle(hFile);
+
+    return TRUE;
 }
 
 /*====================================================
  * Load session from INI file
  *====================================================*/
-static void LoadSession(HWND hWnd) {
+static BOOL LoadSession(HWND hWnd) {
     OPENFILENAME ofn;
     TCHAR szFile[MAX_PATH];
     HANDLE hFile;
@@ -1767,7 +1797,7 @@ static void LoadSession(HWND hWnd) {
 
     dwSize = GetFileSize(hFile, NULL);
     if (dwSize == INVALID_FILE_SIZE || dwSize > 8191)
-        { CloseHandle(hFile); return; }
+        { CloseHandle(hFile); return FALSE; }
 
     pBuf = (char*)malloc((size_t)(dwSize + 1));
     if (pBuf == NULL) { CloseHandle(hFile); return; }
@@ -1782,26 +1812,47 @@ static void LoadSession(HWND hWnd) {
     free(pBuf);
     if (pIni == NULL) return;
 
-    /* Parse [expression] */
-    pSec = PineIni_Find(pIni, "expression");
-    if (pSec != NULL)
-        Utils_StringCopy(g_szCartExpr, CART_EXPR_LENGTH,
-            PineIni_Section_GetString(pSec, "expr", g_szCartExpr));
+    /* Parse [function] */
+    pSec = PineIni_Find(pIni, "function");
+    if (pSec != NULL) {
+        g_iFuncType = PineIni_Section_GetInt(pSec, "type", g_iFuncType);
+    }
+    
+    /* Parse [cart_expr] */
+    pSec = PineIni_Find(pIni, "cart_expr");
+    if (pSec != NULL) {
+        Utils_StringCopy(g_szCartExpr, CART_EXPR_LENGTH, PineIni_Section_GetString(pSec, "z", g_szCartExpr));
+    }
+
+    /* Parse [parm_expr] */
+    pSec = PineIni_Find(pIni, "parm_expr");
+    if (pSec != NULL) {
+        Utils_StringCopy(g_szParmExpr[0], PARM_EXPR_LENGTH, PineIni_Section_GetString(pSec, "x", g_szParmExpr[0]));
+        Utils_StringCopy(g_szParmExpr[1], PARM_EXPR_LENGTH, PineIni_Section_GetString(pSec, "y", g_szParmExpr[1]));
+        Utils_StringCopy(g_szParmExpr[2], PARM_EXPR_LENGTH, PineIni_Section_GetString(pSec, "z", g_szParmExpr[2]));
+    }
 
     /* Parse [camera] */
     pSec = PineIni_Find(pIni, "camera");
     if (pSec != NULL) {
-        Camera.iAlphaDeg  = PineIni_Section_GetInt(pSec, "alpha",  Camera.iAlphaDeg);
-        Camera.iBetaDeg   = PineIni_Section_GetInt(pSec, "beta",   Camera.iBetaDeg);
+        Camera.iAlphaDeg  = PineIni_Section_GetInt(pSec, "alpha", Camera.iAlphaDeg);
+        Camera.iBetaDeg   = PineIni_Section_GetInt(pSec, "beta", Camera.iBetaDeg);
         Camera.xMin = (PZ_FLOAT)Utils_Atof(PineIni_Section_GetString(pSec, "xmin", "-6"));
         Camera.xMax = (PZ_FLOAT)Utils_Atof(PineIni_Section_GetString(pSec, "xmax", "6"));
         Camera.yMin = (PZ_FLOAT)Utils_Atof(PineIni_Section_GetString(pSec, "ymin", "-6"));
         Camera.yMax = (PZ_FLOAT)Utils_Atof(PineIni_Section_GetString(pSec, "ymax", "6"));
         Camera.zMin = (PZ_FLOAT)Utils_Atof(PineIni_Section_GetString(pSec, "zmin", "-3"));
         Camera.zMax = (PZ_FLOAT)Utils_Atof(PineIni_Section_GetString(pSec, "zmax", "3"));
-        Camera.xGrid = PineIni_Section_GetInt(pSec, "xgrid", Camera.xGrid);
-        Camera.yGrid = PineIni_Section_GetInt(pSec, "ygrid", Camera.yGrid);
+        Camera.uMin = (PZ_FLOAT)Utils_Atof(PineIni_Section_GetString(pSec, "umin", "0"));
+        Camera.uMax = (PZ_FLOAT)Utils_Atof(PineIni_Section_GetString(pSec, "umax", "6.2832"));
+        Camera.vMin = (PZ_FLOAT)Utils_Atof(PineIni_Section_GetString(pSec, "vmin", "0"));
+        Camera.vMax = (PZ_FLOAT)Utils_Atof(PineIni_Section_GetString(pSec, "vmax", "6.2832"));
+        Camera.xGrid = PineIni_Section_GetInt(pSec, "xgrid", SAMPLE_DEFAULT_GRID);
+        Camera.yGrid = PineIni_Section_GetInt(pSec, "ygrid", SAMPLE_DEFAULT_GRID);
+        Camera.xGrid = PineIni_Section_GetInt(pSec, "ugrid", SAMPLE_DEFAULT_GRID);
+        Camera.yGrid = PineIni_Section_GetInt(pSec, "vgrid", SAMPLE_DEFAULT_GRID);
         Camera.iZoomLevel = PineIni_Section_GetInt(pSec, "zoom", Camera.iZoomLevel);
+        Camera.iFovLevel = PineIni_Section_GetInt(pSec, "fov", Camera.iFovLevel);
         Camera.iViewportX = PineIni_Section_GetInt(pSec, "viewx", Camera.iViewportX);
         Camera.iViewportY = PineIni_Section_GetInt(pSec, "viewy", Camera.iViewportY);
         g_iFormulaX = PineIni_Section_GetInt(pSec, "exprx", g_iFormulaX);
@@ -1826,6 +1877,17 @@ static void LoadSession(HWND hWnd) {
                 g_rgbPalette[i] = (COLORREF)((int)Utils_Atoi(szVal) & 0xFFFFFF);
         }
     }
+
+    /* Parse [display] */
+    pSec = PineIni_Find(pIni, "display");
+    if (pSec != NULL) {
+        g_iProjection = PineIni_Section_GetInt(pSec, "projection", g_iProjection);
+        g_bShowFormula = PineIni_Section_GetInt(pSec, "formula", g_bShowFormula);
+        g_bShowBox = PineIni_Section_GetInt(pSec, "box", g_bShowBox);
+        g_bShowAxes = PineIni_Section_GetInt(pSec, "axes", g_bShowAxes);
+        g_bShowFooter = PineIni_Section_GetInt(pSec, "footer", g_bShowFooter);
+    }
+
     RecalcPaletteLUTs();
     /* Workaround: force canvas recreation when bpp equals 8 */
     if (g_iScreenBpp == 8) {
@@ -1834,9 +1896,7 @@ static void LoadSession(HWND hWnd) {
     
     PineIni_Destroy(pIni);
 
-    RecalcSurface(hWnd);
-    DrawScreen(hWnd);
-    InvalidateRect(hWnd, NULL, FALSE);
+    return TRUE;
 }
 
 /*====================================================
@@ -1983,10 +2043,19 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
                     DestroyWindow(hWnd);
                     break;
                 case IDM_FILE_SAVESESSION:
-                    SaveSession(hWnd);
+                    if (SaveSession(hWnd)) {
+                        MessageBox(hWnd, TEXT("Session Saved"), TEXT("Session"), MB_OK);
+                    }
                     break;
                 case IDM_FILE_LOADSESSION:
-                    LoadSession(hWnd);
+                    if (LoadSession(hWnd)) {
+                        ParseExpr();
+                        RecalcSurface(hWnd);
+                        DrawScreen(hWnd);
+                        InvalidateRect(hWnd, NULL, FALSE);
+                        UpdateDisplayMenuCheckStatus(hWnd);
+                        UpdateViewMenuCheckStatus(hWnd);
+                    }
                     break;
                 case IDM_FILE_SAMPLES: {
                     int iSel;
@@ -2896,10 +2965,6 @@ int ParseExpr(void) {
     if (g_pRenderNode == NULL) return 0;
 
     RenderNode_CalculateSize(g_pRenderNode, &g_rzConfig);
-
-    /* Center formula */
-    g_iFormulaX = 0;
-    g_iFormulaY = 0;
 
     return 1;
 }
