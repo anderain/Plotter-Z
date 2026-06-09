@@ -74,7 +74,7 @@ BEGIN
 	    AUTOID AT (CENTER 23)
 	    FONT 7
 	LABEL 
-		"v 0.5"
+		"v 0.6"
 		AUTOID AT (66 39)
 	BUTTON "OK" ID AboutOKButton AT (58 133 40 12)
 	LABEL 

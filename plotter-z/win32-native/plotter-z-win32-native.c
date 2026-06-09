@@ -1760,7 +1760,7 @@ static BOOL SaveSession(HWND hWnd) {
 
     hFile = CreateFile(szFile, GENERIC_WRITE, 0, NULL,
                        CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
-    if (hFile == INVALID_HANDLE_VALUE) return;
+    if (hFile == INVALID_HANDLE_VALUE) return FALSE;
     WriteFile(hFile, szIni, (DWORD)strlen(szIni), &dwWritten, NULL);
     CloseHandle(hFile);
 
@@ -1789,28 +1789,28 @@ static BOOL LoadSession(HWND hWnd) {
     ofn.nMaxFile    = MAX_PATH;
     ofn.Flags       = OFN_FILEMUSTEXIST;
     ofn.lpstrDefExt = TEXT("ini");
-    if (!GetOpenFileName(&ofn)) return;
+    if (!GetOpenFileName(&ofn)) return FALSE;
 
     hFile = CreateFile(szFile, GENERIC_READ, FILE_SHARE_READ, NULL,
                        OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
-    if (hFile == INVALID_HANDLE_VALUE) return;
+    if (hFile == INVALID_HANDLE_VALUE) return FALSE;
 
     dwSize = GetFileSize(hFile, NULL);
     if (dwSize == INVALID_FILE_SIZE || dwSize > 8191)
         { CloseHandle(hFile); return FALSE; }
 
     pBuf = (char*)malloc((size_t)(dwSize + 1));
-    if (pBuf == NULL) { CloseHandle(hFile); return; }
+    if (pBuf == NULL) { CloseHandle(hFile); return FALSE; }
 
     if (!ReadFile(hFile, pBuf, dwSize, &dwRead, NULL) || dwRead != dwSize) {
-        free(pBuf); CloseHandle(hFile); return;
+        free(pBuf); CloseHandle(hFile); return FALSE;
     }
     CloseHandle(hFile);
     pBuf[dwSize] = '\0';
 
     pIni = PineIni_Parse(pBuf, &iniErr);
     free(pBuf);
-    if (pIni == NULL) return;
+    if (pIni == NULL) return FALSE;
 
     /* Parse [function] */
     pSec = PineIni_Find(pIni, "function");

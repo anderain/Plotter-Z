@@ -1,6 +1,6 @@
 [DLSimProject]
 Name=PlotterZ
-Version=0.5
+Version=0.6
 Model=:fx-9860G.dlm
 SourcePath=SRC
 MemoryPath=INIT

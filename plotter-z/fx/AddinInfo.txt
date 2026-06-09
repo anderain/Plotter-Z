@@ -5,7 +5,7 @@
 [BINDATA]    : "FXADDINror.bin"
 [DISPNAME]   : "PlotterZ"
 [APPNAME]    : "@PLOTTER"
-[VERSION]    : "00.05.0000"
+[VERSION]    : "00.06.0000"
 [APL_ICON]   : "MainIcon.bmp"
 [MODULE_NUM] : 0
 [MOD1_TITLE] : "PlotterZ"
