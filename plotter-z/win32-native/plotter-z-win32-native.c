@@ -1123,8 +1123,7 @@ static int getDlgInt(HWND hDlg, int id) {
  * Window Editor dialog procedure
  *   Edit Camera x/y/z bounds and grid resolution.
  *====================================================*/
-static LRESULT CALLBACK WindowEditorDlgProc(HWND hDlg, UINT message,
-                                       WPARAM wParam, LPARAM lParam) {
+static LRESULT CALLBACK WindowEditorDlgProc(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam) {
     (void)lParam;
     switch (message) {
         case WM_INITDIALOG:
@@ -1134,12 +1133,20 @@ static LRESULT CALLBACK WindowEditorDlgProc(HWND hDlg, UINT message,
             SetDlgFloat(hDlg, IDC_WIN_YMAX, Camera.yMax);
             SetDlgFloat(hDlg, IDC_WIN_ZMIN, Camera.zMin);
             SetDlgFloat(hDlg, IDC_WIN_ZMAX, Camera.zMax);
+            SetDlgFloat(hDlg, IDC_WIN_UMIN, Camera.uMin);
+            SetDlgFloat(hDlg, IDC_WIN_UMAX, Camera.uMax);
+            SetDlgFloat(hDlg, IDC_WIN_VMIN, Camera.vMin);
+            SetDlgFloat(hDlg, IDC_WIN_VMAX, Camera.vMax);
             {
                 TCHAR szBufT[16];
                 wsprintf(szBufT, TEXT("%d"), Camera.xGrid);
                 SetDlgItemText(hDlg, IDC_WIN_XGRID, szBufT);
                 wsprintf(szBufT, TEXT("%d"), Camera.yGrid);
                 SetDlgItemText(hDlg, IDC_WIN_YGRID, szBufT);
+                wsprintf(szBufT, TEXT("%d"), Camera.uGrid);
+                SetDlgItemText(hDlg, IDC_WIN_UGRID, szBufT);
+                wsprintf(szBufT, TEXT("%d"), Camera.vGrid);
+                SetDlgItemText(hDlg, IDC_WIN_VGRID, szBufT);
             }
             CenterDialog(hDlg);
             return TRUE;
@@ -1156,6 +1163,10 @@ static LRESULT CALLBACK WindowEditorDlgProc(HWND hDlg, UINT message,
                     Camera.yMax = getDlgFloat(hDlg, IDC_WIN_YMAX);
                     Camera.zMin = getDlgFloat(hDlg, IDC_WIN_ZMIN);
                     Camera.zMax = getDlgFloat(hDlg, IDC_WIN_ZMAX);
+                    Camera.uMin = getDlgFloat(hDlg, IDC_WIN_UMIN);
+                    Camera.uMax = getDlgFloat(hDlg, IDC_WIN_UMAX);
+                    Camera.vMin = getDlgFloat(hDlg, IDC_WIN_VMIN);
+                    Camera.vMax = getDlgFloat(hDlg, IDC_WIN_VMAX);
 
                     iGrid = getDlgInt(hDlg, IDC_WIN_XGRID);
                     if (iGrid < 5) iGrid = 5;
@@ -1166,6 +1177,16 @@ static LRESULT CALLBACK WindowEditorDlgProc(HWND hDlg, UINT message,
                     if (iGrid < 5) iGrid = 5;
                     if (iGrid > Y_GRID_MAX) iGrid = Y_GRID_MAX;
                     Camera.yGrid = iGrid;
+
+                    iGrid = getDlgInt(hDlg, IDC_WIN_UGRID);
+                    if (iGrid < 5) iGrid = 5;
+                    if (iGrid > U_GRID_MAX) iGrid = U_GRID_MAX;
+                    Camera.uGrid = iGrid;
+
+                    iGrid = getDlgInt(hDlg, IDC_WIN_VGRID);
+                    if (iGrid < 5) iGrid = 5;
+                    if (iGrid > V_GRID_MAX) iGrid = V_GRID_MAX;
+                    Camera.vGrid = iGrid;
 
                     EndDialog(hDlg, IDOK);
                     return TRUE;
@@ -2133,7 +2154,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
                 case IDM_EDIT_WINDOW: {
                     int iRet;
                     iRet = DialogBox(hInst, MAKEINTRESOURCE(IDD_WINDOWEDIT), hWnd, (DLGPROC)WindowEditorDlgProc);
-                    if (iRet == IDOK) {
+                    if (iRet == IDOK && g_iStage == STAGE_READY) {
                         if (RecalcSurface(hWnd)) {
                             Redraw(hWnd);
                             InvalidateRect(hWnd, NULL, FALSE);

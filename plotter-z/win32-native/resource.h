@@ -34,11 +34,17 @@
 #define IDC_WIN_XGRID                   1009
 #define IDC_WIN_YGRID                   1010
 #define IDC_SAMPLE_LIST                 1011
+#define IDC_WIN_UMIN                    1011
 #define IDC_PREF_COLOR0                 1012
+#define IDC_WIN_UMAX                    1012
 #define IDC_PREF_COLOR1                 1013
+#define IDC_WIN_VMIN                    1013
 #define IDC_PREF_COLOR2                 1014
+#define IDC_WIN_VMAX                    1014
 #define IDC_PREF_COLOR3                 1015
+#define IDC_WIN_UGRID                   1015
 #define IDC_PREF_LOWRES                 1016
+#define IDC_WIN_VGRID                   1016
 #define IDC_DEBUG_INFO                  1017
 #define IDC_DEBUG_VMLIST                1018
 #define IDC_DEBUG_PERFTEST              1019
