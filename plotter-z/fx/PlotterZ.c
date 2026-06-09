@@ -99,6 +99,12 @@ typedef struct { int i0, i1; } Edge;
 #define CAM_INIT_YGRID  12
 #define CAM_INIT_ZMIN   -3.0f
 #define CAM_INIT_ZMAX   3.0f
+#define CAM_INIT_UMIN   0
+#define CAM_INIT_UMAX   (2 * PZ_PI)
+#define CAM_INIT_VMIN   0
+#define CAM_INIT_VMAX   (2 * PZ_PI)
+#define CAM_INIT_UGRID  15
+#define CAM_INIT_VGRID  15
 
 #define X_GRID_MAX      30
 #define Y_GRID_MAX      30
@@ -1482,12 +1488,12 @@ void WinEdit_ApplyDefault() {
     Camera.yGrid = CAM_INIT_YGRID;
     Camera.zMin  = CAM_INIT_ZMIN;
     Camera.zMax  = CAM_INIT_ZMAX;
-    Camera.uMin  = -1.0f;
-    Camera.uMax  =  1.0f;
-    Camera.uGrid = 12;
-    Camera.vMin  = -1.0f;
-    Camera.vMax  =  1.0f;
-    Camera.vGrid = 12;
+    Camera.uMin  = CAM_INIT_UMIN;
+    Camera.uMax  = CAM_INIT_UMAX;
+    Camera.uGrid = CAM_INIT_UGRID;
+    Camera.vMin  = CAM_INIT_VMIN;
+    Camera.vMax  = CAM_INIT_VMAX;
+    Camera.vGrid = CAM_INIT_VGRID;
 }
 
 void WindowEditorStage(void) {
