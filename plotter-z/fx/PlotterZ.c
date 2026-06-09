@@ -62,7 +62,7 @@ static const DISPBOX BoxEditArea = { 0, 8, VRAM_WIDTH - 1, 55 };
  * Global Variables
  *====================================================*/
 
-#define CART_EXPR_LENGTH 80
+#define CART_EXPR_LENGTH 150
 #define PARM_EXPR_LENGTH 80
 
 char    g_szCartExpr[CART_EXPR_LENGTH] = "sin(sqr(x^2+y^2)+t/5)*cos(sqr(x^2+y^2)+t/5)";
@@ -90,8 +90,6 @@ static const char* szFuncTypeLabel[] = { "CARTESIAN", "PARAMETRIC" };
  *====================================================*/
 typedef struct { NUMERIC x, y, z; } Vertex;
 typedef struct { int i0, i1; } Edge;
-
-#define GRID_MAX            30
 
 #define CAM_INIT_XMIN   -6.0f
 #define CAM_INIT_XMAX   6.0f
@@ -1450,13 +1448,13 @@ static void WinEdit_SaveCamera(void) {
     Camera.xMin  = (PZ_FLOAT)Utils_Atof(g_szWinEditValues[0]);
     Camera.xMax  = (PZ_FLOAT)Utils_Atof(g_szWinEditValues[1]);
     iGrid = (int)Utils_Atoi(g_szWinEditValues[2]);
-    if (iGrid < 5) iGrid = 5; if (iGrid > GRID_MAX) iGrid = GRID_MAX;
+    if (iGrid < 5) iGrid = 5; if (iGrid > X_GRID_MAX) iGrid = X_GRID_MAX;
     Camera.xGrid = iGrid;
 
     Camera.yMin  = (PZ_FLOAT)Utils_Atof(g_szWinEditValues[3]);
     Camera.yMax  = (PZ_FLOAT)Utils_Atof(g_szWinEditValues[4]);
     iGrid = (int)Utils_Atoi(g_szWinEditValues[5]);
-    if (iGrid < 5) iGrid = 5; if (iGrid > GRID_MAX) iGrid = GRID_MAX;
+    if (iGrid < 5) iGrid = 5; if (iGrid > Y_GRID_MAX) iGrid = Y_GRID_MAX;
     Camera.yGrid = iGrid;
 
     Camera.zMin  = (PZ_FLOAT)Utils_Atof(g_szWinEditValues[6]);
@@ -1465,13 +1463,13 @@ static void WinEdit_SaveCamera(void) {
     Camera.uMin  = (PZ_FLOAT)Utils_Atof(g_szWinEditValues[8]);
     Camera.uMax  = (PZ_FLOAT)Utils_Atof(g_szWinEditValues[9]);
     iGrid = (int)Utils_Atoi(g_szWinEditValues[10]);
-    if (iGrid < 5) iGrid = 5; if (iGrid > GRID_MAX) iGrid = GRID_MAX;
+    if (iGrid < 5) iGrid = 5; if (iGrid > U_GRID_MAX) iGrid = U_GRID_MAX;
     Camera.uGrid = iGrid;
 
     Camera.vMin  = (PZ_FLOAT)Utils_Atof(g_szWinEditValues[11]);
     Camera.vMax  = (PZ_FLOAT)Utils_Atof(g_szWinEditValues[12]);
     iGrid = (int)Utils_Atoi(g_szWinEditValues[13]);
-    if (iGrid < 5) iGrid = 5; if (iGrid > GRID_MAX) iGrid = GRID_MAX;
+    if (iGrid < 5) iGrid = 5; if (iGrid > V_GRID_MAX) iGrid = V_GRID_MAX;
     Camera.vGrid = iGrid;
 }
 
