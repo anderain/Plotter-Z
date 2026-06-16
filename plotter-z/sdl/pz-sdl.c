@@ -423,7 +423,7 @@ static void putText(int x, int y, const unsigned char* usz, Uint32 uColor) {
 #define ORTHOGRAPHIC    0
 #define PERSPECTIVE     1
 
-int g_iProjection = ORTHOGRAPHIC;
+int g_iProjection = PERSPECTIVE;
 
 /*====================================================
  * Scale blit (integer nearest-neighbour)

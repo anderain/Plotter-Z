@@ -142,7 +142,7 @@ EzMachine*      g_pVmParm[]     = { NULL, NULL, NULL };
 RenderNode*     g_pRenderNode   = NULL;
 RenderConfig    g_rzConfig;
 
-int             g_iProjection = ORTHOGRAPHIC;
+int             g_iProjection = PERSPECTIVE;
 
 /*====================================================
  * Vertex Buffer
