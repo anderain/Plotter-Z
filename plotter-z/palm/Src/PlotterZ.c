@@ -391,7 +391,7 @@ static void RecalcCartesian(void) {
             /* Normalize z into [-1, 1] based on the z-axis bounds */
             CART_Z_BUF(iX, iY) = NUM_VAL(2.0f * (fZ - (Camera.zMax + Camera.zMin) / 2.0f) / (Camera.zMax - Camera.zMin));
         }
-        RedrawRecalcProgress((iX + 1) * 100 / Camera.uGrid);
+        RedrawRecalcProgress((iX + 1) * 100 / Camera.xGrid);
     }
 
     /* Normalize x and y grid coordinates into [-1, 1] */
