@@ -1,7 +1,89 @@
+#define ALLOW_ACCESS_TO_INTERNALS_OF_BITMAPS 1
 #include "BitmapBuffer.h"
 #include "../../utils/hybird_6x8.h"
 
 #define CURRENT_FONT_WIDTH  6
+
+/*====================================================
+ * Bitmap API
+ -----------------------------------------------------
+   Manually implement the bitmap API in releases prior
+   to Palm OS 3.5
+ *====================================================*/
+#define BmpCreate	PzBmpCreate
+#define BmpGetBits	PzBmpGetBits
+#define BmpDelete	PzBmpDelete
+
+typedef struct {
+    Int16 width;
+    Int16 height;
+    UInt16 rowBytes;
+    UInt16 flags;
+    UInt8 pixelSize;
+    UInt8 version;
+    UInt16 nextDepthOffset;
+    UInt8 transparentIndex;
+    UInt8 compressionType;
+    UInt16 reserved;
+} PzBitmapType;
+
+typedef PzBitmapType* PzBitmapPtr;
+
+BitmapPtr PzBmpCreate(Int16 width, Int16 height, UInt8 depth, ColorTableType *colorTableP, UInt16 *error) {
+    UInt16 rowBytes;
+    UInt32 dataSize;
+    UInt32 totalSize;
+    MemHandle h;
+    PzBitmapPtr bmp;
+
+    rowBytes = (((((UInt32)width * depth) + 15) >> 4) << 1);
+
+    dataSize = (UInt32)rowBytes * height;
+    totalSize = sizeof(PzBitmapType) + dataSize;
+
+    h = MemHandleNew(totalSize);
+    if (!h) {
+        if (error) *error = memErrNotEnoughSpace;
+        return NULL;
+    }
+
+    bmp = (PzBitmapPtr)MemHandleLock(h);
+    
+    bmp->width = width;
+    bmp->height = height;
+    bmp->rowBytes = rowBytes;
+    bmp->flags = 0;
+    bmp->pixelSize = depth;
+    bmp->version = 0;
+    bmp->nextDepthOffset = 0;
+	bmp->transparentIndex = 0;
+	bmp->compressionType = 0;
+	bmp->reserved = 0;
+
+    MemSet((UInt8*)bmp + sizeof(PzBitmapType), dataSize, 0x00);
+
+    if (error) *error = errNone;
+    return (BitmapPtr)bmp;
+}
+
+void* PzBmpGetBits(BitmapPtr bitmapP) {
+    if (!bitmapP) return NULL;
+    return (void*)((UInt8*)bitmapP + sizeof(PzBitmapType));
+}
+
+Err PzBmpDelete(BitmapPtr bitmapP) {
+    MemHandle h;
+
+    if (!bitmapP) return /* bmpErrInvalidBitmap */0;
+
+    h = MemPtrRecoverHandle((MemPtr)bitmapP);
+    if (!h) return memErrInvalidParam;
+
+    MemHandleUnlock(h);
+    MemHandleFree(h);
+
+    return errNone;
+}
 
 /*====================================================
  * 1bpp packed-pixel helpers (8 pixels per byte)
