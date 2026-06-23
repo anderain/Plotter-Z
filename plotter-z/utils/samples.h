@@ -57,6 +57,10 @@ typedef struct tagPzSample {
     "(3+3/2*cos(v))*cos(u);(3+3/2*cos(v))*sin(u);3/2*sin(v)" -x -5,5,10 -y -5,5,10 -z -5,5 -u -0,6.2831852,20 -v -0,6.2831852,20 -p
     "(5+v*cos(u/2))*cos(u);(5+v*cos(u/2))*sin(u);v*sin(u/2)" -x -8,8,10 -y -8,8,10 -z -3,3 -u -0,6.2831852,20 -v -3,3,20 -p
     "v*cos(u);v*sin(u);2*u" -x -8,8,10 -y -8,8,10 -z -13,13,10 -u -6.2831852,6.2831852,20 -v 0,8,20 -p
+    "(2+cos(u/2)*sin(v)-sin(u/2)*sin(2*v))*cos(u);(2+cos(u/2)*sin(v)-sin(u/2)*sin(2*v))*sin(u);sin(u/2)*sin(v)+cos(u/2)*sin(2*v)" -x -4,4,10 -y -4,4,10 -z -2,2 -u 0,6.2831852,20 -v 0,6.2831852,20 -p
+    "cos(u)*sin(v);sin(u)*sin(v);cos(v)+ln(tan(v/2))+u/5" -x -1,1,10 -y -1,1,10 -z -3,3.51327412 -u 0,12.56637,20 -v 0.05,2,20 -p
+    "u-u^3/3+u*v^2;v-v^3/3+v*u^2;u^2-v^2" -x -7.5,7.5,10 -y -7.5,7.5,10 -z -4,4 -u -2,2,20 -v -2,2,20 -p
+    "2*cos(u)*sin(2*v);2*sin(u)*sin(2*v);4*cos(u)*sin(u)*(cos(v))^2" -x -2,2,10 -y -2,2,10 -z -2,2 -u 0,3.1415926,20 -v 0,3.1415926,20 -p
 */
 
 static const PzSample PlotterZSamples[] = {
@@ -206,6 +210,62 @@ static const PzSample PlotterZSamples[] = {
             "v*cos(u)",
             "v*sin(u)",
             "2*u"
+        }
+    },
+    {
+        /* Type */      FUNC_TYPE_PARAMETRIC,
+        /* x range */   -4.0f, 4.0f,
+        /* y range */   -4.0f, 4.0f,
+        /* z range */   -2.0f, 2.0f,
+        /* u range */   0, 2 * SAMPLE_PI,
+        /* v range */   0, 2 * SAMPLE_PI,
+        /* name */      "Figure-8 Klein Bottle",
+        /* expr */ {
+            "(2+cos(u/2)*sin(v)-sin(u/2)*sin(2*v))*cos(u)",
+            "(2+cos(u/2)*sin(v)-sin(u/2)*sin(2*v))*sin(u)",
+            "sin(u/2)*sin(v)+cos(u/2)*sin(2*v)"
+        }
+    },
+    {
+        /* Type */      FUNC_TYPE_PARAMETRIC,
+        /* x range */   -1.0f, 1.0f,
+        /* y range */   -1.0f, 1.0f,
+        /* z range */   -3.0f, (1.0f + 4.0f * SAMPLE_PI / 5.0f),
+        /* u range */   0, 12.56637,
+        /* v range */   0.05, 2,
+        /* name */      "Dini's Surface",
+        /* expr */ {
+            "cos(u)*sin(v)",
+            "sin(u)*sin(v)",
+            "cos(v)+ln(tan(v/2))+u/5"
+        }
+    },
+    {
+        /* Type */      FUNC_TYPE_PARAMETRIC,
+        /* x range */   -7.5f, 7.5f,
+        /* y range */   -7.5f, 7.5f,
+        /* z range */   -4.0f, 4.0f,
+        /* u range */   -2, 2,
+        /* v range */   -2, 2,
+        /* name */      "Enneper Surface",
+        /* expr */ {
+            "u-u^3/3+u*v^2",
+            "v-v^3/3+v*u^2",
+            "u^2-v^2"
+        }
+    },
+    {
+        /* Type */      FUNC_TYPE_PARAMETRIC,
+        /* x range */   -2.0f, 2.0f,
+        /* y range */   -2.0f, 2.0f,
+        /* z range */   -2.0f, 2.0f,
+        /* u range */   0, SAMPLE_PI,
+        /* v range */   0, SAMPLE_PI,
+        /* name */      "Steiner's Roman Surface",
+        /* expr */ {
+            "2*cos(u)*sin(2*v)",
+            "2*sin(u)*sin(2*v)",
+            "4*cos(u)*sin(u)*(cos(v))^2"
         }
     }
 };
