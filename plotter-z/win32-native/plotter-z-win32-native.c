@@ -1288,7 +1288,7 @@ typedef struct {
 
 static const Theme g_sThemes[] = {
     { "Plain",      { TEXT("000000"), TEXT("666666"), TEXT("aaaaaa"), TEXT("ffffff") } },
-    { "The Matrix", { TEXT("33ff33"), TEXT("229922"), TEXT("00CD00"), TEXT("000000") } },
+    { "The Matrix", { TEXT("33ff33"), TEXT("229922"), TEXT("005600"), TEXT("000000") } },
     { "VT100",      { TEXT("eeeeee"), TEXT("CDCD00"), TEXT("115511"), TEXT("111111") } },
     { "Gameboy",    { TEXT("0d1400"), TEXT("354f00"), TEXT("5c8b00"), TEXT("84c600") } },
     { "GB Orange",  { TEXT("180b00"), TEXT("622c00"), TEXT("ab4c00"), TEXT("f46d00") } },
